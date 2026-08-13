@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+release/
+
+# Local database — regenerated automatically on first run, contains local patient data
+lab-data.db
+lab-data.db-journal
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env
+.env.local
+.env*.local

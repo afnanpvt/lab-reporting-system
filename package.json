@@ -1,0 +1,66 @@
+{
+  "name": "lab-reporter",
+  "version": "1.0.0",
+  "description": "Modern Laboratory Reporting System",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "cross-env ELECTRON_EXEC_PATH=./node_modules/electron/dist/electron.exe electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-builder"
+  },
+  "dependencies": {
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "lucide-react": "^0.441.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "sql.js": "^1.14.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/node": "^22.5.5",
+    "@types/react": "^18.3.6",
+    "@types/react-dom": "^18.3.0",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
+    "electron": "^32.1.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.12",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.7"
+  },
+  "build": {
+    "appId": "com.lab.reporter",
+    "productName": "Lab Reporter",
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "out/**/*",
+      "!out/main/chunks",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": "resources/"
+      }
+    ]
+  },
+  "allowScripts": {
+    "electron@32.3.3": true,
+    "esbuild@0.21.5": true
+  }
+}

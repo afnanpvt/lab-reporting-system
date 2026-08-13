@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Mirrors tailwind.config.js exactly — used for inline styles (report output, shell chrome). */
+  --bg-app: #f6f7f7;
+  --surface: #ffffff;
+  --border: #e2e5e6;
+  --border-strong: #cbd1d3;
+  --ink: #1a2023;
+  --ink-2: #5c6569;
+  --ink-3: #8a9094;
+  --accent: #2c7a73;
+  --accent-ink: #1f5a55;
+  --accent-soft: #e6f2f0;
+  --accent-soft-border: #bfe0db;
+  --success: #2f7d4f;
+  --success-soft: #eaf5ee;
+  --warning: #8a5a00;
+  --warning-soft: #fcf3df;
+  --danger: #b3261e;
+  --danger-soft: #fbeae8;
+  --info: #1f5fa8;
+  --info-soft: #e9f1fa;
+  --font-ui: 'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-num: 'Segoe UI Variable Text', 'Segoe UI', ui-monospace, 'SF Mono', 'Consolas', monospace;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-app text-ink antialiased;
+    font-family: var(--font-ui);
+    user-select: none;
+    overflow: hidden;
+  }
+
+  input, textarea, select {
+    user-select: text;
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full px-3.5 py-2.5 text-[15px] border border-border-strong rounded-lg bg-surface
+      text-ink placeholder:text-ink-3
+      focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-25 focus:border-accent
+      transition-all duration-150;
+  }
+
+  .result-input {
+    @apply w-full px-2 py-2 text-[15px] border border-border-strong rounded-md bg-surface
+      text-ink text-center
+      focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-25 focus:border-accent
+      transition-all duration-150;
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-white text-[15px] font-medium
+      rounded-lg hover:bg-accent-ink
+      focus:outline-none focus:ring-2 focus:ring-accent focus:ring-opacity-35 focus:ring-offset-1
+      transition-colors duration-150 cursor-pointer
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-surface text-ink text-[15px] font-medium
+      border border-border-strong rounded-lg hover:bg-app
+      focus:outline-none focus:ring-2 focus:ring-border-strong
+      transition-colors duration-150 cursor-pointer
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-soft {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-accent-soft text-accent-ink text-[15px] font-medium
+      border border-accent-softBorder rounded-lg hover:bg-accent-softBorder
+      transition-colors duration-150 cursor-pointer
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 text-ink-2 text-[15px]
+      rounded-lg hover:bg-app hover:text-ink
+      transition-colors duration-150 cursor-pointer;
+  }
+
+  .card {
+    @apply bg-surface rounded-xl border border-border;
+  }
+
+  .section-heading {
+    @apply text-[12px] font-bold uppercase tracking-widest text-ink-2 mb-4;
+    letter-spacing: 0.08em;
+  }
+
+  .ref-range {
+    @apply text-[13px] text-ink-2 whitespace-nowrap;
+  }
+
+  .form-label {
+    @apply block text-[14px] font-medium text-ink mb-1.5;
+  }
+
+  .error-banner {
+    @apply flex items-start gap-2.5 px-4 py-3 rounded-lg text-[14.5px] text-danger bg-danger-soft border border-danger;
+    border-opacity: 0.25;
+  }
+
+  .success-banner {
+    @apply flex items-start gap-2.5 px-4 py-3 rounded-lg text-[14.5px] text-success bg-success-soft border border-success;
+    border-opacity: 0.25;
+  }
+}
+
+/* Titlebar drag region */
+.titlebar-drag { -webkit-app-region: drag; }
+.titlebar-no-drag { -webkit-app-region: no-drag; }
+
+/* Report print styles */
+@media print { body { overflow: visible !important; } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
