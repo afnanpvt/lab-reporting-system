@@ -41,7 +41,9 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Start />} />
+        {/* Soft Cards is the client-confirmed direction — opening the app with no route lands there directly. */}
+        <Route path="/" element={<Navigate to="/site" replace />} />
+        <Route path="/legacy" element={<Start />} />
         <Route path="/patient/new" element={<PatientEntry />} />
         <Route path="/patient/:id/edit" element={<EditPatient />} />
         <Route path="/report/:id" element={<ReportEntry />} />
