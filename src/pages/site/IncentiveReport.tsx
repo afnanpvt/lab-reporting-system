@@ -25,7 +25,7 @@ export default function IncentiveReport() {
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-full print:h-auto">
         {/* Review bar — this is a document to check before it goes out, not a raw data dump */}
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
           <button
@@ -54,7 +54,7 @@ export default function IncentiveReport() {
         </div>
 
         {/* The document itself — what's on screen here is exactly what prints, so reviewing it here IS reviewing the final report */}
-        <div className="flex-1 overflow-y-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
           <div
             className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}

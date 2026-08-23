@@ -33,22 +33,18 @@ export function LetterheadWatermark() {
 
 const CERTIFICATIONS = ['BMQR', 'ISO 9001', 'ISO 9001', 'ISAC\nAccreditation']
 
-const FOOTER_NOTICE: Record<'incentive' | 'billing', string> = {
-  incentive: 'Internal referral incentive statement, for accounts and billing use — not a patient-facing document.',
-  billing: 'This is a computer-generated bill and does not require a signature. Please retain for your records.'
-}
-
 /**
  * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer
  * and the CMC Hospital quality-check line — neither of which belongs on a billing or accounts
- * document. 'incentive' and 'billing' each swap that for a short, context-appropriate note instead.
+ * document. 'incentive' and 'billing' each get their own genuinely relevant note instead of a
+ * single generic line borrowed from the patient report.
  */
 export function LetterheadFooter({ variant = 'report' }: { variant?: 'report' | 'incentive' | 'billing' }) {
   return (
     <div className="bg-white">
       <div className="flex items-start justify-between gap-4 pt-4" style={{ borderTop: '1px solid #dde3ea' }}>
         <div className="flex-1 min-w-0">
-          {variant === 'report' ? (
+          {variant === 'report' && (
             <>
               <p className="text-[10px] text-[#555] leading-snug">
                 The report is based on the specimen received / submitted to the laboratory. Laboratory results are
@@ -59,20 +55,36 @@ export function LetterheadFooter({ variant = 'report' }: { variant?: 'report' | 
                 Test done here have quality - control check with <span style={{ color: '#c2185b' }}>CMC Hospital, Vellore.</span>
               </p>
             </>
-          ) : (
+          )}
+          {variant === 'billing' && (
+            <>
+              <p className="text-[10px] text-[#555] leading-snug">
+                This is a computer-generated bill and does not require a signature. Amounts reflect what was charged
+                for the investigations listed above, correct as of the date printed.
+              </p>
+              <p className="text-[10.5px] font-semibold text-[#1a2430] mt-1.5">
+                Thank you for choosing <span style={{ color: '#1b6fae' }}>Super Lab Service.</span> For any billing
+                query, please contact us using the details below.
+              </p>
+            </>
+          )}
+          {variant === 'incentive' && (
             <p className="text-[10.5px] font-semibold text-[#1a2430] leading-snug">
-              {FOOTER_NOTICE[variant]}
+              Please verify this statement against <span style={{ color: '#1b6fae' }}>billing records</span> before
+              processing any payment to the referring doctor.
             </p>
           )}
         </div>
-        <div
-          className="flex-shrink-0 text-center px-3.5 py-2 rounded-md"
-          style={{ background: '#1b6fae', color: 'white' }}
-        >
-          <div className="text-[10px] font-semibold leading-tight">Fast and comprehensive tests.</div>
-          <div className="text-[9.5px] leading-tight">Get your samples collected from your doorstep.</div>
-          <div className="text-[11px] font-bold mt-1" style={{ color: '#ff4fa0' }}>Home Visit Available</div>
-        </div>
+        {variant !== 'incentive' && (
+          <div
+            className="flex-shrink-0 text-center px-3.5 py-2 rounded-md"
+            style={{ background: '#1b6fae', color: 'white' }}
+          >
+            <div className="text-[10px] font-semibold leading-tight">Fast and comprehensive tests.</div>
+            <div className="text-[9.5px] leading-tight">Get your samples collected from your doorstep.</div>
+            <div className="text-[11px] font-bold mt-1" style={{ color: '#ff4fa0' }}>Home Visit Available</div>
+          </div>
+        )}
       </div>
 
       <div className="h-[3px] my-3 rounded-full" style={{ background: 'linear-gradient(to right, #1b6fae, #ff4fa0)' }} />
