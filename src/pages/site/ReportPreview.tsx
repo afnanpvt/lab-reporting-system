@@ -46,7 +46,7 @@ function ReportBlockView({ block, patient, results, reportedAt }: { block: Repor
 
   if (block.kind === 'emptySection') {
     return (
-      <div className="avoid-break mb-5">
+      <div className="avoid-break mb-6">
         <div className="text-[10px] font-bold uppercase tracking-widest text-[#111] border-b border-[#ddd] pb-1 mb-1.5">
           {block.label}
         </div>
@@ -59,7 +59,7 @@ function ReportBlockView({ block, patient, results, reportedAt }: { block: Repor
 
   if (block.kind === 'sectionChunk') {
     return (
-      <div className="avoid-break mb-5">
+      <div className="avoid-break mb-6">
         <div className="text-[10px] font-bold uppercase tracking-widest text-[#111] border-b border-[#ddd] pb-1 mb-1.5">
           {block.label}{block.continued && <span className="font-normal italic text-[#8593a3]"> (continued)</span>}
         </div>
@@ -73,8 +73,8 @@ function ReportBlockView({ block, patient, results, reportedAt }: { block: Repor
           const flag = flagFor(data[k], range)
           const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
           return (
-            <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[10.5px] py-1 border-b border-[#f0f0f0]">
-              <span>{humanizeKey(k)}</span>
+            <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11px] py-1.5 border-b border-[#f0f0f0]">
+              <span className="font-semibold text-[#1a2430]">{humanizeKey(k)}</span>
               <span style={{ fontWeight: flag ? 600 : 400, color: '#111', fontFamily: 'Consolas, monospace' }}>
                 {flag === 'high' && <span style={{ color: arrowColor }}>▲ </span>}
                 {flag === 'low' && <span style={{ color: arrowColor }}>▼ </span>}
@@ -127,7 +127,7 @@ export default function ReportPreview() {
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
           <button
             onClick={() => navigate(`/site/report/${patient.id}`, { state: { patient } })}
@@ -158,7 +158,7 @@ export default function ReportPreview() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
           <div className="flex flex-col items-center gap-9 print:gap-0">
             {pages.map((blocks, pageIndex) => (
               <div

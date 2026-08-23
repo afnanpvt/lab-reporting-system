@@ -13,7 +13,9 @@ import type { MockPatient } from './mockData'
  * pages on almost nothing, which is exactly the "blank first page" bug this was tuned to fix.
  */
 const CONTENT_HEIGHT = 785
-const ROW_HEIGHT = 25
+// Rows grew from py-1/10.5px to py-1.5/11px (typography pass for legibility) — re-measure this
+// against the live page if row padding/font-size changes again.
+const ROW_HEIGHT = 29
 const SECTION_HEADER_HEIGHT = 26
 const COLUMN_HEADER_HEIGHT = 22
 const EMPTY_NOTICE_HEIGHT = 36
@@ -22,7 +24,10 @@ const PATIENT_INFO_HEIGHT = 140
 // End-of-report marker and the sign-off block always travel together as one unit — never
 // worth burning a whole extra page on two lines of signature separated from their context.
 const CLOSING_HEIGHT = 100
-const BLOCK_GAP = 20
+const BLOCK_GAP = 24
+// Below this many rows, a split chunk looks like an orphaned sliver — better to start the
+// whole remainder fresh on the next page than to dangle 1-2 rows before a "(continued)".
+const MIN_ROWS_TO_SPLIT = 4
 
 export interface PatientInfoBlock { kind: 'patientInfo' }
 export interface EmptySectionBlock { kind: 'emptySection'; label: string }
@@ -60,26 +65,36 @@ export function paginateReport(patient: Pick<MockPatient, 'sections'>, results: 
       continue
     }
 
-    const wholeHeight = SECTION_HEADER_HEIGHT + COLUMN_HEADER_HEIGHT + filledKeys.length * ROW_HEIGHT
-    if (wholeHeight <= CONTENT_HEIGHT) {
-      // Whole section fits on a single page — never split it, even if that means starting fresh.
-      placeWhole({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: filledKeys, continued: false }, wholeHeight)
-      continue
-    }
-
-    // Genuinely too long for one page — split at row boundaries, carrying a labeled
-    // "(continued)" header onto each following page rather than cutting a row in half.
+    // Fill whatever's left on the current page first; only move to a fresh page when the
+    // remainder wouldn't be worth splitting into (too few rows to bother with a "(continued)").
+    // This is what keeps a section from being bumped wholesale onto the next page while the
+    // current one sits mostly blank underneath it.
+    const chunkHeaderHeight = SECTION_HEADER_HEIGHT + COLUMN_HEADER_HEIGHT
     let idx = 0
     let firstChunk = true
     while (idx < filledKeys.length) {
-      const chunkHeaderHeight = SECTION_HEADER_HEIGHT + COLUMN_HEADER_HEIGHT
-      if (remaining < chunkHeaderHeight + ROW_HEIGHT) startNewPage()
-      const availableRows = Math.max(1, Math.floor((remaining - chunkHeaderHeight) / ROW_HEIGHT))
-      const chunkKeys = filledKeys.slice(idx, idx + availableRows)
-      push({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: chunkKeys, continued: !firstChunk }, chunkHeaderHeight + chunkKeys.length * ROW_HEIGHT)
-      idx += chunkKeys.length
-      firstChunk = false
-      if (idx < filledKeys.length) startNewPage()
+      const rowsLeft = filledKeys.length - idx
+      const restHeight = chunkHeaderHeight + rowsLeft * ROW_HEIGHT
+
+      if (restHeight <= remaining) {
+        // Everything that's left of this section fits right here — place it whole and move on.
+        push({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: filledKeys.slice(idx), continued: !firstChunk }, restHeight)
+        idx = filledKeys.length
+        break
+      }
+
+      const availableRows = Math.floor((remaining - chunkHeaderHeight) / ROW_HEIGHT)
+      if (availableRows >= MIN_ROWS_TO_SPLIT || currentPage().length === 0) {
+        const rows = Math.max(1, availableRows)
+        const chunkKeys = filledKeys.slice(idx, idx + rows)
+        push({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: chunkKeys, continued: !firstChunk }, chunkHeaderHeight + chunkKeys.length * ROW_HEIGHT)
+        idx += chunkKeys.length
+        firstChunk = false
+        if (idx < filledKeys.length) startNewPage()
+      } else {
+        // Not worth a tiny sliver of rows here — start the whole remainder fresh.
+        startNewPage()
+      }
     }
   }
 
