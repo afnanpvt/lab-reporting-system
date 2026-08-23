@@ -1,7 +1,8 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer, Download } from 'lucide-react'
 import Shell from './Shell'
-import { mockDoctors, incentiveLineItemsFor, incentiveTotalFor } from './mockData'
+import { mockDoctors, incentiveLineItemsFor, incentiveTotalFor, mockLabSettings } from './mockData'
+import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
 export default function IncentiveReport() {
   const navigate = useNavigate()
@@ -12,7 +13,7 @@ export default function IncentiveReport() {
     return (
       <Shell>
         <main className="px-10 py-9">
-          <p className="text-[15px] text-[#8a8171]">Doctor not found.</p>
+          <p className="text-[15px] text-[#57677a]">Doctor not found.</p>
         </main>
       </Shell>
     )
@@ -20,86 +21,122 @@ export default function IncentiveReport() {
 
   const rows = incentiveLineItemsFor(doctor.name)
   const total = incentiveTotalFor(doctor.name)
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   return (
     <Shell>
-      <main className="px-10 py-9 max-w-4xl">
-        <button
-          onClick={() => navigate('/site/doctors')}
-          className="inline-flex items-center gap-1.5 text-[14px] text-[#a39c8f] hover:text-[#3d3629] mb-5"
-        >
-          <ArrowLeft size={15} />
-          Back to doctors
-        </button>
-
-        <div className="flex items-center justify-between mb-7">
-          <div>
-            <h1 className="text-[24px] font-semibold text-[#3d3629] mb-1">Incentive Report</h1>
-            <p className="text-[15px] text-[#8a8171]">{doctor.specialty} · {doctor.phone}</p>
-          </div>
+      <div className="flex flex-col h-screen">
+        {/* Review bar — this is a document to check before it goes out, not a raw data dump */}
+        <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
           <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-[#3d3629] text-[14px] font-medium border border-[#e3ddd0] rounded-xl hover:bg-[#f6f2ea]"
+            onClick={() => navigate('/site/doctors')}
+            className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
           >
-            <Printer size={15} />
-            Print
+            <ArrowLeft size={15} />
+            Back to doctors
           </button>
+          <div className="h-5 w-px bg-[#e1e6ec]" />
+          <div>
+            <div className="text-[15px] font-semibold text-[#1a2430]">Incentive Report — Review</div>
+            <div className="text-[13px] text-[#57677a]">{doctor.name} · {rows.length} line item{rows.length === 1 ? '' : 's'}</div>
+          </div>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#bfdcf0]">
+              <Download size={14} />
+              Save PDF
+            </button>
+            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm">
+              <Printer size={14} />
+              Print
+            </button>
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-[#ece7de] shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-[#f0ece3]">
-            <div className="text-[19px] font-semibold text-[#3d3629]">{doctor.name}</div>
-            <div className="text-[13px] text-[#a39c8f]">Referral incentive summary</div>
-          </div>
+        {/* The document itself — what's on screen here is exactly what prints, so reviewing it here IS reviewing the final report */}
+        <div className="flex-1 overflow-y-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+          <div
+            className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
+            style={{ minHeight: '600px' }}
+          >
+            <LetterheadWatermark />
+            <div className="relative" style={{ zIndex: 1 }}>
+              <LetterheadHeader />
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13.5px]">
+              <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
+                <div>
+                  <div className="text-[11px] uppercase tracking-widest text-[#8593a3] mb-1">Referral Incentive Report</div>
+                  <div className="text-[18px] font-bold text-[#1a2430]">{doctor.name}</div>
+                  <div className="text-[12px] text-[#57677a]">{doctor.specialty} · {doctor.phone}</div>
+                </div>
+                <div className="text-[11px] text-right text-[#57677a] leading-relaxed">
+                  Generated <b className="text-[#1a2430]">{today}</b><br />
+                  Period <b className="text-[#1a2430]">All recorded referrals</b>
+                </div>
+              </div>
+
+              <table className="w-full text-[12.5px] mb-1">
               <thead>
-                <tr className="text-left text-[#a39c8f] text-[11.5px] uppercase tracking-wide border-b border-[#f0ece3]">
-                  <th className="px-6 py-3 font-semibold">S.No</th>
-                  <th className="px-3 py-3 font-semibold">Date</th>
-                  <th className="px-3 py-3 font-semibold">Patient No.</th>
-                  <th className="px-3 py-3 font-semibold">Gender</th>
-                  <th className="px-3 py-3 font-semibold">Investigation</th>
-                  <th className="px-6 py-3 font-semibold text-right">Amount</th>
+                <tr className="text-left text-[#8593a3] text-[10.5px] uppercase tracking-wide border-b-2 border-[#1a2430]">
+                  <th className="py-2 pr-2 font-semibold">S.No</th>
+                  <th className="py-2 pr-2 font-semibold">Date</th>
+                  <th className="py-2 pr-2 font-semibold">Patient No.</th>
+                  <th className="py-2 pr-2 font-semibold">Gender</th>
+                  <th className="py-2 pr-2 font-semibold">Investigation</th>
+                  <th className="py-2 pl-2 font-semibold text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-[#a39c8f]">
+                    <td colSpan={6} className="py-8 text-center text-[#8593a3]">
                       No patients referred by this doctor yet.
                     </td>
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <tr key={r.sno} className="border-b border-[#f5f2ec]">
-                      <td className="px-6 py-3 text-[#8a8171]">{r.sno}</td>
-                      <td className="px-3 py-3 text-[#3d3629]">{r.date}</td>
-                      <td className="px-3 py-3 font-mono text-[#3d3629]">{r.patientSid}</td>
-                      <td className="px-3 py-3 text-[#8a8171]">{r.gender === 'M' ? 'Male' : 'Female'}</td>
-                      <td className="px-3 py-3 text-[#3d3629]">{r.investigation}</td>
-                      <td className="px-6 py-3 text-right font-medium text-[#3d3629]">₹{r.amount.toLocaleString('en-IN')}</td>
+                    <tr key={r.sno} className="border-b border-[#eaeef2]">
+                      <td className="py-2 pr-2 text-[#57677a]">{r.sno}</td>
+                      <td className="py-2 pr-2 text-[#1a2430]">{r.date}</td>
+                      <td className="py-2 pr-2 font-mono text-[#1a2430]">{r.patientSid}</td>
+                      <td className="py-2 pr-2 text-[#57677a]">{r.gender === 'M' ? 'Male' : 'Female'}</td>
+                      <td className="py-2 pr-2 text-[#1a2430]">{r.investigation}</td>
+                      <td className="py-2 pl-2 text-right font-medium text-[#1a2430]">₹{r.amount.toLocaleString('en-IN')}</td>
                     </tr>
                   ))
                 )}
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-right text-[14px] font-semibold text-[#3d3629]">Total</td>
-                    <td className="px-6 py-4 text-right text-[16px] font-semibold text-[#e07a5f]">₹{total.toLocaleString('en-IN')}</td>
+                  <tr className="border-t-2 border-[#1a2430]">
+                    <td colSpan={5} className="py-3 pr-2 text-right text-[13px] font-semibold text-[#1a2430]">Total</td>
+                    <td className="py-3 pl-2 text-right text-[15px] font-bold text-[#1b6fae]">₹{total.toLocaleString('en-IN')}</td>
                   </tr>
                 </tfoot>
               )}
-            </table>
+              </table>
+
+              <p className="text-[9.5px] text-[#8593a3] italic mt-2">
+                Amounts shown are what patients were charged for each investigation, not a pre-calculated commission. Placeholder rates — replace with your actual price list before this goes live.
+              </p>
+
+              <div className="avoid-break flex items-end justify-between mt-16">
+                <div>
+                  <div className="border-t border-[#333] w-[130px] mb-1" />
+                  <div className="text-[10px] font-bold">Accounts / Billing</div>
+                </div>
+                <div className="text-right">
+                  <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
+                  <div className="text-[10px] font-bold">{mockLabSettings.labDoctor}</div>
+                  <div className="text-[9px] text-[#57677a]">Consultant Pathologist</div>
+                </div>
+              </div>
+            </div>
+
+            <LetterheadFooter variant="incentive" />
           </div>
         </div>
-
-        <p className="text-[12.5px] text-[#a39c8f] mt-4">
-          Amounts shown are what patients were charged for each investigation — not a pre-calculated commission. Placeholder rates; replace with your actual price list before this goes live.
-        </p>
-      </main>
+      </div>
     </Shell>
   )
 }
