@@ -8,10 +8,17 @@ import EditPatient from './pages/EditPatient'
 import ReportEntry from './pages/ReportEntry'
 import ReportPreview from './pages/ReportPreview'
 import Settings from './pages/Settings'
-import SiteStart from './pages/site/Start'
+import SiteDashboard from './pages/site/Dashboard'
+import SitePatients from './pages/site/Patients'
 import SitePatientEntry from './pages/site/PatientEntry'
+import SiteResultEntry from './pages/site/ResultEntry'
+import SiteReportPreview from './pages/site/ReportPreview'
+import SiteSettings from './pages/site/Settings'
 import Doctors from './pages/site/Doctors'
+import DoctorEntry from './pages/site/DoctorEntry'
 import IncentiveReport from './pages/site/IncentiveReport'
+import Reports from './pages/site/Reports'
+import Bill from './pages/site/Bill'
 
 // The client-approved "Soft Cards" direction, built against mock data so it can be
 // reviewed as a plain website before it gets wired to the real Electron/IPC backend.
@@ -19,10 +26,18 @@ import IncentiveReport from './pages/site/IncentiveReport'
 // the design is fully signed off, at which point it replaces them.
 const siteRoutes = (
   <Routes>
-    <Route path="/site" element={<SiteStart />} />
+    <Route path="/site" element={<SiteDashboard />} />
+    <Route path="/site/patients" element={<SitePatients />} />
     <Route path="/site/patient/new" element={<SitePatientEntry />} />
+    <Route path="/site/report/:id" element={<SiteResultEntry />} />
+    <Route path="/site/preview/:id" element={<SiteReportPreview />} />
+    <Route path="/site/bill/:id" element={<Bill />} />
     <Route path="/site/doctors" element={<Doctors />} />
+    <Route path="/site/doctors/new" element={<DoctorEntry />} />
     <Route path="/site/doctors/:id" element={<IncentiveReport />} />
+    <Route path="/site/reports" element={<Reports />} />
+    <Route path="/site/settings" element={<SiteSettings />} />
+    <Route path="/site/*" element={<Navigate to="/site" replace />} />
   </Routes>
 )
 
