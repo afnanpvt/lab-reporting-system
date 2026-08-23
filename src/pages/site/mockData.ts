@@ -1,4 +1,5 @@
-import { SECTIONS } from '../../types/lab'
+import { SECTIONS, getCompletionState } from '../../types/lab'
+import { initialResultsFor, sectionKeyForLabel, flagFor, getReferenceRange } from './reportFields'
 
 export interface MockPatient {
   id: number
@@ -12,25 +13,32 @@ export interface MockPatient {
   regTime: string
   status: 'draft' | 'partial' | 'completed'
   sections: string[]
+  paymentStatus: 'paid' | 'pending'
+  /** Captured at registration — patient (or guardian) consented to their data being collected and stored for testing/reporting. Flagged so the business owner can confirm this satisfies their actual legal obligations; this checkbox alone isn't legal advice. */
+  consentGiven: boolean
 }
 
 export const mockPatients: MockPatient[] = [
-  { id: 1, sid: 'SID-2041', name: 'Ravi Kumar Sharma', age: 45, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-18', regTime: '09:14', status: 'completed', sections: ['Haematology', 'Biochemistry'] },
-  { id: 2, sid: 'SID-2042', name: 'Priya Nair', age: 29, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-18', regTime: '09:31', status: 'partial', sections: ['Serology'] },
-  { id: 3, sid: 'SID-2043', name: 'Baby of Fathima', age: 8, ageUnit: 'M', gender: 'F', referredBy: 'Dr. K. Iyer', date: '2026-08-19', regTime: '09:47', status: 'draft', sections: ['Urine'] },
-  { id: 4, sid: 'SID-2044', name: 'Suresh Pillai', age: 61, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-19', regTime: '10:05', status: 'completed', sections: ['Biochemistry', 'L.F.T.'] },
-  { id: 5, sid: 'SID-2045', name: 'Anjali Verma', age: 34, ageUnit: 'Y', gender: 'F', referredBy: 'Self', date: '2026-08-20', regTime: '10:22', status: 'partial', sections: ['Haematology', 'Urine'] },
-  { id: 6, sid: 'SID-2046', name: 'Mohammed Irfan', age: 52, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-20', regTime: '10:40', status: 'draft', sections: ['C.S.'] },
-  { id: 7, sid: 'SID-2047', name: 'Lakshmi Menon', age: 71, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-21', regTime: '10:58', status: 'completed', sections: ['Biochemistry'] },
-  { id: 8, sid: 'SID-2048', name: 'Arjun Reddy', age: 19, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. K. Iyer', date: '2026-08-22', regTime: '11:12', status: 'partial', sections: ['Serology', 'Mantoux'] },
-  { id: 9, sid: 'SID-2049', name: 'Kavya Krishnan', age: 38, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. A. Mehta', date: '2026-08-22', regTime: '11:30', status: 'completed', sections: ['Haematology', 'Electrolytes'] },
-  { id: 10, sid: 'SID-2050', name: 'Thomas Jacob', age: 66, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-23', regTime: '08:50', status: 'completed', sections: ['ABG / Sputum', 'Biochemistry'] }
+  { id: 1, sid: 'SID-2041', name: 'Ravi Kumar Sharma', age: 45, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-18', regTime: '09:14', status: 'completed', sections: ['Haematology', 'Biochemistry'], paymentStatus: 'paid', consentGiven: true },
+  { id: 2, sid: 'SID-2042', name: 'Priya Nair', age: 29, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-18', regTime: '09:31', status: 'partial', sections: ['Serology'], paymentStatus: 'pending', consentGiven: true },
+  { id: 3, sid: 'SID-2043', name: 'Baby of Fathima', age: 8, ageUnit: 'M', gender: 'F', referredBy: 'Dr. K. Iyer', date: '2026-08-19', regTime: '09:47', status: 'draft', sections: ['Urine'], paymentStatus: 'pending', consentGiven: true },
+  { id: 4, sid: 'SID-2044', name: 'Suresh Pillai', age: 61, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-19', regTime: '10:05', status: 'completed', sections: ['Biochemistry', 'L.F.T.'], paymentStatus: 'paid', consentGiven: true },
+  { id: 5, sid: 'SID-2045', name: 'Anjali Verma', age: 34, ageUnit: 'Y', gender: 'F', referredBy: 'Self', date: '2026-08-20', regTime: '10:22', status: 'partial', sections: ['Haematology', 'Urine'], paymentStatus: 'paid', consentGiven: true },
+  { id: 6, sid: 'SID-2046', name: 'Mohammed Irfan', age: 52, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-20', regTime: '10:40', status: 'draft', sections: ['C.S.'], paymentStatus: 'pending', consentGiven: true },
+  { id: 7, sid: 'SID-2047', name: 'Lakshmi Menon', age: 71, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-21', regTime: '10:58', status: 'completed', sections: ['Biochemistry'], paymentStatus: 'paid', consentGiven: true },
+  { id: 8, sid: 'SID-2048', name: 'Arjun Reddy', age: 19, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. K. Iyer', date: '2026-08-22', regTime: '11:12', status: 'partial', sections: ['Serology', 'Mantoux'], paymentStatus: 'pending', consentGiven: true },
+  { id: 9, sid: 'SID-2049', name: 'Kavya Krishnan', age: 38, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. A. Mehta', date: '2026-08-22', regTime: '11:30', status: 'completed', sections: ['Haematology', 'Electrolytes'], paymentStatus: 'paid', consentGiven: true },
+  { id: 10, sid: 'SID-2050', name: 'Thomas Jacob', age: 66, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-23', regTime: '08:50', status: 'completed', sections: ['ABG / Sputum', 'Biochemistry'], paymentStatus: 'pending', consentGiven: true }
 ]
 
-export const mockStats = {
-  today: mockPatients.length,
-  pending: mockPatients.filter((p) => p.status !== 'completed').length,
-  completed: mockPatients.filter((p) => p.status === 'completed').length
+/** Recomputed on every call (not cached) so it always reflects live completion state, not the static seed status. */
+export function getStats() {
+  const statuses = mockPatients.map(computePatientStatus)
+  return {
+    today: mockPatients.length,
+    pending: statuses.filter((s) => s !== 'completed').length,
+    completed: statuses.filter((s) => s === 'completed').length
+  }
 }
 
 export const ALL_SECTIONS = SECTIONS.map((s) => s.label)
@@ -47,6 +55,7 @@ export interface PatientFormData {
   mobile: string
   address: string
   sections: string[]
+  consentGiven: boolean
 }
 
 export const emptyPatientForm = (): PatientFormData => ({
@@ -55,10 +64,11 @@ export const emptyPatientForm = (): PatientFormData => ({
   age: '',
   ageUnit: 'Y',
   gender: 'M',
-  referredBy: '',
+  referredBy: 'Self',
   mobile: '',
   address: '',
-  sections: []
+  sections: [],
+  consentGiven: false
 })
 
 export function patientToForm(p: MockPatient): PatientFormData {
@@ -71,7 +81,8 @@ export function patientToForm(p: MockPatient): PatientFormData {
     referredBy: p.referredBy,
     mobile: '98765 43210',
     address: '14, Lake View Road, Kochi',
-    sections: p.sections
+    sections: p.sections,
+    consentGiven: p.consentGiven
   }
 }
 
@@ -88,7 +99,9 @@ export function formToPatient(form: PatientFormData, editing?: MockPatient): Moc
     date: editing?.date ?? '2026-08-23',
     regTime: editing?.regTime ?? new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
     status: editing?.status ?? 'draft',
-    sections: form.sections
+    sections: form.sections,
+    paymentStatus: editing?.paymentStatus ?? 'pending',
+    consentGiven: form.consentGiven
   }
 }
 
@@ -109,6 +122,20 @@ export const mockDoctors: Doctor[] = [
   { id: 3, name: 'Dr. K. Iyer', specialty: 'Paediatrics', phone: '98450 55667' },
   { id: 4, name: 'Dr. N. Das', specialty: 'Orthopaedics', phone: '98450 77889' }
 ]
+
+export const nextDoctorId = () => Math.max(0, ...mockDoctors.map((d) => d.id)) + 1
+
+/** Adds or updates a doctor in place — same append-in-place pattern as upsertPatient. */
+export function upsertDoctor(doctor: Doctor) {
+  const idx = mockDoctors.findIndex((d) => d.id === doctor.id)
+  if (idx === -1) mockDoctors.unshift(doctor)
+  else mockDoctors[idx] = doctor
+}
+
+/** Looks up the doctor record behind a patient's free-text "referredBy" name, so cards can link to that doctor's page — returns undefined for "Self" or a name that doesn't match any doctor on file. */
+export function doctorByName(name: string): Doctor | undefined {
+  return mockDoctors.find((d) => d.name === name)
+}
 
 /**
  * Price charged to the patient per investigation — this is a placeholder rate card, not a real one.
@@ -165,4 +192,123 @@ export function incentiveLineItemsFor(doctorName: string): IncentiveLineItem[] {
 
 export function incentiveTotalFor(doctorName: string): number {
   return incentiveLineItemsFor(doctorName).reduce((sum, r) => sum + r.amount, 0)
+}
+
+export function patientById(id: number): MockPatient | undefined {
+  return mockPatients.find((p) => p.id === id)
+}
+
+/**
+ * The card/dashboard "status" a patient shows as — computed live from what's actually been
+ * entered in Result Entry, not a stored flag. A patient becomes 'completed' only once every
+ * selected section has every one of its fields filled; 'draft' only while nothing at all has
+ * been entered; anything in between is 'partial'. `patient.status` itself is kept only as a
+ * seed hint for how much placeholder data to pre-fill in the mock/demo phase — it is never the
+ * source of truth for what's shown on screen.
+ */
+export function computePatientStatus(patient: MockPatient): MockPatient['status'] {
+  if (patient.sections.length === 0) return 'draft'
+  const results = getResultsFor(patient)
+  const states = patient.sections.map((label) => {
+    const key = sectionKeyForLabel(label)
+    if (!key) return 'empty' as const
+    return getCompletionState(key, results[key] ?? {})
+  })
+  if (states.every((s) => s === 'complete')) return 'completed'
+  if (states.every((s) => s === 'empty')) return 'draft'
+  return 'partial'
+}
+
+/** True if any entered result for this patient falls outside its reference range — surfaced as a quick "needs a look" flag on cards, without having to open the full report. */
+export function hasAbnormalResults(patient: MockPatient): boolean {
+  const results = getResultsFor(patient)
+  return patient.sections.some((label) => {
+    const key = sectionKeyForLabel(label)
+    if (!key) return false
+    const data = results[key] ?? {}
+    return Object.entries(data).some(([field, value]) => {
+      if (!value || !value.trim()) return false
+      const range = getReferenceRange(key, field, patient.gender)
+      return flagFor(value, range) !== null
+    })
+  })
+}
+
+/** Adds or updates a patient in place — mockPatients is read fresh on every render (not memoized), so this is enough to make Start's dashboard and everything else see the change without a real store. */
+export function upsertPatient(patient: MockPatient) {
+  const idx = mockPatients.findIndex((p) => p.id === patient.id)
+  if (idx === -1) mockPatients.unshift(patient)
+  else mockPatients[idx] = patient
+}
+
+// ---------------------------------------------------------------------------
+// Patient billing — one bill per patient/visit, priced off the same rate card
+// as the doctor incentive report. Bill No. reuses the SID: it's already the
+// unique reference for this visit, so there's no need for a second number.
+// ---------------------------------------------------------------------------
+
+export interface BillLineItem {
+  sno: number
+  investigation: string
+  amount: number
+}
+
+/** One row per investigation ordered for this patient, numbered for the printed bill. */
+export function billLineItemsFor(patient: MockPatient): BillLineItem[] {
+  return patient.sections.map((section, i) => ({
+    sno: i + 1,
+    investigation: section,
+    amount: mockSectionPrice[section] ?? 0
+  }))
+}
+
+export function billTotalFor(patient: MockPatient): number {
+  return billLineItemsFor(patient).reduce((sum, r) => sum + r.amount, 0)
+}
+
+export function setPaymentStatus(patientId: number, status: MockPatient['paymentStatus']) {
+  const patient = mockPatients.find((p) => p.id === patientId)
+  if (patient) patient.paymentStatus = status
+}
+
+// ---------------------------------------------------------------------------
+// Result entry — in-memory only (this is the mock/site phase, no real backend
+// yet). Keeping it in a module-level object rather than component state means
+// editing a patient's results, navigating away, and coming back doesn't lose
+// anything within the same browser session — matching "never lose your place".
+// ---------------------------------------------------------------------------
+
+type ResultsBySection = Record<string, Record<string, string>>
+const resultsStore: Record<number, ResultsBySection> = {}
+
+export function getResultsFor(patient: MockPatient): ResultsBySection {
+  if (!resultsStore[patient.id]) {
+    resultsStore[patient.id] = initialResultsFor(patient)
+  }
+  return resultsStore[patient.id]
+}
+
+export function setSectionResults(patientId: number, sectionKey: string, data: Record<string, string>) {
+  if (!resultsStore[patientId]) resultsStore[patientId] = {}
+  resultsStore[patientId][sectionKey] = data
+}
+
+// ---------------------------------------------------------------------------
+// Lab settings — mock only for now; becomes real once wired to the desktop app.
+// ---------------------------------------------------------------------------
+
+export interface LabSettingsForm {
+  labName: string
+  labAddress: string
+  labPhone: string
+  labEmail: string
+  labDoctor: string
+}
+
+export const mockLabSettings: LabSettingsForm = {
+  labName: 'Super Lab Service',
+  labAddress: '#92, Opp. Azeem Hospital, Moolakadai Street, P.J. Nehru Road, Vaniyambadi.',
+  labPhone: '99442 38110',
+  labEmail: 'superlab.vaniyambadi@gmail.com',
+  labDoctor: 'Dr. Arvind Nair'
 }

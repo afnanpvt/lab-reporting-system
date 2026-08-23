@@ -17,6 +17,16 @@ const LABEL_OVERRIDES: Record<string, string> = {
   afb_smear: 'AFB Smear', pt: 'PT', inr: 'INR', ggt: 'GGT', ag_ratio: 'A/G Ratio'
 }
 
+/** "09:14" -> "09:14 AM", "14:30" -> "02:30 PM" — every stored time is 24-hour; this is the one place that renders it for display. */
+export function formatTime12h(time24: string): string {
+  const [hStr, mStr] = time24.split(':')
+  const h24 = parseInt(hStr, 10)
+  if (isNaN(h24)) return time24
+  const period = h24 >= 12 ? 'PM' : 'AM'
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${String(h12).padStart(2, '0')}:${mStr} ${period}`
+}
+
 export function humanizeKey(key: string): string {
   if (LABEL_OVERRIDES[key]) return LABEL_OVERRIDES[key]
   return key
