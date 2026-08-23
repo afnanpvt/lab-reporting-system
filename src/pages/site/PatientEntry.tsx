@@ -1,17 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutGrid, Users, FileText, Settings, FlaskConical, ArrowLeft, Check } from 'lucide-react'
-import DesignSwitcher from './DesignSwitcher'
+import { ArrowLeft, Check } from 'lucide-react'
+import Shell from './Shell'
 import { ALL_SECTIONS, emptyPatientForm, patientToForm, type MockPatient } from './mockData'
 
-const navItems = [
-  { icon: LayoutGrid, label: 'Dashboard', active: false },
-  { icon: Users, label: 'Patients', active: true },
-  { icon: FileText, label: 'Reports', active: false },
-  { icon: Settings, label: 'Settings', active: false }
-]
-
-export default function Design3PatientEntry() {
+export default function PatientEntry() {
   const navigate = useNavigate()
   const location = useLocation()
   const editing = (location.state as { patient?: MockPatient })?.patient
@@ -21,38 +14,17 @@ export default function Design3PatientEntry() {
     setForm((f) => ({ ...f, sections: f.sections.includes(s) ? f.sections.filter((x) => x !== s) : [...f.sections, s] }))
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#faf8f5] pt-9 flex">
-      <DesignSwitcher current={3} screen={editing ? `Editing ${editing.name}` : 'New Patient'} />
-
-      <aside className="w-20 flex-shrink-0 bg-white border-r border-[#ece7de] flex flex-col items-center py-5 gap-6 h-[calc(100vh-36px)] sticky top-9">
-        <div className="w-10 h-10 rounded-2xl bg-[#e07a5f] flex items-center justify-center">
-          <FlaskConical size={18} className="text-white" />
-        </div>
-        <nav className="flex flex-col gap-2">
-          {navItems.map(({ icon: Icon, label, active }) => (
-            <div
-              key={label}
-              title={label}
-              className={`w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer ${
-                active ? 'bg-[#fbe6de] text-[#e07a5f]' : 'text-[#a39c8f] hover:bg-[#f6f2ea]'
-              }`}
-            >
-              <Icon size={19} />
-            </div>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex-1 px-10 py-9 max-w-3xl">
+    <Shell>
+      <main className="px-10 py-9 max-w-3xl">
         <button
-          onClick={() => navigate('/designs/3')}
+          onClick={() => navigate('/site')}
           className="inline-flex items-center gap-1.5 text-[14px] text-[#a39c8f] hover:text-[#3d3629] mb-5"
         >
           <ArrowLeft size={15} />
           Back to dashboard
         </button>
 
-        <h1 className="text-[24px] font-semibold text-[#3d3629] mb-1">{editing ? 'Edit Patient' : 'New Patient'} 📋</h1>
+        <h1 className="text-[24px] font-semibold text-[#3d3629] mb-1">{editing ? 'Edit Patient' : 'New Patient'}</h1>
         <p className="text-[15px] text-[#8a8171] mb-7">SID <span className="font-mono text-[#3d3629]">{form.sid}</span></p>
 
         <div className="bg-white rounded-2xl border border-[#ece7de] p-6 space-y-5 shadow-sm">
@@ -155,13 +127,13 @@ export default function Design3PatientEntry() {
 
           <div className="flex items-center gap-3 pt-2">
             <button
-              onClick={() => navigate('/designs/3')}
+              onClick={() => navigate('/site')}
               className="px-5 py-2.5 bg-[#e07a5f] text-white text-[15px] font-medium rounded-2xl hover:bg-[#c96a51] shadow-sm"
             >
               {editing ? 'Save Changes' : 'Register Patient'}
             </button>
             <button
-              onClick={() => navigate('/designs/3')}
+              onClick={() => navigate('/site')}
               className="px-5 py-2.5 bg-white text-[#3d3629] text-[15px] font-medium border border-[#e3ddd0] rounded-2xl hover:bg-[#f6f2ea]"
             >
               Cancel
@@ -169,6 +141,6 @@ export default function Design3PatientEntry() {
           </div>
         </div>
       </main>
-    </div>
+    </Shell>
   )
 }

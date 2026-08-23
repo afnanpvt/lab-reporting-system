@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, Users, FileText, Settings, Plus, FlaskConical, Clock, User2 } from 'lucide-react'
-import DesignSwitcher from './DesignSwitcher'
+import { Plus, Clock, User2 } from 'lucide-react'
+import Shell from './Shell'
 import { mockPatients, type MockPatient } from './mockData'
 
 const statusCard: Record<string, { bg: string; border: string; text: string; label: string }> = {
@@ -9,44 +9,16 @@ const statusCard: Record<string, { bg: string; border: string; text: string; lab
   draft: { bg: '#fbeeee', border: '#f0d3d3', text: '#a8434a', label: 'Draft' }
 }
 
-const navItems = [
-  { icon: LayoutGrid, label: 'Dashboard', active: true },
-  { icon: Users, label: 'Patients', active: false },
-  { icon: FileText, label: 'Reports', active: false },
-  { icon: Settings, label: 'Settings', active: false }
-]
-
-export default function Design3SoftCards() {
+export default function Start() {
   const navigate = useNavigate()
-  const openPatient = (p?: MockPatient) => navigate('/designs/3/new', { state: { patient: p } })
+  const openPatient = (p?: MockPatient) => navigate('/site/patient/new', { state: { patient: p } })
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#faf8f5] pt-9 flex">
-      <DesignSwitcher current={3} />
-
-      <aside className="w-20 flex-shrink-0 bg-white border-r border-[#ece7de] flex flex-col items-center py-5 gap-6 h-[calc(100vh-36px)] sticky top-9">
-        <div className="w-10 h-10 rounded-2xl bg-[#e07a5f] flex items-center justify-center">
-          <FlaskConical size={18} className="text-white" />
-        </div>
-        <nav className="flex flex-col gap-2">
-          {navItems.map(({ icon: Icon, label, active }) => (
-            <div
-              key={label}
-              title={label}
-              className={`w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer ${
-                active ? 'bg-[#fbe6de] text-[#e07a5f]' : 'text-[#a39c8f] hover:bg-[#f6f2ea]'
-              }`}
-            >
-              <Icon size={19} />
-            </div>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex-1 px-10 py-9">
+    <Shell>
+      <main className="px-10 py-9">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-[26px] font-semibold text-[#3d3629]">Good morning 👋</h1>
+            <h1 className="text-[26px] font-semibold text-[#3d3629]">Good morning</h1>
             <p className="text-[15px] text-[#8a8171]">8 patients registered today, 5 still need attention</p>
           </div>
           <button
@@ -102,6 +74,6 @@ export default function Design3SoftCards() {
           })}
         </div>
       </main>
-    </div>
+    </Shell>
   )
 }
