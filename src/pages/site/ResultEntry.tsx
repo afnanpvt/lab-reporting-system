@@ -103,7 +103,7 @@ export default function ResultEntry() {
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-full">
         {/* Patient context bar */}
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0">
           <button
@@ -159,6 +159,7 @@ export default function ResultEntry() {
             </span>
           )}
           <div className="flex-1" />
+
           <span className="text-[13px] text-[#8593a3] flex items-center gap-1.5">
             <CheckCircle2 size={13} className="text-[#7fae90]" />
             Saved

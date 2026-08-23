@@ -25,7 +25,7 @@ export default function Settings() {
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-full">
         <div className="flex items-center px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0">
           <button
             onClick={() => navigate('/site')}
