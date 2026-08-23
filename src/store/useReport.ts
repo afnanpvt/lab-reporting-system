@@ -26,6 +26,9 @@ export const useReport = create<ReportStore>((set) => ({
   clearReport: () => set({ patient: null, results: {} }),
 
   loadSettings: async () => {
+    // window.api only exists inside Electron — this store is also mounted on /site routes,
+    // which run in a plain browser during the design-review phase, so this is expected there.
+    if (!window.api) return
     const s = await window.api.settings.get()
     set({ settings: s })
   }
