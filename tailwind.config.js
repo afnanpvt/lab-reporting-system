@@ -4,20 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        app: '#f6f7f7',
+        // Brand blue lifted from the client's actual "Super Lab Service" logo ribbon.
+        app: '#f5f7fa',
         surface: '#ffffff',
-        border: { DEFAULT: '#e2e5e6', strong: '#cbd1d3' },
-        ink: { DEFAULT: '#1a2023', 2: '#5c6569', 3: '#8a9094' },
+        border: { DEFAULT: '#e1e6ec', strong: '#c7cfd9' },
+        ink: { DEFAULT: '#1a2430', 2: '#57677a', 3: '#8593a3' },
         accent: {
-          DEFAULT: '#2c7a73',
-          ink: '#1f5a55',
-          soft: '#e6f2f0',
-          softBorder: '#bfe0db'
+          DEFAULT: '#1b6fae',
+          ink: '#125483',
+          soft: '#e8f1f9',
+          softBorder: '#bfdcf0'
         },
-        success: { DEFAULT: '#2f7d4f', soft: '#eaf5ee' },
-        warning: { DEFAULT: '#8a5a00', soft: '#fcf3df' },
-        danger: { DEFAULT: '#b3261e', soft: '#fbeae8' },
-        info: { DEFAULT: '#1f5fa8', soft: '#e9f1fa' }
+        success: { DEFAULT: '#1f8a54', soft: '#e7f6ee' },
+        warning: { DEFAULT: '#9a6b00', soft: '#fdf3df' },
+        danger: { DEFAULT: '#c23b33', soft: '#fceae8' },
+        info: { DEFAULT: '#1b6fae', soft: '#e8f1f9' }
       }
     }
   },
