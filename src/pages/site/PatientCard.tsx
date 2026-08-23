@@ -1,5 +1,5 @@
-import { Clock, User2, Stethoscope, TriangleAlert } from 'lucide-react'
-import { doctorByName, computePatientStatus, hasAbnormalResults, type MockPatient } from './mockData'
+import { Clock, User2, Stethoscope } from 'lucide-react'
+import { doctorByName, computePatientStatus, type MockPatient } from './mockData'
 import { formatTime12h } from './reportFields'
 
 export const statusCard: Record<string, { bg: string; border: string; text: string; label: string }> = {
@@ -37,7 +37,6 @@ export function HandledByBadge({ referredBy }: { referredBy: string }) {
  */
 export function PatientCard({ patient: p, index, onOpen }: { patient: MockPatient; index: number; onOpen: (p: MockPatient) => void }) {
   const s = statusCard[computePatientStatus(p)]
-  const abnormal = hasAbnormalResults(p)
   return (
     <div
       role="button"
@@ -58,24 +57,12 @@ export function PatientCard({ patient: p, index, onOpen }: { patient: MockPatien
         <div className="w-10 h-10 rounded-full bg-[#eef2f6] flex items-center justify-center">
           <User2 size={17} className="text-[#8593a3]" />
         </div>
-        <div className="flex items-center gap-1.5">
-          {abnormal && (
-            <span
-              className="inline-flex items-center gap-1 text-[11.5px] font-semibold px-2 py-1 rounded-full"
-              style={{ background: '#fceae8', color: '#c23b33', border: '1px solid #f0c9c5' }}
-              title="One or more entered results fall outside the reference range"
-            >
-              <TriangleAlert size={11} />
-              Abnormal
-            </span>
-          )}
-          <span
-            className="text-[11.5px] font-semibold px-2.5 py-1 rounded-full"
-            style={{ backgroundColor: s.bg, color: s.text, border: `1px solid ${s.border}` }}
-          >
-            {s.label}
-          </span>
-        </div>
+        <span
+          className="text-[11.5px] font-semibold px-2.5 py-1 rounded-full"
+          style={{ backgroundColor: s.bg, color: s.text, border: `1px solid ${s.border}` }}
+        >
+          {s.label}
+        </span>
       </div>
       <div className="text-[16.5px] font-semibold text-[#1a2430] mb-0.5">{p.name}</div>
       <div className="text-[13.5px] text-[#57677a] mb-3.5">
