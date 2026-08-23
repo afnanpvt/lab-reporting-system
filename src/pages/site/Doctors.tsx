@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Stethoscope, ChevronRight, Phone } from 'lucide-react'
+import { Stethoscope, ChevronRight, Phone, Plus } from 'lucide-react'
 import Shell from './Shell'
 import { mockDoctors, incentiveTotalFor, mockPatients } from './mockData'
 
@@ -9,39 +9,68 @@ export default function Doctors() {
   return (
     <Shell>
       <main className="px-10 py-9">
-        <div className="mb-8">
-          <h1 className="text-[26px] font-semibold text-[#3d3629]">Doctors</h1>
-          <p className="text-[15px] text-[#8a8171]">Referring doctors and their incentive reports</p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-[26px] font-semibold text-[#1a2430]">Doctors</h1>
+            <p className="text-[15px] text-[#57677a]">Referring doctors, who they've handled, and their incentive reports</p>
+          </div>
+          <button
+            onClick={() => navigate('/site/doctors/new')}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
+          >
+            <Plus size={16} />
+            New Doctor
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {mockDoctors.map((d) => {
-            const patientCount = mockPatients.filter((p) => p.referredBy === d.name).length
+            const handled = mockPatients.filter((p) => p.referredBy === d.name)
             const total = incentiveTotalFor(d.name)
             return (
-              <div
+              <button
                 key={d.id}
                 onClick={() => navigate(`/site/doctors/${d.id}`)}
-                className="rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-white"
-                style={{ borderColor: '#ece7de' }}
+                className="text-left rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/40"
+                style={{ borderColor: '#e1e6ec' }}
               >
                 <div className="flex items-start justify-between mb-3.5">
-                  <div className="w-10 h-10 rounded-full bg-[#f6f2ea] flex items-center justify-center">
-                    <Stethoscope size={17} className="text-[#a39c8f]" />
+                  <div className="w-10 h-10 rounded-full bg-[#eef2f6] flex items-center justify-center">
+                    <Stethoscope size={17} className="text-[#8593a3]" />
                   </div>
-                  <ChevronRight size={16} className="text-[#c9c1b2]" />
+                  <ChevronRight size={16} className="text-[#a8b4c2]" />
                 </div>
-                <div className="text-[16.5px] font-semibold text-[#3d3629] mb-0.5">{d.name}</div>
-                <div className="text-[13.5px] text-[#8a8171] mb-3.5">{d.specialty}</div>
-                <div className="flex items-center gap-1.5 text-[13px] text-[#a39c8f] mb-3.5">
+                <div className="text-[16.5px] font-semibold text-[#1a2430] mb-0.5">{d.name}</div>
+                <div className="text-[13.5px] text-[#57677a] mb-3.5">{d.specialty}</div>
+                <div className="flex items-center gap-1.5 text-[13px] text-[#8593a3] mb-3.5">
                   <Phone size={12} />
                   {d.phone}
                 </div>
-                <div className="flex items-center justify-between pt-3 border-t border-[#f0ece3]">
-                  <span className="text-[13px] text-[#a39c8f]">{patientCount} patient{patientCount === 1 ? '' : 's'} referred</span>
-                  <span className="text-[14px] font-semibold text-[#3d3629]">₹{total.toLocaleString('en-IN')}</span>
+
+                <div className="pt-3 border-t border-[#eaeef2] mb-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#8593a3] mb-1.5">Patients handled</div>
+                  {handled.length === 0 ? (
+                    <p className="text-[13px] text-[#8593a3]">None yet</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {handled.slice(0, 3).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between text-[13px]">
+                          <span className="text-[#1a2430] truncate">{p.name}</span>
+                          <span className="text-[#8593a3] flex-shrink-0 ml-2">{p.date}</span>
+                        </div>
+                      ))}
+                      {handled.length > 3 && (
+                        <div className="text-[12px] text-[#8593a3]">+{handled.length - 3} more</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-[#eaeef2]">
+                  <span className="text-[13px] text-[#8593a3]">{handled.length} patient{handled.length === 1 ? '' : 's'} referred</span>
+                  <span className="text-[14px] font-semibold text-[#1a2430]">₹{total.toLocaleString('en-IN')}</span>
+                </div>
+              </button>
             )
           })}
         </div>
