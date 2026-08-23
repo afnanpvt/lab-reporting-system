@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Stethoscope, ChevronRight, FileCheck2, Eye, IndianRupee, CheckCircle2, Clock3 } from 'lucide-react'
+import { Stethoscope, ChevronRight, FileCheck2, Eye, IndianRupee } from 'lucide-react'
 import Shell from './Shell'
 import { mockDoctors, incentiveTotalFor, mockPatients, billTotalFor, computePatientStatus, type MockPatient } from './mockData'
 
@@ -8,10 +8,6 @@ export default function Reports() {
   const completed = mockPatients.filter((p) => computePatientStatus(p) === 'completed')
   const openPreview = (p: MockPatient) => navigate(`/site/preview/${p.id}`, { state: { patient: p } })
   const openBill = (p: MockPatient) => navigate(`/site/bill/${p.id}`, { state: { patient: p } })
-
-  const outstanding = mockPatients
-    .filter((p) => p.paymentStatus === 'pending')
-    .reduce((sum, p) => sum + billTotalFor(p), 0)
 
   return (
     <Shell>
@@ -42,40 +38,22 @@ export default function Reports() {
         </section>
 
         <section className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold uppercase tracking-widest text-[#8593a3]">Billing</h2>
-            {outstanding > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold px-2.5 py-1 rounded-full" style={{ background: '#fdf3df', color: '#9a6b00', border: '1px solid #f0dfad' }}>
-                <Clock3 size={12} />
-                ₹{outstanding.toLocaleString('en-IN')} outstanding
-              </span>
-            )}
-          </div>
+          <h2 className="text-[13px] font-bold uppercase tracking-widest text-[#8593a3] mb-3">Billing</h2>
           <div className="bg-white rounded-2xl border border-[#e1e6ec] shadow-sm overflow-hidden">
-            {mockPatients.map((p) => {
-              const paid = p.paymentStatus === 'paid'
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => openBill(p)}
-                  className="w-full flex items-center gap-4 px-6 py-3.5 border-b border-[#eaeef2] last:border-b-0 hover:bg-[#f5f7fa] text-left"
-                >
-                  <IndianRupee size={16} className="text-[#8593a3] flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14.5px] font-medium text-[#1a2430] truncate">{p.name}</div>
-                    <div className="text-[12.5px] text-[#8593a3]">{p.sid} · {p.sections.join(', ')}</div>
-                  </div>
-                  <span className="text-[14px] font-semibold text-[#1a2430] flex-shrink-0">₹{billTotalFor(p).toLocaleString('en-IN')}</span>
-                  <span
-                    className="inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-1 rounded-full flex-shrink-0"
-                    style={paid ? { background: '#e7f6ee', color: '#1f8a54' } : { background: '#fdf3df', color: '#9a6b00' }}
-                  >
-                    {paid ? <CheckCircle2 size={11} /> : <Clock3 size={11} />}
-                    {paid ? 'Paid' : 'Pending'}
-                  </span>
-                </button>
-              )
-            })}
+            {mockPatients.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => openBill(p)}
+                className="w-full flex items-center gap-4 px-6 py-3.5 border-b border-[#eaeef2] last:border-b-0 hover:bg-[#f5f7fa] text-left"
+              >
+                <IndianRupee size={16} className="text-[#8593a3] flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14.5px] font-medium text-[#1a2430] truncate">{p.name}</div>
+                  <div className="text-[12.5px] text-[#8593a3]">{p.sid} · {p.sections.join(', ')}</div>
+                </div>
+                <span className="text-[14px] font-semibold text-[#1a2430] flex-shrink-0">₹{billTotalFor(p).toLocaleString('en-IN')}</span>
+              </button>
+            ))}
           </div>
         </section>
 

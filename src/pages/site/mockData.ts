@@ -1,5 +1,5 @@
 import { SECTIONS, getCompletionState } from '../../types/lab'
-import { initialResultsFor, sectionKeyForLabel, flagFor, getReferenceRange } from './reportFields'
+import { initialResultsFor, sectionKeyForLabel } from './reportFields'
 
 export interface MockPatient {
   id: number
@@ -13,22 +13,21 @@ export interface MockPatient {
   regTime: string
   status: 'draft' | 'partial' | 'completed'
   sections: string[]
-  paymentStatus: 'paid' | 'pending'
   /** Captured at registration — patient (or guardian) consented to their data being collected and stored for testing/reporting. Flagged so the business owner can confirm this satisfies their actual legal obligations; this checkbox alone isn't legal advice. */
   consentGiven: boolean
 }
 
 export const mockPatients: MockPatient[] = [
-  { id: 1, sid: 'SID-2041', name: 'Ravi Kumar Sharma', age: 45, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-18', regTime: '09:14', status: 'completed', sections: ['Haematology', 'Biochemistry'], paymentStatus: 'paid', consentGiven: true },
-  { id: 2, sid: 'SID-2042', name: 'Priya Nair', age: 29, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-18', regTime: '09:31', status: 'partial', sections: ['Serology'], paymentStatus: 'pending', consentGiven: true },
-  { id: 3, sid: 'SID-2043', name: 'Baby of Fathima', age: 8, ageUnit: 'M', gender: 'F', referredBy: 'Dr. K. Iyer', date: '2026-08-19', regTime: '09:47', status: 'draft', sections: ['Urine'], paymentStatus: 'pending', consentGiven: true },
-  { id: 4, sid: 'SID-2044', name: 'Suresh Pillai', age: 61, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-19', regTime: '10:05', status: 'completed', sections: ['Biochemistry', 'L.F.T.'], paymentStatus: 'paid', consentGiven: true },
-  { id: 5, sid: 'SID-2045', name: 'Anjali Verma', age: 34, ageUnit: 'Y', gender: 'F', referredBy: 'Self', date: '2026-08-20', regTime: '10:22', status: 'partial', sections: ['Haematology', 'Urine'], paymentStatus: 'paid', consentGiven: true },
-  { id: 6, sid: 'SID-2046', name: 'Mohammed Irfan', age: 52, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-20', regTime: '10:40', status: 'draft', sections: ['C.S.'], paymentStatus: 'pending', consentGiven: true },
-  { id: 7, sid: 'SID-2047', name: 'Lakshmi Menon', age: 71, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-21', regTime: '10:58', status: 'completed', sections: ['Biochemistry'], paymentStatus: 'paid', consentGiven: true },
-  { id: 8, sid: 'SID-2048', name: 'Arjun Reddy', age: 19, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. K. Iyer', date: '2026-08-22', regTime: '11:12', status: 'partial', sections: ['Serology', 'Mantoux'], paymentStatus: 'pending', consentGiven: true },
-  { id: 9, sid: 'SID-2049', name: 'Kavya Krishnan', age: 38, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. A. Mehta', date: '2026-08-22', regTime: '11:30', status: 'completed', sections: ['Haematology', 'Electrolytes'], paymentStatus: 'paid', consentGiven: true },
-  { id: 10, sid: 'SID-2050', name: 'Thomas Jacob', age: 66, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-23', regTime: '08:50', status: 'completed', sections: ['ABG / Sputum', 'Biochemistry'], paymentStatus: 'pending', consentGiven: true }
+  { id: 1, sid: 'SID-2041', name: 'Ravi Kumar Sharma', age: 45, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-18', regTime: '09:14', status: 'completed', sections: ['Haematology', 'Biochemistry'], consentGiven: true },
+  { id: 2, sid: 'SID-2042', name: 'Priya Nair', age: 29, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-18', regTime: '09:31', status: 'partial', sections: ['Serology'], consentGiven: true },
+  { id: 3, sid: 'SID-2043', name: 'Baby of Fathima', age: 8, ageUnit: 'M', gender: 'F', referredBy: 'Dr. K. Iyer', date: '2026-08-19', regTime: '09:47', status: 'draft', sections: ['Urine'], consentGiven: true },
+  { id: 4, sid: 'SID-2044', name: 'Suresh Pillai', age: 61, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. A. Mehta', date: '2026-08-19', regTime: '10:05', status: 'completed', sections: ['Biochemistry', 'L.F.T.'], consentGiven: true },
+  { id: 5, sid: 'SID-2045', name: 'Anjali Verma', age: 34, ageUnit: 'Y', gender: 'F', referredBy: 'Self', date: '2026-08-20', regTime: '10:22', status: 'partial', sections: ['Haematology', 'Urine'], consentGiven: true },
+  { id: 6, sid: 'SID-2046', name: 'Mohammed Irfan', age: 52, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-20', regTime: '10:40', status: 'draft', sections: ['C.S.'], consentGiven: true },
+  { id: 7, sid: 'SID-2047', name: 'Lakshmi Menon', age: 71, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. S. Rao', date: '2026-08-21', regTime: '10:58', status: 'completed', sections: ['Biochemistry'], consentGiven: true },
+  { id: 8, sid: 'SID-2048', name: 'Arjun Reddy', age: 19, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. K. Iyer', date: '2026-08-22', regTime: '11:12', status: 'partial', sections: ['Serology', 'Mantoux'], consentGiven: true },
+  { id: 9, sid: 'SID-2049', name: 'Kavya Krishnan', age: 38, ageUnit: 'Y', gender: 'F', referredBy: 'Dr. A. Mehta', date: '2026-08-22', regTime: '11:30', status: 'completed', sections: ['Haematology', 'Electrolytes'], consentGiven: true },
+  { id: 10, sid: 'SID-2050', name: 'Thomas Jacob', age: 66, ageUnit: 'Y', gender: 'M', referredBy: 'Dr. N. Das', date: '2026-08-23', regTime: '08:50', status: 'completed', sections: ['ABG / Sputum', 'Biochemistry'], consentGiven: true }
 ]
 
 /** Recomputed on every call (not cached) so it always reflects live completion state, not the static seed status. */
@@ -100,7 +99,6 @@ export function formToPatient(form: PatientFormData, editing?: MockPatient): Moc
     regTime: editing?.regTime ?? new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
     status: editing?.status ?? 'draft',
     sections: form.sections,
-    paymentStatus: editing?.paymentStatus ?? 'pending',
     consentGiven: form.consentGiven
   }
 }
@@ -130,6 +128,7 @@ export function upsertDoctor(doctor: Doctor) {
   const idx = mockDoctors.findIndex((d) => d.id === doctor.id)
   if (idx === -1) mockDoctors.unshift(doctor)
   else mockDoctors[idx] = doctor
+  persist()
 }
 
 /** Looks up the doctor record behind a patient's free-text "referredBy" name, so cards can link to that doctor's page — returns undefined for "Self" or a name that doesn't match any doctor on file. */
@@ -183,7 +182,7 @@ export function incentiveLineItemsFor(doctorName: string): IncentiveLineItem[] {
         patientName: p.name,
         gender: p.gender,
         investigation: section,
-        amount: mockSectionPrice[section] ?? 0
+        amount: priceFor(p.id, section)
       })
     }
   }
@@ -199,12 +198,12 @@ export function patientById(id: number): MockPatient | undefined {
 }
 
 /**
- * The card/dashboard "status" a patient shows as — computed live from what's actually been
- * entered in Result Entry, not a stored flag. A patient becomes 'completed' only once every
- * selected section has every one of its fields filled; 'draft' only while nothing at all has
- * been entered; anything in between is 'partial'. `patient.status` itself is kept only as a
- * seed hint for how much placeholder data to pre-fill in the mock/demo phase — it is never the
- * source of truth for what's shown on screen.
+ * The card/dashboard "status" a patient shows as — always auto-computed from what's actually
+ * been entered in Result Entry, deliberately with no manual override. A patient becomes
+ * 'completed' only once every selected section has every one of its fields filled, 'draft' only
+ * while nothing at all has been entered, anything in between is 'partial'. `patient.status`
+ * itself is kept only as a seed hint for how much placeholder data to pre-fill in the mock/demo
+ * phase — it is never the source of truth for what's shown on screen.
  */
 export function computePatientStatus(patient: MockPatient): MockPatient['status'] {
   if (patient.sections.length === 0) return 'draft'
@@ -219,26 +218,12 @@ export function computePatientStatus(patient: MockPatient): MockPatient['status'
   return 'partial'
 }
 
-/** True if any entered result for this patient falls outside its reference range — surfaced as a quick "needs a look" flag on cards, without having to open the full report. */
-export function hasAbnormalResults(patient: MockPatient): boolean {
-  const results = getResultsFor(patient)
-  return patient.sections.some((label) => {
-    const key = sectionKeyForLabel(label)
-    if (!key) return false
-    const data = results[key] ?? {}
-    return Object.entries(data).some(([field, value]) => {
-      if (!value || !value.trim()) return false
-      const range = getReferenceRange(key, field, patient.gender)
-      return flagFor(value, range) !== null
-    })
-  })
-}
-
 /** Adds or updates a patient in place — mockPatients is read fresh on every render (not memoized), so this is enough to make Start's dashboard and everything else see the change without a real store. */
 export function upsertPatient(patient: MockPatient) {
   const idx = mockPatients.findIndex((p) => p.id === patient.id)
   if (idx === -1) mockPatients.unshift(patient)
   else mockPatients[idx] = patient
+  persist()
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +231,20 @@ export function upsertPatient(patient: MockPatient) {
 // as the doctor incentive report. Bill No. reuses the SID: it's already the
 // unique reference for this visit, so there's no need for a second number.
 // ---------------------------------------------------------------------------
+
+/** Per-patient, per-investigation price overrides — the rate card is a starting point, not fixed; staff can adjust what a specific patient is actually charged. */
+const billOverrides: Record<number, Record<string, number>> = {}
+
+/** The real amount a patient is charged for an investigation: their own override if staff set one, otherwise the rate card default. Both the bill and the doctor's incentive report read through this, so an edited amount stays consistent everywhere it appears. */
+export function priceFor(patientId: number, section: string): number {
+  return billOverrides[patientId]?.[section] ?? mockSectionPrice[section] ?? 0
+}
+
+export function setBillItemAmount(patientId: number, section: string, amount: number) {
+  if (!billOverrides[patientId]) billOverrides[patientId] = {}
+  billOverrides[patientId][section] = Math.max(0, amount)
+  persist()
+}
 
 export interface BillLineItem {
   sno: number
@@ -258,17 +257,12 @@ export function billLineItemsFor(patient: MockPatient): BillLineItem[] {
   return patient.sections.map((section, i) => ({
     sno: i + 1,
     investigation: section,
-    amount: mockSectionPrice[section] ?? 0
+    amount: priceFor(patient.id, section)
   }))
 }
 
 export function billTotalFor(patient: MockPatient): number {
   return billLineItemsFor(patient).reduce((sum, r) => sum + r.amount, 0)
-}
-
-export function setPaymentStatus(patientId: number, status: MockPatient['paymentStatus']) {
-  const patient = mockPatients.find((p) => p.id === patientId)
-  if (patient) patient.paymentStatus = status
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +285,7 @@ export function getResultsFor(patient: MockPatient): ResultsBySection {
 export function setSectionResults(patientId: number, sectionKey: string, data: Record<string, string>) {
   if (!resultsStore[patientId]) resultsStore[patientId] = {}
   resultsStore[patientId][sectionKey] = data
+  persist()
 }
 
 // ---------------------------------------------------------------------------
@@ -312,3 +307,39 @@ export const mockLabSettings: LabSettingsForm = {
   labEmail: 'superlab.vaniyambadi@gmail.com',
   labDoctor: 'Dr. Arvind Nair'
 }
+
+// ---------------------------------------------------------------------------
+// Local persistence — there's no real backend yet, so closing the app or
+// navigating away mid-entry used to lose everything the moment the page
+// reloaded. This survives that: every mutation above (patients, doctors,
+// entered results, bill amounts) writes through to localStorage, and it's
+// read back in once, below, after all the seed data has loaded — a saved
+// record for a given patient/doctor id replaces the seed one; anything not
+// yet touched keeps its seed value.
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = 'labReporter.mockState.v1'
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ mockPatients, mockDoctors, resultsStore, billOverrides }))
+  } catch {
+    // Storage can be unavailable (private mode, quota) — losing autosave silently beats crashing.
+  }
+}
+
+function hydrate() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (Array.isArray(saved.mockPatients)) { mockPatients.length = 0; mockPatients.push(...saved.mockPatients) }
+    if (Array.isArray(saved.mockDoctors)) { mockDoctors.length = 0; mockDoctors.push(...saved.mockDoctors) }
+    if (saved.resultsStore) Object.assign(resultsStore, saved.resultsStore)
+    if (saved.billOverrides) Object.assign(billOverrides, saved.billOverrides)
+  } catch {
+    // Corrupt or incompatible saved state — fall back to the seed data instead of crashing.
+  }
+}
+
+hydrate()

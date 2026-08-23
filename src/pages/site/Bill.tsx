@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer, Download, CheckCircle2, Clock3, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Printer, Download, MessageCircle } from 'lucide-react'
 import Shell from './Shell'
-import { billLineItemsFor, billTotalFor, setPaymentStatus, patientById, mockPatients, mockLabSettings, type MockPatient } from './mockData'
+import { billLineItemsFor, billTotalFor, setBillItemAmount, patientById, mockPatients, mockLabSettings, type MockPatient } from './mockData'
 import { formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
@@ -22,22 +22,16 @@ export default function Bill() {
 
   const rows = billLineItemsFor(patient)
   const total = billTotalFor(patient)
-  const paid = patient.paymentStatus === 'paid'
-
-  const togglePaid = () => {
-    setPaymentStatus(patient.id, paid ? 'pending' : 'paid')
-    forceRender((n) => n + 1)
-  }
 
   const handleWhatsApp = () => {
     const digits = '9876543210' // placeholder — real number comes from the patient record once wired to production
-    const message = `Hi, your bill from ${mockLabSettings.labName} for ${patient.sid} is ₹${total.toLocaleString('en-IN')}. ${paid ? 'Marked as paid — thank you!' : 'Please settle at your earliest convenience.'}`
+    const message = `Hi, your bill from ${mockLabSettings.labName} for ${patient.sid} is ₹${total.toLocaleString('en-IN')}.`
     window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
           <button
             onClick={() => navigate(`/site/report/${patient.id}`, { state: { patient } })}
@@ -52,16 +46,6 @@ export default function Bill() {
             <div className="text-[13px] text-[#57677a]">{patient.name} · {patient.sid}</div>
           </div>
           <div className="flex-1" />
-          <button
-            onClick={togglePaid}
-            className="inline-flex items-center gap-2 px-4 py-2 text-[14px] font-medium rounded-xl transition-colors"
-            style={paid
-              ? { background: '#e7f6ee', color: '#1f8a54' }
-              : { background: '#fdf3df', color: '#9a6b00' }}
-          >
-            {paid ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}
-            {paid ? 'Paid' : 'Pending — mark as paid'}
-          </button>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#bfdcf0]">
               <Download size={14} />
@@ -78,7 +62,7 @@ export default function Bill() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
           <div
             className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
@@ -87,22 +71,11 @@ export default function Bill() {
             <div className="relative" style={{ zIndex: 1 }}>
               <LetterheadHeader />
 
-              <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
-                <div>
-                  <div className="text-[14px] font-bold uppercase tracking-widest text-[#1a2430] mb-1">Bill</div>
-                  <div className="text-[12px] text-[#57677a]">
-                    Bill No. <b className="text-[#1a2430]">{patient.sid}</b> · {patient.date} {formatTime12h(patient.regTime)}
-                  </div>
+              <div className="avoid-break mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
+                <div className="text-[14px] font-bold uppercase tracking-widest text-[#1a2430] mb-1">Bill</div>
+                <div className="text-[12px] text-[#57677a]">
+                  Bill No. <b className="text-[#1a2430]">{patient.sid}</b> · {patient.date} {formatTime12h(patient.regTime)}
                 </div>
-                <span
-                  className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-full flex-shrink-0"
-                  style={paid
-                    ? { background: '#e7f6ee', color: '#1f8a54', border: '1px solid #bfe4d0' }
-                    : { background: '#fdf3df', color: '#9a6b00', border: '1px solid #f0dfad' }}
-                >
-                  {paid ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}
-                  {paid ? 'Paid' : 'Payment Pending'}
-                </span>
               </div>
 
               <div className="avoid-break grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] mb-6">
@@ -116,7 +89,7 @@ export default function Bill() {
                   <tr className="text-left text-[#8593a3] text-[10.5px] uppercase tracking-wide border-b-2 border-[#1a2430]">
                     <th className="py-2 pr-2 font-semibold">S.No</th>
                     <th className="py-2 pr-2 font-semibold">Investigation</th>
-                    <th className="py-2 pl-2 font-semibold text-right">Amount</th>
+                    <th className="py-2 pl-2 font-semibold text-right">Amount (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -129,7 +102,22 @@ export default function Bill() {
                       <tr key={r.sno} className="border-b border-[#eaeef2]">
                         <td className="py-2 pr-2 text-[#57677a]">{r.sno}</td>
                         <td className="py-2 pr-2 text-[#1a2430]">{r.investigation}</td>
-                        <td className="py-2 pl-2 text-right font-medium text-[#1a2430]">₹{r.amount.toLocaleString('en-IN')}</td>
+                        <td className="py-1.5 pl-2 text-right font-medium text-[#1a2430]">
+                          <span className="print:inline hidden">₹{r.amount.toLocaleString('en-IN')}</span>
+                          <span className="print:hidden inline-flex items-center justify-end gap-1">
+                            ₹
+                            <input
+                              type="number"
+                              min={0}
+                              value={r.amount}
+                              onChange={(e) => {
+                                setBillItemAmount(patient.id, r.investigation, Number(e.target.value) || 0)
+                                forceRender((n) => n + 1)
+                              }}
+                              className="w-20 text-right px-1.5 py-1 rounded-md border border-[#c7cfd9] bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                            />
+                          </span>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -144,8 +132,8 @@ export default function Bill() {
                 )}
               </table>
 
-              <p className="text-[9.5px] text-[#8593a3] italic mt-2">
-                Placeholder rates — replace with your actual price list before this goes live.
+              <p className="text-[9.5px] text-[#8593a3] italic mt-2 print:hidden">
+                Click an amount above to adjust it for this patient — rates aren't fixed.
               </p>
 
               <div className="avoid-break flex items-end justify-between mt-16">
