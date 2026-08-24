@@ -14,6 +14,9 @@ lab-data.db-journal
 *.log
 npm-debug.log*
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # OS
 .DS_Store
 Thumbs.db

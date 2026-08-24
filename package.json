@@ -1,13 +1,13 @@
 {
-  "name": "lab-reporter",
+  "name": "lumalabs",
   "version": "1.0.0",
-  "description": "Modern Laboratory Reporting System",
+  "description": "LumaLabs — offline-first desktop platform for laboratory registration, results, reporting, and billing",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "cross-env ELECTRON_EXEC_PATH=./node_modules/electron/dist/electron.exe electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-builder"
+    "package": "electron-vite build && electron-builder"
   },
   "dependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -15,8 +15,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "sql.js": "^1.14.1",
-    "zustand": "^5.0.0"
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -37,8 +36,8 @@
     "vite": "^5.4.7"
   },
   "build": {
-    "appId": "com.lab.reporter",
-    "productName": "Lab Reporter",
+    "appId": "com.icamxperts.lumalabs",
+    "productName": "LumaLabs",
     "win": {
       "target": "nsis",
       "icon": "resources/icon.ico"
@@ -49,13 +48,12 @@
     },
     "files": [
       "out/**/*",
-      "!out/main/chunks",
-      "resources/**/*"
+      "!out/main/chunks"
     ],
     "extraResources": [
       {
         "from": "resources/",
-        "to": "resources/"
+        "to": "."
       }
     ]
   },
