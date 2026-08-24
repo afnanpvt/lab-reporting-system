@@ -28,10 +28,27 @@ const api = {
   },
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
-    openWhatsApp: (phone: string, message?: string) => ipcRenderer.invoke('shell:openWhatsApp', phone, message)
+    openWhatsApp: (phone: string, message?: string) => ipcRenderer.invoke('shell:openWhatsApp', phone, message),
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+  },
+  doctors: {
+    list: () => ipcRenderer.invoke('doctors:list'),
+    get: (id: number) => ipcRenderer.invoke('doctors:get', id),
+    create: (data: unknown) => ipcRenderer.invoke('doctors:create', data),
+    update: (id: number, data: unknown) => ipcRenderer.invoke('doctors:update', id, data)
+  },
+  billing: {
+    rateCard: () => ipcRenderer.invoke('billing:rateCard'),
+    setRateCardAmount: (section: string, amount: number) => ipcRenderer.invoke('billing:setRateCardAmount', section, amount),
+    allItems: () => ipcRenderer.invoke('billing:allItems'),
+    setItemAmount: (patientId: number, section: string, amount: number) =>
+      ipcRenderer.invoke('billing:setItemAmount', patientId, section, amount)
   },
   demo: {
     seed: () => ipcRenderer.invoke('demo:seed')
+  },
+  license: {
+    get: () => ipcRenderer.invoke('license:get')
   }
 }
 

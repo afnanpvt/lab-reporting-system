@@ -1,8 +1,9 @@
-import { app, shell, BrowserWindow, ipcMain, nativeTheme } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeTheme, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { initDb } from './db'
+import { initDb, lockLabName } from './db'
 import { registerIpcHandlers } from './ipc'
+import { verifyLicense } from './license'
 
 let mainWindow: BrowserWindow
 
@@ -19,6 +20,10 @@ app.on('second-instance', () => {
 })
 
 function createWindow(): void {
+  const iconPath = is.dev
+    ? join(process.cwd(), 'resources', 'icon.ico')
+    : join(process.resourcesPath, 'icon.ico')
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -26,6 +31,7 @@ function createWindow(): void {
     minHeight: 720,
     show: false,
     autoHideMenuBar: true,
+    icon: iconPath,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#ffffff',
@@ -66,7 +72,19 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   if (!gotLock) return
 
-  electronApp.setAppUserModelId('com.lab.reporter')
+  const license = verifyLicense()
+  if (!license.ok) {
+    dialog.showErrorBox(
+      'LumaLabs — Unlicensed',
+      'This installation does not have a valid license.\n\n' +
+        (license.reason ?? '') +
+        '\n\nContact Scalyft (www.scalyft.tech) to get this lab licensed.'
+    )
+    app.quit()
+    return
+  }
+
+  electronApp.setAppUserModelId('com.icamxperts.lumalabs')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -75,6 +93,7 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = 'light'
 
   await initDb()
+  lockLabName(license.labName!)
   registerIpcHandlers(ipcMain)
   createWindow()
 

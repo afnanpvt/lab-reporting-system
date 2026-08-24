@@ -31,6 +31,17 @@ export function getDb(): SqlDatabase {
   return db
 }
 
+/**
+ * Forces lab_name to whatever the verified license authorizes, every single startup —
+ * regardless of what's currently in the database. This is the actual enforcement point:
+ * even someone who edits the SQLite file directly (bypassing the UI entirely, which never
+ * exposed an edit control for this field anyway) gets overwritten back to the licensed
+ * name the next time the app launches. Only a new signed license file changes this.
+ */
+export function lockLabName(labName: string): void {
+  dbRun('INSERT OR REPLACE INTO lab_settings (key, value) VALUES (?, ?)', ['lab_name', labName])
+}
+
 export async function initDb(): Promise<void> {
   dbPath = is.dev
     ? join(process.cwd(), 'lab-data.db')
@@ -228,12 +239,36 @@ function createTables(): void {
       base_excess TEXT, fio2 TEXT,
       sputum_appearance TEXT, afb_smear TEXT, culture TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS doctors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      specialty TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    -- Default price per investigation (keyed by the section label, matching
+    -- patients.sections). A starting point, not fixed — bill_items below holds
+    -- per-patient overrides.
+    CREATE TABLE IF NOT EXISTS rate_card (
+      section TEXT PRIMARY KEY,
+      amount REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bill_items (
+      patient_id INTEGER NOT NULL,
+      section TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (patient_id, section)
+    );
   `)
 
   // Safe migrations for existing databases
   addColumnIfNotExists('patients', 'address', "TEXT DEFAULT ''")
   addColumnIfNotExists('patients', 'mobile', "TEXT DEFAULT ''")
   addColumnIfNotExists('patients', 'status', "TEXT DEFAULT 'draft'")
+  addColumnIfNotExists('patients', 'consent_given', 'INTEGER DEFAULT 0')
 
   // C.S. antibiogram — keys must match ANTIBIOTICS in src/types/lab.ts
   const ANTIBIOTIC_KEYS = [
@@ -246,19 +281,43 @@ function createTables(): void {
     addColumnIfNotExists('culture_sensitivity', 'abx_' + key, "TEXT DEFAULT ''")
   }
 
-  // Seed defaults only if empty
-  const existing = dbGet("SELECT value FROM lab_settings WHERE key='lab_name'")
-  if (!existing) {
-    const defaults = [
-      ['lab_name', 'Diagnostic Laboratory'],
-      ['lab_address', ''],
-      ['lab_phone', ''],
-      ['lab_doctor', ''],
-      ['default_printer', ''],
-      ['sid_counter', '1']
-    ]
-    for (const [k, v] of defaults) {
-      dbRun('INSERT OR IGNORE INTO lab_settings (key, value) VALUES (?, ?)', [k, v])
-    }
+  // Seed defaults for any key not already present — INSERT OR IGNORE is a no-op against an
+  // existing row, so this only backfills what's missing (e.g. a dev DB seeded before
+  // sid_counter/lab_email existed) and never overwrites a value staff already set.
+  // This build is licensed exclusively to Super Lab Service (see license.ts), so their real
+  // contact details are the actual defaults here rather than blanks waiting to be typed in —
+  // still editable in Settings if any of it ever changes, just not empty on first launch.
+  const defaults = [
+    ['lab_name', 'Diagnostic Laboratory'],
+    ['lab_address', '#92, Opp. Azeem Hospital, Moolakadai Street, P.J. Nehru Road, Vaniyambadi.'],
+    ['lab_phone', '99442 38110'],
+    ['lab_email', 'superlab.vaniyambadi@gmail.com'],
+    ['lab_doctor', 'Dr. Arvind Nair'],
+    ['default_printer', ''],
+    ['sid_counter', '1']
+  ]
+  for (const [k, v] of defaults) {
+    dbRun('INSERT OR IGNORE INTO lab_settings (key, value) VALUES (?, ?)', [k, v])
+  }
+
+  // Rate card defaults — a placeholder starting price list; staff can edit it like any
+  // other row via billing:setRateCardAmount, and per-patient bill_items overrides always
+  // take priority over whatever is here. Same backfill-only INSERT OR IGNORE pattern.
+  const rateDefaults: [string, number][] = [
+    ['Haematology', 350],
+    ['Biochemistry', 500],
+    ['Serology', 600],
+    ['Urine', 200],
+    ['Motion', 200],
+    ['C.S.', 800],
+    ['Mantoux', 150],
+    ['GTT / SA / Lipid', 700],
+    ['Blood', 250],
+    ['Electrolytes', 400],
+    ['L.F.T.', 550],
+    ['ABG / Sputum', 650]
+  ]
+  for (const [section, amount] of rateDefaults) {
+    dbRun('INSERT OR IGNORE INTO rate_card (section, amount) VALUES (?, ?)', [section, amount])
   }
 }

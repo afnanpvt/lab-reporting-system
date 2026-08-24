@@ -2,6 +2,7 @@ import { IpcMain, BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { dbRun, dbGet, dbAll } from './db'
+import { verifyLicense } from './license'
 
 const SECTION_TABLES: Record<string, string> = {
   haematology: 'haematology',
@@ -47,8 +48,8 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     const sid = String(counter).padStart(6, '0')
 
     dbRun(
-      `INSERT INTO patients (sid, name, age, age_unit, gender, address, mobile, referred_by, reg_date, reg_time, rpt_date, rpt_time, sections)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO patients (sid, name, age, age_unit, gender, address, mobile, referred_by, reg_date, reg_time, rpt_date, rpt_time, sections, consent_given)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         sid,
         data.name,
@@ -62,7 +63,8 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
         data.reg_time ?? '',
         data.rpt_date ?? '',
         data.rpt_time ?? '',
-        JSON.stringify(data.sections ?? [])
+        JSON.stringify(data.sections ?? []),
+        data.consent_given ? 1 : 0
       ]
     )
 
@@ -79,8 +81,13 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('patients:update', (_e, id: number, data: Record<string, unknown>) => {
     const keys = Object.keys(data)
     if (keys.length === 0) return true
+    const values = keys.map((k) => {
+      if (k === 'sections' && Array.isArray(data[k])) return JSON.stringify(data[k])
+      if (k === 'consent_given') return data[k] ? 1 : 0
+      return data[k]
+    })
     const set = keys.map((k) => `${k}=?`).join(',')
-    dbRun(`UPDATE patients SET ${set} WHERE id=?`, [...Object.values(data), id])
+    dbRun(`UPDATE patients SET ${set} WHERE id=?`, [...values, id])
     return true
   })
 
@@ -108,16 +115,25 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return true
   })
 
+  // patient_id is the join key, not a result field — every caller treats these rows as
+  // Record<string, string> of just the clinical fields, so it must never leak into them
+  // (it's a number, not text, and crashes anything that assumes every value is a string).
+  function stripPatientId(row: Record<string, unknown> | null): Record<string, unknown> {
+    if (!row) return {}
+    const { patient_id, ...rest } = row
+    return rest
+  }
+
   ipcMain.handle('results:get', (_e, section: string, patientId: number) => {
     const table = SECTION_TABLES[section]
     if (!table) return null
-    return dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId])
+    return stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
   })
 
   ipcMain.handle('results:getAll', (_e, patientId: number) => {
     const result: Record<string, unknown> = {}
     for (const [section, table] of Object.entries(SECTION_TABLES)) {
-      result[section] = dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]) ?? {}
+      result[section] = stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
     }
     return result
   })
@@ -217,6 +233,70 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return { id: pid, sid }
   })
 
+  // ---- Doctors ----
+  ipcMain.handle('doctors:list', () => {
+    return dbAll('SELECT * FROM doctors ORDER BY name')
+  })
+
+  ipcMain.handle('doctors:get', (_e, id: number) => {
+    return dbGet('SELECT * FROM doctors WHERE id=?', [id])
+  })
+
+  ipcMain.handle('doctors:create', (_e, data: Record<string, unknown>) => {
+    dbRun(
+      'INSERT INTO doctors (name, specialty, phone) VALUES (?, ?, ?)',
+      [data.name, data.specialty ?? '', data.phone ?? '']
+    )
+    const inserted = dbGet('SELECT id FROM doctors ORDER BY rowid DESC LIMIT 1')
+    return { id: inserted?.id }
+  })
+
+  ipcMain.handle('doctors:update', (_e, id: number, data: Record<string, unknown>) => {
+    const keys = Object.keys(data)
+    if (keys.length === 0) return true
+    const set = keys.map((k) => `${k}=?`).join(',')
+    dbRun(`UPDATE doctors SET ${set} WHERE id=?`, [...Object.values(data), id])
+    return true
+  })
+
+  // ---- Billing ----
+  // Line-item pricing is computed in the renderer from these two tables: rate_card
+  // (default price per investigation) and bill_items (per-patient overrides, which
+  // always win). Fetching both tables whole is fine at this scale and keeps the IPC
+  // surface as dumb as the rest of the app — no server-side business logic to drift
+  // out of sync with the UI.
+  ipcMain.handle('billing:rateCard', () => {
+    return dbAll('SELECT section, amount FROM rate_card')
+  })
+
+  ipcMain.handle('billing:setRateCardAmount', (_e, section: string, amount: number) => {
+    dbRun(
+      `INSERT INTO rate_card (section, amount) VALUES (?, ?)
+       ON CONFLICT(section) DO UPDATE SET amount=excluded.amount`,
+      [section, amount]
+    )
+    return true
+  })
+
+  ipcMain.handle('billing:allItems', () => {
+    return dbAll('SELECT patient_id, section, amount FROM bill_items')
+  })
+
+  ipcMain.handle('billing:setItemAmount', (_e, patientId: number, section: string, amount: number) => {
+    dbRun(
+      `INSERT INTO bill_items (patient_id, section, amount) VALUES (?, ?, ?)
+       ON CONFLICT(patient_id, section) DO UPDATE SET amount=excluded.amount`,
+      [patientId, section, amount]
+    )
+    return true
+  })
+
+  // ---- License ----
+  ipcMain.handle('license:get', () => {
+    const result = verifyLicense()
+    return result.ok ? { labName: result.labName, licenseId: result.licenseId, issuedAt: result.issuedAt } : null
+  })
+
   // ---- Shell ----
   ipcMain.handle('shell:openPath', (_e, path: string) => {
     shell.showItemInFolder(path)
@@ -227,5 +307,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     const withCountryCode = clean.length === 10 ? `91${clean}` : clean
     const text = message ? `?text=${encodeURIComponent(message)}` : ''
     shell.openExternal(clean ? `https://wa.me/${withCountryCode}${text}` : 'https://web.whatsapp.com')
+  })
+
+  ipcMain.handle('shell:openExternal', (_e, url: string) => {
+    if (!/^https:\/\//.test(url)) return
+    shell.openExternal(url)
   })
 }

@@ -11,6 +11,7 @@ export interface Patient {
   address?: string
   mobile?: string
   status?: 'draft' | 'completed'
+  consent_given?: number
   referred_by: string
   reg_date: string
   reg_time: string
@@ -22,6 +23,25 @@ export interface Patient {
 
 export interface PatientWithResults extends Patient {
   results: AllResults
+}
+
+export interface Doctor {
+  id: number
+  name: string
+  specialty: string
+  phone: string
+  created_at: string
+}
+
+export interface RateCardEntry {
+  section: string
+  amount: number
+}
+
+export interface BillItem {
+  patient_id: number
+  section: string
+  amount: number
 }
 
 export interface LabSettings {
