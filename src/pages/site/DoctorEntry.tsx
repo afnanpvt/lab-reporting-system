@@ -1,29 +1,28 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, AlertCircle, Stethoscope, Phone } from 'lucide-react'
-import Shell from './Shell'
-import { nextDoctorId, upsertDoctor } from './mockData'
+import { createDoctor } from './api'
 
 export default function DoctorEntry() {
   const navigate = useNavigate()
   const [form, setForm] = useState({ name: '', specialty: '', phone: '' })
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const update = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.name.trim()) { setError("Please enter the doctor's name before continuing."); return }
     setError('')
-    const doctor = { id: nextDoctorId(), name: form.name.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() }
-    upsertDoctor(doctor)
-    navigate('/site/doctors')
+    setSaving(true)
+    await createDoctor({ name: form.name.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() })
+    navigate('/doctors')
   }
 
   return (
-    <Shell>
       <main className="px-10 py-9">
         <button
-          onClick={() => navigate('/site/doctors')}
+          onClick={() => navigate('/doctors')}
           className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430] mb-5"
         >
           <ArrowLeft size={15} />
@@ -73,12 +72,13 @@ export default function DoctorEntry() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 onClick={handleSubmit}
-                className="px-5 py-2.5 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
+                disabled={saving}
+                className="px-5 py-2.5 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm disabled:opacity-60"
               >
-                Add Doctor
+                {saving ? 'Saving…' : 'Add Doctor'}
               </button>
               <button
-                onClick={() => navigate('/site/doctors')}
+                onClick={() => navigate('/doctors')}
                 className="px-5 py-2.5 bg-white text-[#1a2430] text-[15px] font-medium border border-[#c7cfd9] rounded-2xl hover:bg-[#eef2f6]"
               >
                 Cancel
@@ -103,6 +103,5 @@ export default function DoctorEntry() {
           </div>
         </div>
       </main>
-    </Shell>
   )
 }

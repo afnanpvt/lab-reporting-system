@@ -1,17 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2 } from 'lucide-react'
-import Shell from './Shell'
-import { mockLabSettings } from './mockData'
+import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock } from 'lucide-react'
+import { getLabSettings, saveLabSettings, getLicenseInfo, type LabSettingsForm, type LicenseInfo } from './api'
+
+const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '' }
 
 export default function Settings() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ ...mockLabSettings })
+  const [form, setForm] = useState<LabSettingsForm>(EMPTY)
+  const [license, setLicense] = useState<LicenseInfo | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    getLabSettings().then(setForm)
+    getLicenseInfo().then(setLicense)
+  }, [])
 
   const update = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaving(true)
+    await saveLabSettings(form)
+    setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -24,11 +35,10 @@ export default function Settings() {
   ]
 
   return (
-    <Shell>
       <div className="flex flex-col h-full">
         <div className="flex items-center px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0">
           <button
-            onClick={() => navigate('/site')}
+            onClick={() => navigate('/')}
             className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
           >
             <ArrowLeft size={15} />
@@ -45,10 +55,11 @@ export default function Settings() {
               </div>
               <button
                 onClick={handleSave}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm"
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm disabled:opacity-60"
               >
                 {saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
-                {saved ? 'Saved!' : 'Save Changes'}
+                {saved ? 'Saved!' : saving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
 
@@ -58,6 +69,14 @@ export default function Settings() {
                   <Building2 size={16} className="text-[#1b6fae]" />
                   <h2 className="text-[11px] font-bold uppercase tracking-widest text-[#8593a3]">Laboratory Information</h2>
                 </div>
+
+                <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[#f5f7fa] border border-[#e1e6ec]">
+                  <Lock size={13} className="text-[#8593a3] flex-shrink-0" />
+                  <div className="text-[13px] text-[#57677a]">
+                    Licensed to <span className="font-medium text-[#1a2430]">{license?.labName ?? '…'}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   {fields.map(({ key, label, placeholder }) => (
                     <div key={key} className={key === 'labAddress' ? 'col-span-2' : ''}>
@@ -95,11 +114,20 @@ export default function Settings() {
                     <p>WhatsApp sharing opens a chat with a message ready — attaching the PDF is one drag once it's saved.</p>
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between text-[12.5px] text-[#a8b4c2] px-1">
+                  <span>LumaLabs</span>
+                  <button
+                    onClick={() => window.api.shell.openExternal('https://www.scalyft.tech')}
+                    className="hover:text-[#1b6fae] hover:underline"
+                  >
+                    Powered by Scalyft
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </Shell>
   )
 }

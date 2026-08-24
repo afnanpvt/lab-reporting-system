@@ -1,13 +1,23 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Stethoscope, ChevronRight, Phone, Plus } from 'lucide-react'
-import Shell from './Shell'
-import { mockDoctors, incentiveTotalFor, mockPatients } from './mockData'
+import { listDoctors, listPatients, loadBillingContext, incentiveTotalFor, type Doctor, type Patient, type BillingContext } from './api'
 
 export default function Doctors() {
   const navigate = useNavigate()
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [billing, setBilling] = useState<BillingContext>({ rateCard: [], items: [] })
+
+  useEffect(() => {
+    Promise.all([listDoctors(), listPatients(), loadBillingContext()]).then(([d, p, b]) => {
+      setDoctors(d)
+      setPatients(p)
+      setBilling(b)
+    })
+  }, [])
 
   return (
-    <Shell>
       <main className="px-10 py-9">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -15,7 +25,7 @@ export default function Doctors() {
             <p className="text-[15px] text-[#57677a]">Referring doctors, who they've handled, and their incentive reports</p>
           </div>
           <button
-            onClick={() => navigate('/site/doctors/new')}
+            onClick={() => navigate('/doctors/new')}
             className="inline-flex items-center gap-2 px-5 py-3 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
           >
             <Plus size={16} />
@@ -24,13 +34,13 @@ export default function Doctors() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {mockDoctors.map((d) => {
-            const handled = mockPatients.filter((p) => p.referredBy === d.name)
-            const total = incentiveTotalFor(d.name)
+          {doctors.map((d) => {
+            const handled = patients.filter((p) => p.referredBy === d.name)
+            const total = incentiveTotalFor(billing, patients, d.name)
             return (
               <button
                 key={d.id}
-                onClick={() => navigate(`/site/doctors/${d.id}`)}
+                onClick={() => navigate(`/doctors/${d.id}`)}
                 className="text-left rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/40"
                 style={{ borderColor: '#e1e6ec' }}
               >
@@ -75,6 +85,5 @@ export default function Doctors() {
           })}
         </div>
       </main>
-    </Shell>
   )
 }

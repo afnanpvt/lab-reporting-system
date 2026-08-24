@@ -5,16 +5,16 @@ import type { ReactNode } from 'react'
 import logo from '../../assets/superlab-logo.png'
 
 const NAV = [
-  { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/site' },
-  { icon: Users, label: 'Patients', description: 'Manage patient records', path: '/site/patients' },
-  { icon: Stethoscope, label: 'Doctors', description: 'Referring doctors & incentives', path: '/site/doctors' },
-  { icon: FileBarChart, label: 'Reports', description: 'Billing & completed reports', path: '/site/reports' },
-  { icon: Settings, label: 'Settings', description: 'Lab configuration', path: '/site/settings' }
+  { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/' },
+  { icon: Users, label: 'Patients', description: 'Manage patient records', path: '/patients' },
+  { icon: Stethoscope, label: 'Doctors', description: 'Referring doctors & incentives', path: '/doctors' },
+  { icon: FileBarChart, label: 'Reports', description: 'Billing & completed reports', path: '/reports' },
+  { icon: Settings, label: 'Settings', description: 'Lab configuration', path: '/settings' }
 ]
 
-/** Which nav item should light up for a given path — /site/doctors/5 still highlights Doctors, etc. */
+/** Which nav item should light up for a given path — /doctors/5 still highlights Doctors, etc. */
 function isNavActive(path: string, pathname: string): boolean {
-  if (path === '/site') return pathname === '/site'
+  if (path === '/') return pathname === '/'
   return pathname === path || pathname.startsWith(path + '/')
 }
 
@@ -25,16 +25,15 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="h-screen overflow-hidden print:h-auto print:overflow-visible bg-[#f5f7fa] flex flex-col">
-      {/* Branded header — claims the full top strip so the native window controls never
-          collide with in-page content (every page's own bar sits below this). print:hidden
-          because every printable page already carries its own letterhead — without this, the
-          app's chrome logo and icon rail were bleeding into the printed/saved PDF above and
-          beside the actual document. */}
+      {/* Branded header — this build is exclusively Super Lab Service's, so their logo lives right
+          in the app itself. print:hidden because every printable page already carries its own
+          letterhead — without this, the app's chrome was bleeding into the printed/saved PDF above
+          the document. */}
       <header
         className="titlebar-drag flex items-center gap-4 pl-6 flex-shrink-0 bg-white border-b border-[#e1e6ec] print:hidden"
         style={{ height: 104, paddingRight: 170 }}
       >
-        <img src={logo} alt="Super Lab Service — Digital E.C.G. & Computerised X-Ray" className="titlebar-no-drag h-24 w-auto flex-shrink-0" draggable={false} />
+        <img src={logo} alt="Super Lab Service" className="titlebar-no-drag h-24 w-auto flex-shrink-0" draggable={false} />
       </header>
 
       <div className="flex-1 flex min-h-0 print:h-auto print:overflow-visible">
@@ -53,7 +52,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                     key={label}
                     title={label}
                     aria-label={label}
-                    onClick={() => navigate(path)}
+                    onClick={() => { navigate(path); setExpanded(false) }}
                     className={`flex items-center gap-3 h-12 rounded-xl px-3 flex-shrink-0 transition-all duration-150 active:scale-[0.96] active:bg-[#bfdcf0] ${
                       active ? 'bg-[#e8f1f9] text-[#1b6fae]' : 'text-[#8593a3] hover:bg-[#eef2f6]'
                     }`}

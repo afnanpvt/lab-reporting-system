@@ -1,16 +1,28 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Stethoscope, ChevronRight, FileCheck2, Eye, IndianRupee } from 'lucide-react'
-import Shell from './Shell'
-import { mockDoctors, incentiveTotalFor, mockPatients, billTotalFor, computePatientStatus, type MockPatient } from './mockData'
+import { listDoctors, listPatientsWithStatus, loadBillingContext, incentiveTotalFor, billTotalFor, type Doctor, type Patient, type PatientWithStatus, type BillingContext } from './api'
 
 export default function Reports() {
   const navigate = useNavigate()
-  const completed = mockPatients.filter((p) => computePatientStatus(p) === 'completed')
-  const openPreview = (p: MockPatient) => navigate(`/site/preview/${p.id}`, { state: { patient: p } })
-  const openBill = (p: MockPatient) => navigate(`/site/bill/${p.id}`, { state: { patient: p } })
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [rows, setRows] = useState<PatientWithStatus[]>([])
+  const [billing, setBilling] = useState<BillingContext>({ rateCard: [], items: [] })
+
+  useEffect(() => {
+    Promise.all([listDoctors(), listPatientsWithStatus(), loadBillingContext()]).then(([d, r, b]) => {
+      setDoctors(d)
+      setRows(r)
+      setBilling(b)
+    })
+  }, [])
+
+  const patients = rows.map((r) => r.patient)
+  const completed = rows.filter((r) => r.status === 'completed').map((r) => r.patient)
+  const openPreview = (p: Patient) => navigate(`/preview/${p.id}`, { state: { patient: p } })
+  const openBill = (p: Patient) => navigate(`/bill/${p.id}`, { state: { patient: p } })
 
   return (
-    <Shell>
       <main className="px-10 py-9 max-w-5xl">
         <div className="mb-8">
           <h1 className="text-[26px] font-semibold text-[#1a2430]">Reports</h1>
@@ -20,10 +32,10 @@ export default function Reports() {
         <section className="mb-8">
           <h2 className="text-[13px] font-bold uppercase tracking-widest text-[#8593a3] mb-3">Doctor Incentive Reports</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {mockDoctors.map((d) => (
+            {doctors.map((d) => (
               <button
                 key={d.id}
-                onClick={() => navigate(`/site/doctors/${d.id}`)}
+                onClick={() => navigate(`/doctors/${d.id}`)}
                 className="text-left rounded-xl p-4 border border-[#e1e6ec] bg-white shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -31,7 +43,7 @@ export default function Reports() {
                   <ChevronRight size={14} className="text-[#a8b4c2]" />
                 </div>
                 <div className="text-[14.5px] font-semibold text-[#1a2430] truncate">{d.name}</div>
-                <div className="text-[13px] text-[#8593a3]">₹{incentiveTotalFor(d.name).toLocaleString('en-IN')}</div>
+                <div className="text-[13px] text-[#8593a3]">₹{incentiveTotalFor(billing, patients, d.name).toLocaleString('en-IN')}</div>
               </button>
             ))}
           </div>
@@ -40,7 +52,7 @@ export default function Reports() {
         <section className="mb-8">
           <h2 className="text-[13px] font-bold uppercase tracking-widest text-[#8593a3] mb-3">Billing</h2>
           <div className="bg-white rounded-2xl border border-[#e1e6ec] shadow-sm overflow-hidden">
-            {mockPatients.map((p) => (
+            {patients.map((p) => (
               <button
                 key={p.id}
                 onClick={() => openBill(p)}
@@ -51,7 +63,7 @@ export default function Reports() {
                   <div className="text-[14.5px] font-medium text-[#1a2430] truncate">{p.name}</div>
                   <div className="text-[12.5px] text-[#8593a3]">{p.sid} · {p.sections.join(', ')}</div>
                 </div>
-                <span className="text-[14px] font-semibold text-[#1a2430] flex-shrink-0">₹{billTotalFor(p).toLocaleString('en-IN')}</span>
+                <span className="text-[14px] font-semibold text-[#1a2430] flex-shrink-0">₹{billTotalFor(billing, p).toLocaleString('en-IN')}</span>
               </button>
             ))}
           </div>
@@ -84,6 +96,5 @@ export default function Reports() {
           </div>
         </section>
       </main>
-    </Shell>
   )
 }

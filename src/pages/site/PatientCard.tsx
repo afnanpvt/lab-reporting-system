@@ -1,5 +1,5 @@
 import { Clock, User2, Stethoscope } from 'lucide-react'
-import { doctorByName, computePatientStatus, type MockPatient } from './mockData'
+import type { Patient, PatientStatus } from './api'
 import { formatTime12h } from './reportFields'
 
 export const statusCard: Record<string, { bg: string; border: string; text: string; label: string }> = {
@@ -15,14 +15,13 @@ export const statusCard: Record<string, { bg: string; border: string; text: stri
  * and Reports areas, where looking at commission figures actually belongs.
  */
 export function HandledByBadge({ referredBy }: { referredBy: string }) {
-  const doctor = doctorByName(referredBy)
   if (referredBy === 'Self') {
     return <span className="text-[13px] text-[#8593a3]">Self-referred</span>
   }
   return (
     <span className="inline-flex items-center gap-1.5 text-[13px] text-[#125483] bg-[#e8f1f9] px-2 py-1 rounded-full -ml-2">
       <Stethoscope size={11} />
-      {doctor?.name ?? referredBy}
+      {referredBy}
     </span>
   )
 }
@@ -34,9 +33,12 @@ export function HandledByBadge({ referredBy }: { referredBy: string }) {
  * `index` is a plain display-order number ("Patient 3"), not a stored identifier — it's for quick
  * verbal reference ("look at patient 3") and changes if the list order changes. The permanent,
  * unique-per-patient reference is the SID printed on the report itself.
+ *
+ * `status` is passed in rather than computed here — it depends on that patient's results, which
+ * now live behind an async IPC call, so callers batch-load it once via listPatientsWithStatus().
  */
-export function PatientCard({ patient: p, index, onOpen }: { patient: MockPatient; index: number; onOpen: (p: MockPatient) => void }) {
-  const s = statusCard[computePatientStatus(p)]
+export function PatientCard({ patient: p, status, index, onOpen }: { patient: Patient; status: PatientStatus; index: number; onOpen: (p: Patient) => void }) {
+  const s = statusCard[status]
   return (
     <div
       role="button"

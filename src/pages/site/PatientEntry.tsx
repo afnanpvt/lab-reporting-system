@@ -1,35 +1,39 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, AlertCircle, User2, Plus } from 'lucide-react'
-import Shell from './Shell'
-import { ALL_SECTIONS, emptyPatientForm, patientToForm, formToPatient, upsertPatient, mockDoctors, type MockPatient } from './mockData'
+import { ALL_SECTIONS, emptyPatientForm, patientToForm, createPatient, updatePatient, listDoctors, type Patient, type Doctor } from './api'
 
 export default function PatientEntry() {
   const navigate = useNavigate()
   const location = useLocation()
-  const editing = (location.state as { patient?: MockPatient })?.patient
+  const editing = (location.state as { patient?: Patient })?.patient
   const [form, setForm] = useState(editing ? patientToForm(editing) : emptyPatientForm())
   const [error, setError] = useState('')
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    listDoctors().then(setDoctors)
+  }, [])
 
   const toggleSection = (s: string) =>
     setForm((f) => ({ ...f, sections: f.sections.includes(s) ? f.sections.filter((x) => x !== s) : [...f.sections, s] }))
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Please enter the patient\'s name before continuing.'); return }
     if (!form.mobile.trim()) { setError('Please enter the patient\'s mobile number before continuing.'); return }
     if (form.sections.length === 0) { setError('Select at least one test before continuing.'); return }
     if (!form.consentGiven) { setError('Patient consent is required before registering — please confirm with the patient and check the consent box below.'); return }
     setError('')
-    const patient = formToPatient(form, editing)
-    upsertPatient(patient)
-    navigate(`/site/report/${patient.id}`, { state: { patient } })
+    setSaving(true)
+    const patient = editing ? await updatePatient(editing.id, form) : await createPatient(form)
+    navigate(`/report/${patient.id}`, { state: { patient } })
   }
 
   return (
-    <Shell>
       <main className="px-10 py-9">
         <button
-          onClick={() => navigate('/site/patients')}
+          onClick={() => navigate('/patients')}
           className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430] mb-5"
         >
           <ArrowLeft size={15} />
@@ -37,7 +41,9 @@ export default function PatientEntry() {
         </button>
 
         <h1 className="text-[24px] font-semibold text-[#1a2430] mb-1">{editing ? 'Edit Patient' : 'New Patient'}</h1>
-        <p className="text-[15px] text-[#57677a] mb-5">SID <span className="font-mono text-[#1a2430]">{form.sid}</span></p>
+        <p className="text-[15px] text-[#57677a] mb-5">
+          {editing ? <>SID <span className="font-mono text-[#1a2430]">{form.sid}</span></> : 'SID will be assigned once saved'}
+        </p>
 
         {error && (
           <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-[14px] mb-5 max-w-2xl" style={{ background: '#fceae8', color: '#c23b33', border: '1px solid #f0c9c5' }}>
@@ -99,7 +105,7 @@ export default function PatientEntry() {
                   <label className="block text-[14px] font-medium text-[#1a2430]">Referred By</label>
                   <button
                     type="button"
-                    onClick={() => navigate('/site/doctors/new')}
+                    onClick={() => navigate('/doctors/new')}
                     className="inline-flex items-center gap-1 text-[12.5px] text-[#1b6fae] hover:text-[#125483] font-medium"
                   >
                     <Plus size={12} />
@@ -112,7 +118,7 @@ export default function PatientEntry() {
                   className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
                 >
                   <option value="Self">Self (no referring doctor)</option>
-                  {mockDoctors.map((d) => (
+                  {doctors.map((d) => (
                     <option key={d.id} value={d.name}>{d.name}{d.specialty ? ` — ${d.specialty}` : ''}</option>
                   ))}
                 </select>
@@ -175,12 +181,13 @@ export default function PatientEntry() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 onClick={handleSubmit}
-                className="px-5 py-2.5 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
+                disabled={saving}
+                className="px-5 py-2.5 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm disabled:opacity-60"
               >
-                {editing ? 'Save & Continue' : 'Start Entering Results'}
+                {saving ? 'Saving…' : editing ? 'Save & Continue' : 'Start Entering Results'}
               </button>
               <button
-                onClick={() => navigate('/site/patients')}
+                onClick={() => navigate('/patients')}
                 className="px-5 py-2.5 bg-white text-[#1a2430] text-[15px] font-medium border border-[#c7cfd9] rounded-2xl hover:bg-[#eef2f6]"
               >
                 Cancel
@@ -196,7 +203,7 @@ export default function PatientEntry() {
             </div>
             <div className="text-[16.5px] font-semibold text-[#1a2430] mb-0.5">{form.name.trim() || 'Unnamed Patient'}</div>
             <div className="text-[13.5px] text-[#57677a] mb-3.5">
-              {form.age || '—'}{form.ageUnit} · {form.gender === 'M' ? 'Male' : 'Female'} · {form.sid}
+              {form.age || '—'}{form.ageUnit} · {form.gender === 'M' ? 'Male' : 'Female'} · {form.sid || 'SID pending'}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap mb-3.5">
               {form.sections.length === 0 ? (
@@ -213,6 +220,5 @@ export default function PatientEntry() {
           </div>
         </div>
       </main>
-    </Shell>
   )
 }

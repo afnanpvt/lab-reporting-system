@@ -1,18 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle } from 'lucide-react'
-import Shell from './Shell'
-import { getResultsFor, patientById, mockPatients, mockLabSettings, type MockPatient } from './mockData'
+import { getPatient, getResultsFor, getLabSettings, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
-
-function resolvePatient(location: ReturnType<typeof useLocation>, idParam?: string): MockPatient {
-  const fromState = (location.state as { patient?: MockPatient })?.patient
-  if (fromState) return fromState
-  const fromParam = idParam ? patientById(Number(idParam)) : undefined
-  return fromParam ?? mockPatients[0]
-}
 
 /** "Now", formatted to match the app's existing date/time style, with a 12-hour AM/PM clock. */
 function formatReportedAt(): string {
@@ -22,7 +14,9 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt }: { block: ReportBlock; patient: MockPatient; results: Record<string, Record<string, string>>; reportedAt: string }) {
+function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; labDoctor: string
+}) {
   if (block.kind === 'patientInfo') {
     return (
       <div className="avoid-break">
@@ -101,7 +95,7 @@ function ReportBlockView({ block, patient, results, reportedAt }: { block: Repor
         </div>
         <div className="text-right">
           <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
-          <div className="text-[10px] font-bold">{mockLabSettings.labDoctor}</div>
+          <div className="text-[10px] font-bold">{labDoctor}</div>
           <div className="text-[9px] text-[#555]">Consultant Pathologist</div>
         </div>
       </div>
@@ -113,24 +107,50 @@ export default function ReportPreview() {
   const location = useLocation()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const patient = resolvePatient(location, id)
-  const results = getResultsFor(patient)
 
-  const pages = useMemo(() => paginateReport(patient, results), [patient, results])
-  const reportedAt = useMemo(() => formatReportedAt(), [patient.id])
+  const [patient, setPatient] = useState<Patient | null>((location.state as { patient?: Patient })?.patient ?? null)
+  const [results, setResults] = useState<ResultsBySection | null>(null)
+  const [settings, setSettings] = useState<LabSettingsForm | null>(null)
+
+  useEffect(() => {
+    const fromState = (location.state as { patient?: Patient })?.patient
+    if (fromState) { setPatient(fromState); return }
+    if (id) getPatient(Number(id)).then(setPatient)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  useEffect(() => {
+    if (!patient) return
+    getResultsFor(patient.id).then(setResults)
+  }, [patient?.id])
+
+  useEffect(() => {
+    getLabSettings().then(setSettings)
+  }, [])
+
+  const pages = useMemo(() => (patient && results ? paginateReport(patient, results) : []), [patient, results])
+  const reportedAt = useMemo(() => formatReportedAt(), [patient?.id])
 
   const handleWhatsApp = () => {
-    const digits = '9876543210' // placeholder — real number comes from the patient record once wired to production
-    const message = `Hi, your lab report from ${mockLabSettings.labName} is ready. Please find it attached.`
+    if (!patient || !settings) return
+    const digits = patient.mobile.replace(/\D/g, '') || '9876543210'
+    const message = `Hi, your lab report from ${settings.labName} is ready. Please find it attached.`
     window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
+  if (!patient || !results || !settings) {
+    return (
+        <main className="px-10 py-9">
+          <p className="text-[15px] text-[#57677a]">Loading…</p>
+        </main>
+    )
+  }
+
   return (
-    <Shell>
       <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
           <button
-            onClick={() => navigate(`/site/report/${patient.id}`, { state: { patient } })}
+            onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
             className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
           >
             <ArrowLeft size={15} />
@@ -158,7 +178,7 @@ export default function ReportPreview() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
           <div className="flex flex-col items-center gap-9 print:gap-0">
             {pages.map((blocks, pageIndex) => (
               <div
@@ -173,23 +193,22 @@ export default function ReportPreview() {
                 <LetterheadWatermark />
 
                 <div className="relative" style={{ zIndex: 1 }}>
-                  <LetterheadHeader />
+                  <LetterheadHeader labName={settings.labName} />
                 </div>
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} labDoctor={settings.labDoctor} />
                   ))}
                 </div>
 
                 <div className="relative mt-4" style={{ zIndex: 1 }}>
-                  <LetterheadFooter />
+                  <LetterheadFooter settings={settings} />
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
-    </Shell>
   )
 }

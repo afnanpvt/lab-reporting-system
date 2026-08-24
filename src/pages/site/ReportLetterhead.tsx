@@ -1,5 +1,5 @@
 import { Phone, Mail, MapPin, QrCode } from 'lucide-react'
-import { mockLabSettings } from './mockData'
+import type { LabSettingsForm } from './api'
 import logo from '../../assets/superlab-logo.png'
 import badge from '../../assets/superlab-25years-badge.png'
 
@@ -9,10 +9,10 @@ import badge from '../../assets/superlab-25years-badge.png'
  * preview shows page-by-page is exactly what prints, no reliance on the browser's print engine
  * to repeat fixed-position chrome across pages.
  */
-export function LetterheadHeader() {
+export function LetterheadHeader({ labName }: { labName: string }) {
   return (
     <div className="flex items-center justify-between bg-white">
-      <img src={logo} alt={mockLabSettings.labName} className="h-32 w-auto" />
+      <img src={logo} alt={labName} className="h-32 w-auto" />
       <img src={badge} alt="Celebrating 25 years of service" className="h-[144px] w-auto" />
     </div>
   )
@@ -39,7 +39,7 @@ const CERTIFICATIONS = ['BMQR', 'ISO 9001', 'ISO 9001', 'ISAC\nAccreditation']
  * document. 'incentive' and 'billing' each get their own genuinely relevant note instead of a
  * single generic line borrowed from the patient report.
  */
-export function LetterheadFooter({ variant = 'report' }: { variant?: 'report' | 'incentive' | 'billing' }) {
+export function LetterheadFooter({ variant = 'report', settings }: { variant?: 'report' | 'incentive' | 'billing'; settings: Pick<LabSettingsForm, 'labPhone' | 'labEmail' | 'labAddress'> }) {
   return (
     <div className="bg-white">
       <div className="flex items-start justify-between gap-4 pt-4" style={{ borderTop: '1px solid #dde3ea' }}>
@@ -93,15 +93,15 @@ export function LetterheadFooter({ variant = 'report' }: { variant?: 'report' | 
         <div className="space-y-1.5 text-[11px] text-[#1a2430]">
           <div className="flex items-center gap-2">
             <Phone size={13} className="text-[#1b6fae]" />
-            <span className="tracking-wider font-medium">{mockLabSettings.labPhone}</span>
+            <span className="tracking-wider font-medium">{settings.labPhone}</span>
           </div>
           <div className="flex items-center gap-2">
             <Mail size={13} className="text-[#1b6fae]" />
-            {mockLabSettings.labEmail}
+            {settings.labEmail}
           </div>
           <div className="flex items-start gap-2">
             <MapPin size={13} className="text-[#1b6fae] flex-shrink-0 mt-0.5" />
-            <span className="max-w-[320px]">{mockLabSettings.labAddress}</span>
+            <span className="max-w-[320px]">{settings.labAddress}</span>
           </div>
         </div>
 

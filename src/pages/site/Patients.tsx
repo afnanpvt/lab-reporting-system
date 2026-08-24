@@ -1,36 +1,39 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
-import Shell from './Shell'
-import { mockPatients, computePatientStatus, type MockPatient } from './mockData'
+import { listPatientsWithStatus, type Patient, type PatientWithStatus } from './api'
 import { PatientCard, statusCard } from './PatientCard'
 
 export default function Patients() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const newPatient = () => navigate('/site/patient/new')
-  const openPatient = (p: MockPatient) => navigate(`/site/report/${p.id}`, { state: { patient: p } })
+  const [rows, setRows] = useState<PatientWithStatus[]>([])
+  const newPatient = () => navigate('/patient/new')
+  const openPatient = (p: Patient) => navigate(`/report/${p.id}`, { state: { patient: p } })
 
-  const filtered = mockPatients.filter((p) =>
-    !query.trim() ||
-    p.name.toLowerCase().includes(query.toLowerCase()) ||
-    p.sid.toLowerCase().includes(query.toLowerCase())
+  useEffect(() => {
+    listPatientsWithStatus().then(setRows)
+  }, [])
+
+  const filtered = rows.filter(
+    ({ patient: p }) =>
+      !query.trim() ||
+      p.name.toLowerCase().includes(query.toLowerCase()) ||
+      p.sid.toLowerCase().includes(query.toLowerCase())
   )
 
-  const liveStatuses = mockPatients.map(computePatientStatus)
   const counts = {
-    completed: liveStatuses.filter((s) => s === 'completed').length,
-    partial: liveStatuses.filter((s) => s === 'partial').length,
-    draft: liveStatuses.filter((s) => s === 'draft').length
+    completed: rows.filter((r) => r.status === 'completed').length,
+    partial: rows.filter((r) => r.status === 'partial').length,
+    draft: rows.filter((r) => r.status === 'draft').length
   }
 
   return (
-    <Shell>
       <main className="px-10 py-9">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-[26px] font-semibold text-[#1a2430]">Patients</h1>
-            <p className="text-[15px] text-[#57677a]">{mockPatients.length} registered · who handled each one, at a glance</p>
+            <p className="text-[15px] text-[#57677a]">{rows.length} registered · who handled each one, at a glance</p>
           </div>
           <button
             onClick={newPatient}
@@ -67,14 +70,13 @@ export default function Patients() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((p, i) => (
-            <PatientCard key={p.id} patient={p} index={i} onOpen={openPatient} />
+          {filtered.map((r, i) => (
+            <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} />
           ))}
           {filtered.length === 0 && (
             <p className="text-[14px] text-[#8593a3] col-span-full py-8 text-center">No patients match "{query}".</p>
           )}
         </div>
       </main>
-    </Shell>
   )
 }

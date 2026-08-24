@@ -1,44 +1,58 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope } from 'lucide-react'
-import Shell from './Shell'
-import { getResultsFor, setSectionResults, patientById, mockPatients, doctorByName, type MockPatient } from './mockData'
+import { getPatient, getResultsFor, setSectionResults, listPatients, type Patient, type ResultsBySection } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 
 const FOCUSABLE_SELECTOR = 'input, .abx-btn'
 
-function resolvePatient(location: ReturnType<typeof useLocation>, idParam?: string): MockPatient {
-  const fromState = (location.state as { patient?: MockPatient })?.patient
-  if (fromState) return fromState
-  const fromParam = idParam ? patientById(Number(idParam)) : undefined
-  return fromParam ?? mockPatients[0]
-}
-
 export default function ResultEntry() {
   const location = useLocation()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const patient = resolvePatient(location, id)
 
-  const categories = useMemo(
-    () => patient.sections.map((label) => ({ label, key: sectionKeyForLabel(label)! })).filter((c) => c.key),
-    [patient]
-  )
-
-  const [resultsVersion, setResultsVersion] = useState(0)
-  const results = getResultsFor(patient)
+  const [patient, setPatient] = useState<Patient | null>((location.state as { patient?: Patient })?.patient ?? null)
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [results, setResults] = useState<ResultsBySection>({})
+  const [resultsLoaded, setResultsLoaded] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const paneRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef(false)
 
   useEffect(() => {
+    listPatients().then(setPatients)
+  }, [])
+
+  useEffect(() => {
+    const fromState = (location.state as { patient?: Patient })?.patient
+    if (fromState) { setPatient(fromState); return }
+    if (id) getPatient(Number(id)).then(setPatient)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  useEffect(() => {
+    if (!patient) return
+    setResultsLoaded(false)
+    getResultsFor(patient.id).then((r) => {
+      setResults(r)
+      setResultsLoaded(true)
+    })
+  }, [patient?.id])
+
+  const categories = useMemo(
+    () => (patient ? patient.sections.map((label) => ({ label, key: sectionKeyForLabel(label)! })).filter((c) => c.key) : []),
+    [patient]
+  )
+
+  useEffect(() => {
+    if (!resultsLoaded) return
     const firstIncomplete = categories.findIndex(
       (c) => getCompletionState(c.key, results[c.key] ?? {}) !== 'complete'
     )
     setActiveIndex(firstIncomplete === -1 ? 0 : firstIncomplete)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patient.id])
+  }, [patient?.id, resultsLoaded])
 
   useEffect(() => {
     if (!pendingFocusRef.current) return
@@ -50,19 +64,20 @@ export default function ResultEntry() {
     return () => clearTimeout(t)
   }, [activeIndex])
 
-  const patientIndex = mockPatients.findIndex((p) => p.id === patient.id)
-  const prevPatient = patientIndex > 0 ? mockPatients[patientIndex - 1] : undefined
-  const nextPatient = patientIndex !== -1 && patientIndex < mockPatients.length - 1 ? mockPatients[patientIndex + 1] : undefined
-  const goToPatient = (p?: MockPatient) => { if (p) navigate(`/site/report/${p.id}`, { state: { patient: p } }) }
+  const patientIndex = patient ? patients.findIndex((p) => p.id === patient.id) : -1
+  const prevPatient = patientIndex > 0 ? patients[patientIndex - 1] : undefined
+  const nextPatient = patientIndex !== -1 && patientIndex < patients.length - 1 ? patients[patientIndex + 1] : undefined
+  const goToPatient = (p?: Patient) => { if (p) navigate(`/report/${p.id}`, { state: { patient: p } }) }
 
   const active = categories[activeIndex]
   const activeData = results[active?.key] ?? {}
 
   const updateField = useCallback((field: string, value: string) => {
+    if (!patient || !active) return
     const merged = { ...(results[active.key] ?? {}), [field]: value }
+    setResults((r) => ({ ...r, [active.key]: merged }))
     setSectionResults(patient.id, active.key, merged)
-    setResultsVersion((v) => v + 1)
-  }, [active, patient.id, results])
+  }, [active, patient, results])
 
   const goTo = useCallback((idx: number) => {
     if (idx < 0 || idx >= categories.length) return
@@ -87,13 +102,19 @@ export default function ResultEntry() {
     }
   }
 
+  if (!patient || !resultsLoaded) {
+    return (
+        <main className="px-10 py-9">
+          <p className="text-[15px] text-[#57677a]">Loading…</p>
+        </main>
+    )
+  }
+
   if (!active) {
     return (
-      <Shell>
         <main className="px-10 py-9">
           <p className="text-[15px] text-[#57677a]">This patient has no tests selected.</p>
         </main>
-      </Shell>
     )
   }
 
@@ -102,12 +123,11 @@ export default function ResultEntry() {
   const completion = getCompletionState(active.key, activeData)
 
   return (
-    <Shell>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0">
           <button
-            onClick={() => navigate('/site/patients')}
+            onClick={() => navigate('/patients')}
             className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
           >
             <ArrowLeft size={15} />
@@ -138,7 +158,7 @@ export default function ResultEntry() {
             <div className="flex items-center gap-1.5">
               <span className="text-[16px] font-semibold text-[#1a2430] leading-tight">{patient.name}</span>
               <button
-                onClick={() => navigate('/site/patient/new', { state: { patient } })}
+                onClick={() => navigate('/patient/new', { state: { patient } })}
                 title="Edit patient details"
                 className="text-[#8593a3] hover:text-[#1b6fae] p-0.5 rounded"
               >
@@ -155,7 +175,7 @@ export default function ResultEntry() {
               title="Doctor handling this patient"
             >
               <Stethoscope size={12} />
-              {doctorByName(patient.referredBy)?.name ?? patient.referredBy}
+              {patient.referredBy}
             </span>
           )}
           <div className="flex-1" />
@@ -165,14 +185,14 @@ export default function ResultEntry() {
             Saved
           </span>
           <button
-            onClick={() => navigate(`/site/bill/${patient.id}`, { state: { patient } })}
+            onClick={() => navigate(`/bill/${patient.id}`, { state: { patient } })}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white text-[#1a2430] text-[14px] font-medium border border-[#c7cfd9] rounded-xl hover:bg-[#eef2f6]"
           >
             <IndianRupee size={14} />
             Bill
           </button>
           <button
-            onClick={() => navigate(`/site/preview/${patient.id}`, { state: { patient } })}
+            onClick={() => navigate(`/preview/${patient.id}`, { state: { patient } })}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm"
           >
             <Eye size={14} />
@@ -245,7 +265,6 @@ export default function ResultEntry() {
           </div>
         </div>
       </div>
-    </Shell>
   )
 }
 
