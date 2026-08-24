@@ -1,46 +1,45 @@
-# Lab Reporter
+# LumaLabs
 
-A modern, offline-first desktop application for laboratory patient registration, result entry, and report generation — built for Windows.
+A modern, offline-first desktop application for laboratory patient registration, result entry, report generation, and billing — built for Windows.
 
-It replaces a legacy VB6-style lab management tool with a keyboard-first workflow, while keeping the operator's existing mental model (patient → tests → results → report → print/share) intact.
+This build is licensed exclusively to **Super Lab Service** (Vaniyambadi) — see [Licensing](#licensing) below. The underlying platform is generic (nothing is hardcoded to one lab's data), but each real-world install is a separate signed, separately-built copy for one specific lab.
 
 ## What's in here
 
-- **Start** — search for an existing patient or jump straight into registering a new one. Shows only today's genuinely unfinished patients, not a generic history feed.
-- **Patient Intake** — minimal required fields (name, age, gender, mobile), test selection as toggle chips, optional contact/address details tucked behind a disclosure.
-- **Edit Patient Info** — go back and correct registration details or adjust selected tests at any point without losing your place in result entry.
-- **Result Entry Workbench** — the core of the app:
-  - A compact local rail shows every selected category with a completion state (empty / partial / complete) — it's a checklist, not app navigation.
-  - One category is shown at a time, sized to its own content (a 4-field category and a 30-field category don't get the same amount of screen).
-  - `Enter` and `Tab` move between fields automatically and cross into the next category at the end of one — keyboard-only entry works end to end.
-  - Autosave runs continuously in the background (debounced); there's no manual "Save" button to remember.
-  - Abnormal values are flagged live, in red/blue, as you type, based on the printed reference range.
-  - Haematology is broken into its five legacy sub-panels (CBC / Differential / ESR / Coagulation / Blood Group). Culture & Sensitivity gets a dedicated antibiogram grid (20 antibiotics × S/I/R) instead of being forced into the same row layout as everything else.
-- **Report Review** — full A4 preview, printer selection (real Windows printer names), PDF export, and a WhatsApp handoff that opens the patient's actual chat with a message pre-filled and the PDF highlighted in Explorer, ready to drag in.
-- **Settings** — lab identity (name/address/phone/authorised doctor), plus a plain-language note confirming everything is stored locally with nothing sent to the cloud.
+Every screen lives under `src/pages/site/`, backed by a single data-access module (`src/pages/site/api.ts`) that talks to the Electron main process over IPC (`window.api.*`). Nothing touches the database directly from the UI.
 
-12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S., Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
+- **Dashboard** — today's registered/needs-attention/completed counts, recent patients.
+- **Patients** — search, status pills (draft / in progress / completed — always computed live from actual saved results, never manually overridden), referring doctor shown per patient.
+- **Patient Entry** — register or edit a patient: name, age, gender, mobile, address, referring doctor, which of the 12 test sections apply, and a consent checkbox.
+- **Result Entry** — one test section at a time, a local checklist rail showing completion state per section, prev/next patient navigation, live abnormal-value flagging against reference ranges, click-to-prefill from the printed reference range.
+- **Report Preview** — the actual printable A4 report, paginated in JavaScript (`pagination.ts`) so what's on screen is exactly what prints; printed via the browser's native print dialog (`window.print()`), which also offers "Save as PDF."
+- **Bill** — per-patient line items derived from a rate card, with per-patient-per-section amount overrides (rates aren't fixed).
+- **Doctors / Incentive Report** — referring doctors, who they've referred, and a printable incentive statement per doctor.
+- **Reports** — every completed report and bill in one place.
+- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), plus a note confirming everything is stored locally.
+
+12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S. (with a 20-antibiotic antibiogram grid), Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
 
 ## Tech stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Shell | Electron 32 | Native Windows printer APIs (`webContents.print` / `printToPDF`), not an emulation layer |
+| Shell | Electron 32 | Native Windows printing, no browser sandbox limitations |
 | UI | React 18 + TypeScript + Vite | Fast dev loop, typed IPC contract |
-| State | Zustand | Small, no boilerplate |
-| Styling | Tailwind CSS + a semantic token system | One accent color, light-mode-only design tokens defined once in `tailwind.config.js` and mirrored as CSS variables for print output |
-| Local database | sql.js (SQLite compiled to WASM) | Zero native build tooling required — no Visual Studio Build Tools, no Python, works out of the box on any machine that runs Node |
+| Styling | Tailwind CSS | Utility classes, no separate design-token build step |
+| Local database | sql.js (SQLite compiled to WASM) | Zero native build tooling required — no Visual Studio Build Tools, no Python |
 | Routing | React Router (HashRouter) | Plays nicely with Electron's `file://` production loading |
+| Licensing | Ed25519 signatures (Node's built-in `crypto`) | Fully offline verification, no server round-trip |
 
 Everything runs fully offline. There is no server, no API, no network call anywhere in the data path — patient data lives in a single local SQLite file.
 
 ## Prerequisites
 
-- **Windows 10/11** — required for full functionality (native printer detection/printing). The UI will run in dev mode on macOS/Linux for review, but printing and the Windows installer target Windows only.
+- **Windows 10/11** — required for full functionality (native printing). The UI will run in dev mode on macOS/Linux for review, but printing and packaging target Windows only.
 - **[Node.js](https://nodejs.org/) 18 LTS or newer** (20 LTS recommended) — includes npm.
 - **Git**
 
-No database server, no Docker, no API keys, no `.env` file. That's the whole list.
+No database server, no Docker, no API keys, no `.env` file.
 
 ## Getting started
 
@@ -51,7 +50,9 @@ npm install
 npm run dev
 ```
 
-That's it — `npm run dev` starts the app in an Electron window with hot reload. On first launch it creates its own local database and seeds default settings; there's nothing else to configure.
+`npm run dev` starts the app in an Electron window with hot reload. On first launch it creates its own local database and seeds default settings.
+
+Since this build is license-gated (see below), **dev mode also needs a valid `resources/license.json`** in the project root to get past the startup check — without one the app refuses to launch, by design.
 
 > **Windows-specific note:** the `dev` script uses `cross-env` so it works from PowerShell, Git Bash, or cmd.exe without extra setup.
 
@@ -69,14 +70,15 @@ npm install
 | Command | What it does |
 |---|---|
 | `npm run dev` | Launches the app in development mode with hot reload |
-| `npm run build` | Type-checks nothing on its own, but bundles main/preload/renderer for production via `electron-vite` |
-| `npm run preview` | Runs the production build locally without packaging an installer |
-| `npm run package` | Builds a distributable Windows installer (`.exe`, via `electron-builder`) — see note below |
+| `npm run build` | Bundles main/preload/renderer for production via `electron-vite` |
+| `npm run preview` | Runs the production build locally without packaging |
+| `npm run package` | Runs `build` then `electron-builder` to produce a distributable — see [Packaging](#packaging) |
 
-To type-check the renderer explicitly:
+To type-check explicitly:
 
 ```bash
-npx tsc --noEmit -p tsconfig.json
+npx tsc --noEmit -p tsconfig.web.json    # renderer
+npx tsc --noEmit -p tsconfig.node.json   # main + preload
 ```
 
 ## Project structure
@@ -84,44 +86,64 @@ npx tsc --noEmit -p tsconfig.json
 ```
 lab-app/
 ├── electron/
-│   ├── main/          # Electron main process: window, IPC handlers, sql.js database
-│   └── preload/       # contextBridge — the only surface the renderer can call into main
+│   ├── main/
+│   │   ├── db.ts        # sql.js init, schema, migrations, dbRun/dbGet/dbAll helpers
+│   │   ├── ipc.ts        # every window.api.* handler
+│   │   ├── license.ts    # signed-license verification (see Licensing)
+│   │   └── index.ts      # app bootstrap: license check → window → IPC registration
+│   └── preload/          # contextBridge — the only surface the renderer can call into main
 ├── src/
+│   ├── pages/site/        # every screen, plus api.ts (the sole data-access layer)
 │   ├── components/
-│   │   ├── layout/     # App shell, patient context bar, autosave indicator
-│   │   ├── report/     # Printable report template (renders to static HTML for PDF/print)
-│   │   └── sections/   # One component per lab category (Haematology, Biochemistry, ...)
-│   ├── pages/          # Start, PatientEntry, EditPatient, ReportEntry, ReportPreview, Settings
-│   ├── store/          # Zustand store (settings)
-│   ├── types/          # Shared TypeScript types + the field-key registry used for completion tracking
-│   └── lib/            # Small utilities (autosave hook, date helpers)
-├── resources/          # Windows installer icon goes here (see Packaging below)
-└── tailwind.config.js  # The design token system — colors, nothing else touches raw hex values
+│   │   └── ErrorBoundary.tsx  # catches render errors and shows them on screen instead of a blank page
+│   └── types/lab.ts       # shared types + the per-section field-key registry
+├── scripts/
+│   └── issue-license.js   # signs a new license.json for a new lab (needs the private key — never in this repo)
+├── resources/
+│   ├── icon.ico            # app icon
+│   └── license.json         # the signed license for THIS build (currently: Super Lab Service)
+└── tailwind.config.js
 ```
 
 ## Data & privacy
 
 All patient records, results, and settings live in a single local SQLite file:
 
-- **Development:** `lab-app/lab-data.db` (in the project root, gitignored — this is local test data, not committed)
-- **Production (installed app):** `%APPDATA%/Lab Reporter/lab-data.db`
+- **Development:** `lab-app/lab-data.db` (project root, gitignored)
+- **Packaged app:** `%APPDATA%\LumaLabs\lab-data.db`
 
 Nothing is uploaded anywhere. The app enforces a single-instance lock, so two copies can never run against the same database file and corrupt each other's writes.
 
-Generated PDFs are saved to `Documents\LabReports\` on whichever machine runs the app.
+Generated PDFs save wherever the user chooses via the native print dialog's "Save as PDF."
 
-## Printing, PDF, and WhatsApp sharing
+## Licensing
 
-- **Printing** uses `webContents.print()` against the actual list of installed Windows printers (`webContents.getPrinters()`) — no OS print dialog, no virtual-printer workarounds.
-- **PDF** uses `webContents.printToPDF()` against a hidden, offscreen window rendering the same report template.
-- **WhatsApp sharing** opens `wa.me/<patient's number>` with a pre-filled message and simultaneously reveals the generated PDF in File Explorer. One honest limitation: neither WhatsApp Web nor the desktop app expose any public way to auto-attach a local file to an outgoing chat — that's only possible through WhatsApp's paid Business API. So the last step is a single drag of the already-highlighted PDF into the already-open chat, not a fully automatic send.
+This app will not start at all without a valid signed `resources/license.json` (checked in `electron/main/license.ts` before any window is created). The signature is verified with an Ed25519 public key baked into the compiled app; only the matching private key — kept outside this repo, never committed, never shipped — can produce a license that passes.
 
-## Packaging a Windows installer
+Once verified, the licensed lab name is force-written into the database on **every** launch (`lockLabName` in `db.ts`), overriding anything already there. There is no Settings control to edit it, and even a direct edit to the SQLite file gets overwritten back on the next launch. Practical effect: this specific compiled app only ever functions as one specific lab's system.
 
-`npm run package` (electron-builder) expects a `.ico` file at `resources/icon.ico`. That file isn't included yet — the lab's actual logo/branding is expected to replace the current neutral placeholder identity used in the app shell before a distributable installer is built. Add an icon there first, or packaging will fail on that step (dev and `npm run build` are unaffected).
+To issue a new license for a different lab:
+
+```bash
+node scripts/issue-license.js --key /path/to/private.pem --lab "New Lab Name" --id NL-0001 --out resources/license.json
+```
+
+Then rebuild and repackage with that `license.json` in place.
+
+## Packaging
+
+`npm run package` runs `electron-vite build` then `electron-builder`. On this development machine, the final NSIS-installer step fails because it needs to download and extract a signing-tool archive containing macOS symlinks, which Windows blocks without Developer Mode (or an elevated terminal) enabled. This is an environment limitation, not a code issue.
+
+Working alternative used for the current release: `npx electron-builder --dir --win` produces a plain folder build (`dist/win-unpacked/`) without hitting that step. That folder is then:
+
+1. Signed with a self-signed Authenticode certificate (`Set-AuthenticodeSignature` — no Windows SDK / `signtool.exe` needed), so Windows' Smart App Control doesn't block it on a machine that has imported the matching `.cer` once.
+2. Given its icon via `rcedit` directly (bypassing the same blocked step electron-builder would otherwise use).
+3. Zipped up as the distributable.
+
+Once Developer Mode (or an elevated terminal) is available, `npm run package` alone should produce a proper `Setup.exe` installer instead of the manual dir-build/sign/icon sequence above.
 
 ## Status
 
-Built and working end to end: patient search/registration, editing patient info, keyboard-first result entry across all 12 categories with autosave and live abnormal flagging, report review with printer selection, PDF export, and WhatsApp handoff.
+Working end to end: patient registration/editing, result entry across all 12 categories with live abnormal-value flagging, paginated report preview, printing/PDF, billing with per-patient overrides, doctors and incentive reports, and the licensing/branding lock described above.
 
-Not yet built: a lock/sign-in screen, a full visual pass on the Report Review screen to match the rest of the app's design system, and a dedicated cross-cutting error-recovery pass (individual failure states — save errors, printer errors, PDF errors — are already handled, but haven't been audited screen-by-screen as a single pass).
+Not yet built: the real NSIS installer (blocked on the Developer Mode issue above, not on missing code), multi-computer/shared-data support (each install is a single local database on one machine), and a proper paid code-signing certificate (the current self-signed one requires a one-time trust step per machine — fine for hand-delivered installs, not for broad public distribution).
