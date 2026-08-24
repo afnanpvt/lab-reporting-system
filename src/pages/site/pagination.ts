@@ -1,5 +1,5 @@
 import { sectionKeyForLabel } from './reportFields'
-import type { MockPatient } from './mockData'
+import type { Patient } from './api'
 
 /**
  * Turns a patient's sections into discrete printed pages, so the on-screen preview shows the
@@ -37,7 +37,7 @@ export type ReportBlock = PatientInfoBlock | EmptySectionBlock | SectionChunkBlo
 
 type ResultsBySection = Record<string, Record<string, string>>
 
-export function paginateReport(patient: Pick<MockPatient, 'sections'>, results: ResultsBySection): ReportBlock[][] {
+export function paginateReport(patient: Pick<Patient, 'sections'>, results: ResultsBySection): ReportBlock[][] {
   const pages: ReportBlock[][] = [[]]
   let remaining = CONTENT_HEIGHT
 

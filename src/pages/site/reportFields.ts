@@ -1,5 +1,4 @@
 import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
-import type { MockPatient } from './mockData'
 
 export { SECTIONS, SECTION_FIELD_KEYS }
 
@@ -37,40 +36,6 @@ export function humanizeKey(key: string): string {
 
 export function sectionKeyForLabel(label: string): string | undefined {
   return SECTIONS.find((s) => s.label === label)?.key
-}
-
-const QUALITATIVE_HINTS: Record<string, string[]> = {
-  colour: ['Pale Yellow', 'Straw Coloured', 'Amber'],
-  appearance: ['Clear', 'Slightly Turbid'],
-  reaction: ['Acidic', 'Alkaline'],
-  blood_group: ['O Positive', 'A Positive', 'B Positive', 'AB Positive'],
-  rh_typing: ['Positive', 'Negative'],
-  rh_type: ['Positive', 'Negative']
-}
-
-function hashOf(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1000
-  return h
-}
-
-/** Deterministic placeholder value for a field — same key always yields the same value, for a stable-looking demo report. */
-export function mockValueFor(key: string): string {
-  for (const hint in QUALITATIVE_HINTS) {
-    if (key.includes(hint)) {
-      const opts = QUALITATIVE_HINTS[hint]
-      return opts[hashOf(key) % opts.length]
-    }
-  }
-  if (key.includes('smear') || key.includes('crystals') || key.includes('cast') || key.includes('flagellate')) {
-    return hashOf(key) % 3 === 0 ? 'Present' : 'Nil'
-  }
-  if (key.includes('nitrite') || key.includes('bile') || key.includes('ketone') || key.includes('albumin') && key.includes('urine')) {
-    return hashOf(key) % 2 === 0 ? 'Nil' : 'Trace'
-  }
-  const n = hashOf(key)
-  const base = 4 + (n % 130)
-  return (base + (n % 10) / 10).toFixed(1)
 }
 
 type RangeValue = string | { M: string; F: string }
@@ -277,21 +242,4 @@ export function flagFor(value: string, range: string): 'high' | 'low' | null {
   if (v > parsed[1]) return 'high'
   if (v < parsed[0]) return 'low'
   return null
-}
-
-/** Demo result data for a patient's selected sections, filled according to status — 'completed' gets every field, 'partial' gets every other field, 'draft' stays empty. Shared by every design's Result Entry screen and by any dashboard that deep-links a completed patient straight to Preview, so the printed report isn't blank. */
-export function initialResultsFor(patient: Pick<MockPatient, 'sections' | 'status'>): Record<string, Record<string, string>> {
-  const out: Record<string, Record<string, string>> = {}
-  for (const label of patient.sections) {
-    const key = sectionKeyForLabel(label)
-    if (!key) continue
-    const fields = SECTION_FIELD_KEYS[key] ?? []
-    const data: Record<string, string> = {}
-    fields.forEach((f, i) => {
-      const fill = patient.status === 'completed' || (patient.status === 'partial' && i % 2 === 0)
-      data[f] = fill ? mockValueFor(f) : ''
-    })
-    out[key] = data
-  }
-  return out
 }
