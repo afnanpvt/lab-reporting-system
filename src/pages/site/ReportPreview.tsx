@@ -29,10 +29,10 @@ function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
             Reported <b className="text-[#111]">{reportedAt}</b>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] mb-1">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] mb-1">
           <div>Patient <b className="text-[#111]">{patient.name}</b></div>
           <div>Referred by <b className="text-[#111]">{patient.referredBy}</b></div>
-          <div>Age / Sex <b className="text-[#111]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></div>
+          <div className="col-span-2">Age / Sex <b className="text-[#111]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></div>
         </div>
       </div>
     )
@@ -57,7 +57,7 @@ function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
         <div className="text-[10px] font-bold uppercase tracking-widest text-[#111] border-b border-[#ddd] pb-1 mb-1.5">
           {block.label}{block.continued && <span className="font-normal italic text-[#8593a3]"> (continued)</span>}
         </div>
-        <div className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[9px] font-bold uppercase tracking-wide text-[#777] border-b border-[#ddd] pb-1 mb-1">
+        <div className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[9.5px] font-bold uppercase tracking-wide text-[#57677a] border-b border-[#ddd] pb-1 mb-1">
           <span>Test</span><span>Result</span><span>Unit</span><span>Reference</span>
         </div>
         {block.keys.map((k) => {
@@ -68,7 +68,7 @@ function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
           const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
           return (
             <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11px] py-1.5 border-b border-[#f0f0f0]">
-              <span className="font-semibold text-[#1a2430]">{humanizeKey(k)}</span>
+              <span className="font-bold text-[#1a2430]">{humanizeKey(k)}</span>
               <span style={{ fontWeight: flag ? 600 : 400, color: '#111', fontFamily: 'Consolas, monospace' }}>
                 {flag === 'high' && <span style={{ color: arrowColor }}>▲ </span>}
                 {flag === 'low' && <span style={{ color: arrowColor }}>▼ </span>}
@@ -186,9 +186,11 @@ export default function ReportPreview() {
                 className="print-page relative bg-white shadow-lg print:shadow-none flex flex-col"
                 style={{ width: 780, minHeight: 1260, padding: '32px 52px' }}
               >
-                <span className="print:hidden absolute -top-6 right-0 text-[11.5px] text-[#8593a3] font-medium">
-                  Page {pageIndex + 1} of {pages.length}
-                </span>
+                {pages.length > 1 && (
+                  <div className="absolute top-2 right-3 text-[8.5px] text-[#a8b4c2] print:text-[#c7cfd9]" style={{ zIndex: 2 }}>
+                    Page {pageIndex + 1} of {pages.length}
+                  </div>
+                )}
 
                 <LetterheadWatermark />
 
