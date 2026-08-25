@@ -12,8 +12,8 @@ import badge from '../../assets/superlab-25years-badge.png'
 export function LetterheadHeader({ labName }: { labName: string }) {
   return (
     <div className="flex items-center justify-between bg-white">
-      <img src={logo} alt={labName} className="h-32 w-auto" />
-      <img src={badge} alt="Celebrating 25 years of service" className="h-[144px] w-auto" />
+      <img src={logo} alt={labName} className="h-[92px] w-auto" />
+      <img src={badge} alt="Celebrating 25 years of service" className="h-[92px] w-auto" />
     </div>
   )
 }
