@@ -48,7 +48,10 @@ export default function ResultEntry() {
     () => (patient
       ? patient.sections.map((label) => {
           const key = sectionKeyForLabel(label)!
-          const displayLabel = key === 'others' ? (results.others?.__label || label) : label
+          // Once customised, an emptied-out label stays empty while the user is still typing —
+          // only fall back to the default when it's never been touched at all (undefined), so
+          // clearing the field to retype it doesn't keep snapping back to "Others".
+          const displayLabel = key === 'others' ? (results.others?.__label ?? label) : label
           return { label: displayLabel, key }
         }).filter((c) => c.key)
       : []),
@@ -243,7 +246,7 @@ export default function ResultEntry() {
                 >
                   {isActive && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#1b6fae]" />}
                   <Dot state={state} />
-                  <span className="truncate">{c.label}</span>
+                  <span className="truncate">{c.label || 'Others'}</span>
                 </button>
               )
             })}

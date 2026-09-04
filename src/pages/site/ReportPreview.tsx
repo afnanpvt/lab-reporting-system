@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Printer, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Download, Printer, MessageCircle, Building2 } from 'lucide-react'
 import { getPatient, getResultsFor, getLabSettings, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
@@ -14,8 +14,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string
+function ReportBlockView({ block, patient, results, reportedAt, externalMode }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; externalMode: boolean
 }) {
   if (block.kind === 'patientInfo') {
     return (
@@ -88,18 +88,20 @@ function ReportBlockView({ block, patient, results, reportedAt }: {
       <div className="text-center text-[10px] text-[#555] border-t border-b border-[#ccc] py-1.5 my-5">
         ----------- End of report -----------
       </div>
-      <div className="flex items-end justify-between mt-6">
-        <div>
-          <div className="border-t border-[#333] w-[130px] mb-1" />
-          <div className="text-[10px] font-bold">Lab Technician</div>
+      {!externalMode && (
+        <div className="flex items-end justify-between mt-6">
+          <div>
+            <div className="border-t border-[#333] w-[130px] mb-1" />
+            <div className="text-[10px] font-bold">Lab Technician</div>
+          </div>
+          <div className="text-right">
+            <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
+            <div className="text-[10px] font-bold">A. Noorul Ameen</div>
+            <div className="text-[9px] text-[#555]">MSC DMLT DMRT DCA</div>
+            <div className="text-[9px] text-[#555]">Lab Incharge</div>
+          </div>
         </div>
-        <div className="text-right">
-          <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
-          <div className="text-[10px] font-bold">A. Noorul Ameen</div>
-          <div className="text-[9px] text-[#555]">MSC DMLT DMRT DCA</div>
-          <div className="text-[9px] text-[#555]">Lab Incharge</div>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -112,6 +114,10 @@ export default function ReportPreview() {
   const [patient, setPatient] = useState<Patient | null>((location.state as { patient?: Patient })?.patient ?? null)
   const [results, setResults] = useState<ResultsBySection | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
+  // For a sample tested on behalf of another lab that will print it on their own letterhead —
+  // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
+  // with blank space left at the top for their pre-printed stationery.
+  const [externalMode, setExternalMode] = useState(false)
 
   useEffect(() => {
     const fromState = (location.state as { patient?: Patient })?.patient
@@ -164,6 +170,17 @@ export default function ReportPreview() {
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setExternalMode((v) => !v)}
+              title="Print without our branding, for a sample tested on behalf of another lab that will print it on their own letterhead"
+              className={`inline-flex items-center gap-2 px-4 py-2 text-[14px] font-medium rounded-xl border ${
+                externalMode ? 'bg-[#1a2430] text-white border-[#1a2430]' : 'bg-white text-[#57677a] border-[#c7cfd9] hover:bg-[#eef2f6]'
+              }`}
+            >
+              <Building2 size={14} />
+              {externalMode ? 'External lab report: On' : 'External lab report'}
+            </button>
+            <div className="h-5 w-px bg-[#e1e6ec]" />
             <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#f6d9cd]">
               <Download size={14} />
               Save PDF
@@ -193,21 +210,30 @@ export default function ReportPreview() {
                   </div>
                 )}
 
-                <LetterheadWatermark />
-
-                <div className="relative" style={{ zIndex: 1 }}>
-                  <LetterheadHeader labName={settings.labName} />
-                </div>
+                {externalMode ? (
+                  // Blank space reserved for the external lab's own pre-printed letterhead —
+                  // no logo, watermark, or footer of ours anywhere on the page.
+                  <div style={{ height: 110 }} />
+                ) : (
+                  <>
+                    <LetterheadWatermark />
+                    <div className="relative" style={{ zIndex: 1 }}>
+                      <LetterheadHeader labName={settings.labName} />
+                    </div>
+                  </>
+                )}
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} externalMode={externalMode} />
                   ))}
                 </div>
 
-                <div className="relative mt-4" style={{ zIndex: 1 }}>
-                  <LetterheadFooter settings={settings} />
-                </div>
+                {!externalMode && (
+                  <div className="relative mt-4" style={{ zIndex: 1 }}>
+                    <LetterheadFooter settings={settings} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
