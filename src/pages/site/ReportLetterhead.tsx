@@ -1,7 +1,11 @@
-import { Phone, Mail, MapPin, QrCode } from 'lucide-react'
+import { Phone, Mail, MapPin } from 'lucide-react'
 import type { LabSettingsForm } from './api'
 import logo from '../../assets/superlab-logo.png'
 import badge from '../../assets/superlab-25years-badge.png'
+import bmqrLogo from '../../assets/certifications/bmqr.png'
+import bmqrSeal from '../../assets/certifications/bmqr-seal.png'
+import iso9001 from '../../assets/certifications/iso9001.png'
+import isac from '../../assets/certifications/isac.png'
 
 /**
  * The report is pre-paginated in JS (see pagination.ts) into discrete page boxes, each of which
@@ -31,7 +35,7 @@ export function LetterheadWatermark() {
   )
 }
 
-const CERTIFICATIONS = ['BMQR', 'ISO 9001', 'ISO 9001', 'ISAC\nAccreditation']
+const CERTIFICATIONS = [bmqrLogo, bmqrSeal, iso9001, isac]
 
 /**
  * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer
@@ -89,7 +93,7 @@ export function LetterheadFooter({ variant = 'report', settings }: { variant?: '
 
       <div className="h-[3px] my-3 rounded-full" style={{ background: 'linear-gradient(to right, #1b6fae, #ff4fa0)' }} />
 
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-end justify-between gap-6">
         <div className="space-y-1.5 text-[11px] text-[#1a2430]">
           <div className="flex items-center gap-2">
             <Phone size={13} className="text-[#1b6fae]" />
@@ -101,27 +105,13 @@ export function LetterheadFooter({ variant = 'report', settings }: { variant?: '
           </div>
           <div className="flex items-start gap-2">
             <MapPin size={13} className="text-[#1b6fae] flex-shrink-0 mt-0.5" />
-            <span className="max-w-[320px]">{settings.labAddress}</span>
+            <span className="max-w-[380px]">{settings.labAddress}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div
-            className="flex flex-col items-center justify-center rounded border border-dashed"
-            style={{ width: 52, height: 52, borderColor: '#c7cfd9', color: '#8593a3' }}
-            title="Real QR code goes here once a scan target is defined"
-          >
-            <QrCode size={20} />
-          </div>
-          {CERTIFICATIONS.map((label, i) => (
-            <div
-              key={label + i}
-              className="flex items-center justify-center rounded-full border text-center px-1"
-              style={{ width: 52, height: 52, borderColor: '#c7cfd9' }}
-              title="Placeholder — swap in the real certification artwork"
-            >
-              <span className="text-[7.5px] font-semibold text-[#57677a] leading-[1.15] whitespace-pre-line">{label}</span>
-            </div>
+        <div className="flex items-center gap-3.5 flex-shrink-0">
+          {CERTIFICATIONS.map((src, i) => (
+            <img key={i} src={src} alt="" className="h-[46px] w-auto object-contain" />
           ))}
         </div>
       </div>

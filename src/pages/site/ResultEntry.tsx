@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope } from 'lucide-react'
+import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X } from 'lucide-react'
 import { getPatient, getResultsFor, setSectionResults, listPatients, type Patient, type ResultsBySection } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
@@ -79,6 +79,16 @@ export default function ResultEntry() {
     setSectionResults(patient.id, active.key, merged)
   }, [active, patient, results])
 
+  const isOthers = active?.key === 'others'
+
+  // 'Others' rows are keyed by the test name itself, so renaming or removing a row
+  // needs to replace the whole section's data rather than merge one field into it.
+  const replaceSectionData = useCallback((next: Record<string, string>) => {
+    if (!patient || !active) return
+    setResults((r) => ({ ...r, [active.key]: next }))
+    setSectionResults(patient.id, active.key, next)
+  }, [active, patient])
+
   const goTo = useCallback((idx: number) => {
     if (idx < 0 || idx >= categories.length) return
     setActiveIndex(idx)
@@ -118,7 +128,7 @@ export default function ResultEntry() {
     )
   }
 
-  const totalCount = SECTION_FIELD_KEYS[active.key]?.length ?? 0
+  const totalCount = isOthers ? Object.keys(activeData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
   const filledCount = Object.values(activeData).filter((v) => v && v.trim() !== '').length
   const completion = getCompletionState(active.key, activeData)
 
@@ -260,6 +270,7 @@ export default function ResultEntry() {
                 gender={patient.gender}
                 data={activeData}
                 onChange={updateField}
+                onReplace={replaceSectionData}
               />
             </div>
           </div>
@@ -318,6 +329,77 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   )
 }
 
+/**
+ * 'Others' has no fixed test list — the technician types both the test name and its result,
+ * one row per custom investigation. Data is keyed by the typed name itself (see
+ * replaceSectionData above), so renaming a row replaces the whole section object rather than
+ * merging a field, and blank rows are dropped rather than saved with an empty key.
+ */
+function OthersEditor({ data, onReplace }: { data: Record<string, string>; onReplace: (next: Record<string, string>) => void }) {
+  const rows = Object.entries(data)
+
+  const setRow = (index: number, name: string, value: string) => {
+    const next: Record<string, string> = {}
+    rows.forEach(([k, v], i) => {
+      if (i === index) { if (name.trim() !== '') next[name] = value; return }
+      next[k] = v
+    })
+    onReplace(next)
+  }
+
+  const removeRow = (index: number) => {
+    const next: Record<string, string> = {}
+    rows.forEach(([k, v], i) => { if (i !== index) next[k] = v })
+    onReplace(next)
+  }
+
+  const addRow = () => {
+    let name = 'New test'
+    let n = 2
+    while (name in data) { name = `New test ${n}`; n++ }
+    onReplace({ ...data, [name]: '' })
+  }
+
+  return (
+    <div>
+      {rows.map(([name, value], i) => (
+        <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[#eaeef2]">
+          <input
+            value={name}
+            onChange={(e) => setRow(i, e.target.value, value)}
+            placeholder="Test name"
+            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-1 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+          />
+          <input
+            value={value}
+            onChange={(e) => setRow(i, name, e.target.value)}
+            placeholder="Result"
+            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+            style={{ width: '11rem', fontFamily: 'Consolas, monospace' }}
+          />
+          <button
+            type="button"
+            onClick={() => removeRow(i)}
+            title="Remove this test"
+            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-[#a8b4c2] hover:text-[#b3261e] hover:bg-[#fbeae8]"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={addRow}
+        className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[#125483] bg-[#e8f1f9] rounded-xl hover:bg-[#bfdcf0]"
+      >
+        <Plus size={14} />
+        Add test
+      </button>
+    </div>
+  )
+}
+
 function SubHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 pt-5 pb-1.5">
@@ -327,11 +409,15 @@ function SubHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SectionBody({ sectionKey, gender, data, onChange }: {
-  sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void
+function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
+  sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void; onReplace: (next: Record<string, string>) => void
 }) {
   const v = (k: string) => data[k] ?? ''
   const set = (k: string) => (val: string) => onChange(k, val)
+
+  if (sectionKey === 'others') {
+    return <OthersEditor data={data} onReplace={onReplace} />
+  }
 
   if (sectionKey === 'haematology') {
     return (

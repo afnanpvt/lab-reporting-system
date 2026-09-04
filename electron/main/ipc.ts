@@ -93,6 +93,15 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
 
   // ---- Results ----
   ipcMain.handle('results:save', (_e, section: string, patientId: number, data: Record<string, string>) => {
+    if (section === 'others') {
+      dbRun(
+        `INSERT INTO custom_results (patient_id, data) VALUES (?, ?)
+         ON CONFLICT(patient_id) DO UPDATE SET data=excluded.data`,
+        [patientId, JSON.stringify(data)]
+      )
+      return true
+    }
+
     const table = SECTION_TABLES[section]
     if (!table) return false
 
@@ -124,7 +133,18 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return rest
   }
 
+  function getCustomResults(patientId: number): Record<string, string> {
+    const row = dbGet('SELECT data FROM custom_results WHERE patient_id=?', [patientId])
+    if (!row) return {}
+    try {
+      return JSON.parse(String(row.data ?? '{}'))
+    } catch {
+      return {}
+    }
+  }
+
   ipcMain.handle('results:get', (_e, section: string, patientId: number) => {
+    if (section === 'others') return getCustomResults(patientId)
     const table = SECTION_TABLES[section]
     if (!table) return null
     return stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
@@ -135,6 +155,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     for (const [section, table] of Object.entries(SECTION_TABLES)) {
       result[section] = stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
     }
+    result.others = getCustomResults(patientId)
     return result
   })
 

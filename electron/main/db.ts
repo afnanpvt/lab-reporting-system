@@ -240,6 +240,14 @@ function createTables(): void {
       sputum_appearance TEXT, afb_smear TEXT, culture TEXT
     );
 
+    -- "Others" section has no fixed test list — staff type the test name and result
+    -- themselves, so it's stored as one JSON object ({ "Test Name": "result", ... })
+    -- per patient rather than as fixed columns like the sections above.
+    CREATE TABLE IF NOT EXISTS custom_results (
+      patient_id INTEGER PRIMARY KEY,
+      data TEXT DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS doctors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -315,7 +323,8 @@ function createTables(): void {
     ['Blood', 250],
     ['Electrolytes', 400],
     ['L.F.T.', 550],
-    ['ABG / Sputum', 650]
+    ['ABG / Sputum', 650],
+    ['Others', 0]
   ]
   for (const [section, amount] of rateDefaults) {
     dbRun('INSERT OR IGNORE INTO rate_card (section, amount) VALUES (?, ?)', [section, amount])

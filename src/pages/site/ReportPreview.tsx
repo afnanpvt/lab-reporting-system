@@ -14,8 +14,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; labDoctor: string
+function ReportBlockView({ block, patient, results, reportedAt }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string
 }) {
   if (block.kind === 'patientInfo') {
     return (
@@ -68,7 +68,7 @@ function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
           const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
           return (
             <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11px] py-1.5 border-b border-[#f0f0f0]">
-              <span className="font-bold text-[#1a2430]">{humanizeKey(k)}</span>
+              <span className="font-bold text-[#1a2430]">{block.sectionKey === 'others' ? k : humanizeKey(k)}</span>
               <span style={{ fontWeight: flag ? 600 : 400, color: '#111', fontFamily: 'Consolas, monospace' }}>
                 {flag === 'high' && <span style={{ color: arrowColor }}>▲ </span>}
                 {flag === 'low' && <span style={{ color: arrowColor }}>▼ </span>}
@@ -90,13 +90,14 @@ function ReportBlockView({ block, patient, results, reportedAt, labDoctor }: {
       </div>
       <div className="flex items-end justify-between mt-6">
         <div>
-          <div className="border-t border-[#333] w-[110px] mb-1" />
-          <div className="text-[10px] font-bold">Lab Incharge</div>
+          <div className="border-t border-[#333] w-[130px] mb-1" />
+          <div className="text-[10px] font-bold">Lab Technician</div>
         </div>
         <div className="text-right">
           <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
-          <div className="text-[10px] font-bold">{labDoctor}</div>
-          <div className="text-[9px] text-[#555]">Consultant Pathologist</div>
+          <div className="text-[10px] font-bold">A. Noorul Ameen</div>
+          <div className="text-[9px] text-[#555]">MSC DMLT DMRT BCA</div>
+          <div className="text-[9px] text-[#555]">Lab Incharge</div>
         </div>
       </div>
     </div>
@@ -200,7 +201,7 @@ export default function ReportPreview() {
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} labDoctor={settings.labDoctor} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} />
                   ))}
                 </div>
 

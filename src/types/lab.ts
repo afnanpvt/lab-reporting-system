@@ -221,7 +221,8 @@ export const SECTIONS = [
   { key: 'blood', label: 'Blood' },
   { key: 'electrolytes', label: 'Electrolytes' },
   { key: 'lft', label: 'L.F.T.' },
-  { key: 'abg_sputum', label: 'ABG / Sputum' }
+  { key: 'abg_sputum', label: 'ABG / Sputum' },
+  { key: 'others', label: 'Others' }
 ]
 
 /** Every data field per section, excluding patient_id — used to compute completion state (empty/partial/complete) for the result-entry rail. Kept in sync with the *Result interfaces and the culture_sensitivity DB columns by hand; this is a small, stable clinical schema. */
@@ -266,6 +267,15 @@ export const SECTION_FIELD_KEYS: Record<string, string[]> = {
 export type CompletionState = 'empty' | 'partial' | 'complete'
 
 export function getCompletionState(sectionKey: string, data: Record<string, string | undefined>): CompletionState {
+  // 'others' has no fixed field list — each row's name is typed by the user, so
+  // completion is judged by rows entered / rows with a value, not a schema length.
+  if (sectionKey === 'others') {
+    const rows = Object.keys(data)
+    if (rows.length === 0) return 'empty'
+    const filled = rows.filter((k) => data[k] && data[k]!.trim() !== '').length
+    if (filled === 0) return 'partial'
+    return filled === rows.length ? 'complete' : 'partial'
+  }
   const keys = SECTION_FIELD_KEYS[sectionKey] ?? []
   if (keys.length === 0) return 'empty'
   const filled = keys.filter((k) => data[k] && data[k]!.trim() !== '').length
