@@ -96,7 +96,7 @@ function ReportBlockView({ block, patient, results, reportedAt }: {
         <div className="text-right">
           <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
           <div className="text-[10px] font-bold">A. Noorul Ameen</div>
-          <div className="text-[9px] text-[#555]">MSC DMLT DMRT BCA</div>
+          <div className="text-[9px] text-[#555]">MSC DMLT DMRT DCA</div>
           <div className="text-[9px] text-[#555]">Lab Incharge</div>
         </div>
       </div>

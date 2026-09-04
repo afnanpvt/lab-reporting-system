@@ -55,10 +55,13 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
 
   placeWhole({ kind: 'patientInfo' }, PATIENT_INFO_HEIGHT)
 
-  for (const label of patient.sections) {
-    const sectionKey = sectionKeyForLabel(label)
+  for (const rawLabel of patient.sections) {
+    const sectionKey = sectionKeyForLabel(rawLabel)
     const data = sectionKey ? results[sectionKey] ?? {} : {}
-    const filledKeys = Object.keys(data).filter((k) => data[k] && data[k].trim() !== '')
+    // 'others' has no fixed identity — staff can rename it in place (see ResultEntry.tsx);
+    // the override lives under '__label' in its own results blob, which is never a real row.
+    const label = sectionKey === 'others' && data.__label ? data.__label : rawLabel
+    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && data[k] && data[k].trim() !== '')
 
     if (filledKeys.length === 0) {
       placeWhole({ kind: 'emptySection', label }, SECTION_HEADER_HEIGHT + EMPTY_NOTICE_HEIGHT)

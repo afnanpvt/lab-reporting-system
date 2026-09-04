@@ -40,9 +40,19 @@ export default function ResultEntry() {
     })
   }, [patient?.id])
 
+  // The 'Others' section has no fixed identity of its own, so staff can rename it in place
+  // (e.g. to a lab-specific panel name) — the override lives in its own results blob under
+  // '__label' rather than in patient.sections, since that array is otherwise a fixed set of
+  // canonical section labels shared across the whole app (billing, rate card, etc.).
   const categories = useMemo(
-    () => (patient ? patient.sections.map((label) => ({ label, key: sectionKeyForLabel(label)! })).filter((c) => c.key) : []),
-    [patient]
+    () => (patient
+      ? patient.sections.map((label) => {
+          const key = sectionKeyForLabel(label)!
+          const displayLabel = key === 'others' ? (results.others?.__label || label) : label
+          return { label: displayLabel, key }
+        }).filter((c) => c.key)
+      : []),
+    [patient, results.others]
   )
 
   useEffect(() => {
@@ -128,9 +138,13 @@ export default function ResultEntry() {
     )
   }
 
-  const totalCount = isOthers ? Object.keys(activeData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
-  const filledCount = Object.values(activeData).filter((v) => v && v.trim() !== '').length
-  const completion = getCompletionState(active.key, activeData)
+  // '__label' is a reserved key on the 'others' data object for the section's custom display
+  // name (see the categories memo above) — it must never be counted as a test row or handed
+  // to the row editor, so every other consumer of this section's data works off the rest.
+  const { __label: _othersLabel, ...visibleData } = activeData
+  const totalCount = isOthers ? Object.keys(visibleData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
+  const filledCount = Object.values(visibleData).filter((v) => v && v.trim() !== '').length
+  const completion = getCompletionState(active.key, visibleData)
 
   return (
       <div className="flex flex-col h-full">
@@ -239,7 +253,17 @@ export default function ResultEntry() {
           <div className="flex-1 overflow-y-auto bg-[#f5f7fa]" ref={paneRef} onKeyDown={handleKeyDown}>
             <div className="max-w-[820px] mx-auto px-9 py-7">
               <div className="flex items-baseline justify-between mb-1.5">
-                <h2 className="text-[22px] font-semibold text-[#1a2430]">{active.label}</h2>
+                {isOthers ? (
+                  <input
+                    value={active.label}
+                    onChange={(e) => replaceSectionData({ ...activeData, __label: e.target.value })}
+                    placeholder="Others"
+                    className="text-[22px] font-semibold text-[#1a2430] bg-transparent border-b border-dashed border-[#c7cfd9] focus:outline-none focus:border-[#1b6fae] px-0.5 -ml-0.5"
+                    title="Rename this section"
+                  />
+                ) : (
+                  <h2 className="text-[22px] font-semibold text-[#1a2430]">{active.label}</h2>
+                )}
                 <span className="text-[13.5px] text-[#57677a]">
                   {completion === 'empty' ? 'Not started' : `${filledCount} of ${totalCount} entered`}
                 </span>
@@ -266,11 +290,12 @@ export default function ResultEntry() {
               )}
 
               <SectionBody
+                key={`${patient.id}:${active.key}`}
                 sectionKey={active.key}
                 gender={patient.gender}
-                data={activeData}
+                data={visibleData}
                 onChange={updateField}
-                onReplace={replaceSectionData}
+                onReplace={(next) => replaceSectionData(_othersLabel !== undefined ? { ...next, __label: _othersLabel } : next)}
               />
             </div>
           </div>
@@ -331,38 +356,42 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
 
 /**
  * 'Others' has no fixed test list — the technician types both the test name and its result,
- * one row per custom investigation. Data is keyed by the typed name itself (see
- * replaceSectionData above), so renaming a row replaces the whole section object rather than
- * merging a field, and blank rows are dropped rather than saved with an empty key.
+ * one row per custom investigation. While editing, rows live as a plain array indexed by
+ * position (so clearing a name field to retype it never makes the row disappear or collide
+ * with another blank row). Only on save does this collapse to the name-keyed object the report
+ * reads — at that point a row with neither a name nor a value is dropped, since an untouched
+ * blank row shouldn't show up as an empty line on the printed report.
  */
 function OthersEditor({ data, onReplace }: { data: Record<string, string>; onReplace: (next: Record<string, string>) => void }) {
-  const rows = Object.entries(data)
+  const [rows, setRows] = useState<{ name: string; value: string }[]>(
+    () => Object.entries(data).map(([name, value]) => ({ name, value }))
+  )
+
+  const commit = (next: { name: string; value: string }[]) => {
+    setRows(next)
+    const obj: Record<string, string> = {}
+    next.forEach(({ name, value }) => {
+      if (name.trim() === '' && value.trim() === '') return
+      obj[name] = value
+    })
+    onReplace(obj)
+  }
 
   const setRow = (index: number, name: string, value: string) => {
-    const next: Record<string, string> = {}
-    rows.forEach(([k, v], i) => {
-      if (i === index) { if (name.trim() !== '') next[name] = value; return }
-      next[k] = v
-    })
-    onReplace(next)
+    commit(rows.map((r, i) => (i === index ? { name, value } : r)))
   }
 
   const removeRow = (index: number) => {
-    const next: Record<string, string> = {}
-    rows.forEach(([k, v], i) => { if (i !== index) next[k] = v })
-    onReplace(next)
+    commit(rows.filter((_, i) => i !== index))
   }
 
   const addRow = () => {
-    let name = 'New test'
-    let n = 2
-    while (name in data) { name = `New test ${n}`; n++ }
-    onReplace({ ...data, [name]: '' })
+    commit([...rows, { name: '', value: '' }])
   }
 
   return (
     <div>
-      {rows.map(([name, value], i) => (
+      {rows.map(({ name, value }, i) => (
         <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[#eaeef2]">
           <input
             value={name}

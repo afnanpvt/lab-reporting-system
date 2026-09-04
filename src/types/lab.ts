@@ -269,8 +269,9 @@ export type CompletionState = 'empty' | 'partial' | 'complete'
 export function getCompletionState(sectionKey: string, data: Record<string, string | undefined>): CompletionState {
   // 'others' has no fixed field list — each row's name is typed by the user, so
   // completion is judged by rows entered / rows with a value, not a schema length.
+  // '__label' is a reserved key for the section's custom display name, not a test row.
   if (sectionKey === 'others') {
-    const rows = Object.keys(data)
+    const rows = Object.keys(data).filter((k) => k !== '__label')
     if (rows.length === 0) return 'empty'
     const filled = rows.filter((k) => data[k] && data[k]!.trim() !== '').length
     if (filled === 0) return 'partial'
