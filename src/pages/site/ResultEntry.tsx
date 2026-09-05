@@ -345,7 +345,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   const key = rangeOverrideKey(sectionKey, fieldKey, gender)
   const isOverridden = overrides[key] !== undefined
   const flag = flagFor(value, range, fieldKey)
-  const flagColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
+  const flagColor = flag ? '#c0392b' : undefined
 
   return (
     <div className={`flex items-center gap-3 py-2.5 border-b border-[#eaeef2] ${indent ? 'pl-6' : ''}`}>
@@ -386,7 +386,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
               ) : (
                 <span className="text-[13px] text-[#57677a] whitespace-nowrap px-1.5 truncate">
                   {flag === 'high' && <span style={{ color: '#c23b33' }}>▲ </span>}
-                  {flag === 'low' && <span style={{ color: '#1b6fae' }}>▼ </span>}
+                  {flag === 'low' && <span style={{ color: '#c23b33' }}>▼ </span>}
                   {range}
                 </span>
               )

@@ -78,7 +78,7 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode, ra
           const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
           const unit = other ? other.unit : unitFor(block.sectionKey, k)
           const flag = flagFor(value, range, isOthers ? undefined : k)
-          const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
+          const arrowColor = flag ? '#c0392b' : undefined
           return (
             <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] items-baseline text-[13px] py-2 border-b border-[#e8e8e8]">
               <span className="font-bold text-[#111]">{isOthers ? k : humanizeKey(k)}</span>
