@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X } from 'lucide-react'
 import { getPatient, getResultsFor, setSectionResults, listPatients, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange } from './reportFields'
+import { humanizeKey, getReferenceRange, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, decodeOtherRow, encodeOtherRow } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 
 const FOCUSABLE_SELECTOR = 'input, .abx-btn'
@@ -358,30 +358,31 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
 }
 
 /**
- * 'Others' has no fixed test list — the technician types both the test name and its result,
- * one row per custom investigation. While editing, rows live as a plain array indexed by
- * position (so clearing a name field to retype it never makes the row disappear or collide
- * with another blank row). Only on save does this collapse to the name-keyed object the report
- * reads — at that point a row with neither a name nor a value is dropped, since an untouched
- * blank row shouldn't show up as an empty line on the printed report.
+ * 'Others' has no fixed test list — the technician types the test name, result, unit, and
+ * reference range, one row per custom investigation. While editing, rows live as a plain array
+ * indexed by position (so clearing a name field to retype it never makes the row disappear or
+ * collide with another blank row). Only on save does this collapse to the name-keyed object the
+ * report reads — at that point a row with nothing entered at all is dropped, since an untouched
+ * blank row shouldn't show up as an empty line on the printed report. Unit and reference are
+ * optional per row and simply print blank if left empty, same as always.
  */
 function OthersEditor({ data, onReplace }: { data: Record<string, string>; onReplace: (next: Record<string, string>) => void }) {
-  const [rows, setRows] = useState<{ name: string; value: string }[]>(
-    () => Object.entries(data).map(([name, value]) => ({ name, value }))
+  const [rows, setRows] = useState<{ name: string; value: string; unit: string; reference: string }[]>(
+    () => Object.entries(data).map(([name, raw]) => ({ name, ...decodeOtherRow(raw) }))
   )
 
-  const commit = (next: { name: string; value: string }[]) => {
+  const commit = (next: { name: string; value: string; unit: string; reference: string }[]) => {
     setRows(next)
     const obj: Record<string, string> = {}
-    next.forEach(({ name, value }) => {
-      if (name.trim() === '' && value.trim() === '') return
-      obj[name] = value
+    next.forEach(({ name, value, unit, reference }) => {
+      if (!name.trim() && !value.trim() && !unit.trim() && !reference.trim()) return
+      obj[name] = encodeOtherRow({ value, unit, reference })
     })
     onReplace(obj)
   }
 
-  const setRow = (index: number, name: string, value: string) => {
-    commit(rows.map((r, i) => (i === index ? { name, value } : r)))
+  const setRow = (index: number, patch: Partial<{ name: string; value: string; unit: string; reference: string }>) => {
+    commit(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)))
   }
 
   const removeRow = (index: number) => {
@@ -389,25 +390,46 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
   }
 
   const addRow = () => {
-    commit([...rows, { name: '', value: '' }])
+    commit([...rows, { name: '', value: '', unit: '', reference: '' }])
   }
 
   return (
     <div>
-      {rows.map(({ name, value }, i) => (
+      <div className="flex items-center gap-3 pb-2 text-[10.5px] font-bold uppercase tracking-wide text-[#8593a3]">
+        <span className="flex-1">Test</span>
+        <span style={{ width: '9rem' }}>Result</span>
+        <span style={{ width: '6rem' }}>Unit</span>
+        <span style={{ width: '9rem' }}>Reference</span>
+        <span className="w-8 flex-shrink-0" />
+      </div>
+      {rows.map(({ name, value, unit, reference }, i) => (
         <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[#eaeef2]">
           <input
             value={name}
-            onChange={(e) => setRow(i, e.target.value, value)}
+            onChange={(e) => setRow(i, { name: e.target.value })}
             placeholder="Test name"
             className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-1 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
           />
           <input
             value={value}
-            onChange={(e) => setRow(i, name, e.target.value)}
+            onChange={(e) => setRow(i, { value: e.target.value })}
             placeholder="Result"
             className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
-            style={{ width: '11rem', fontFamily: 'Consolas, monospace' }}
+            style={{ width: '9rem', fontFamily: 'Consolas, monospace' }}
+          />
+          <input
+            value={unit}
+            onChange={(e) => setRow(i, { unit: e.target.value })}
+            placeholder="Unit"
+            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+            style={{ width: '6rem' }}
+          />
+          <input
+            value={reference}
+            onChange={(e) => setRow(i, { reference: e.target.value })}
+            placeholder="Reference"
+            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[#c7cfd9] bg-white flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+            style={{ width: '9rem' }}
           />
           <button
             type="button"

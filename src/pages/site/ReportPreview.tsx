@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2 } from 'lucide-react'
 import { getPatient, getResultsFor, getLabSettings, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h } from './reportFields'
+import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
 
@@ -62,17 +62,20 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode }: 
         </div>
         {block.keys.map((k) => {
           const data = results[block.sectionKey] ?? {}
-          const range = getReferenceRange(block.sectionKey, k, patient.gender)
-          const unit = unitFor(block.sectionKey, k)
-          const flag = flagFor(data[k], range)
+          const isOthers = block.sectionKey === 'others'
+          const other = isOthers ? decodeOtherRow(data[k]) : null
+          const value = other ? other.value : data[k]
+          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender)
+          const unit = other ? other.unit : unitFor(block.sectionKey, k)
+          const flag = flagFor(value, range)
           const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
           return (
             <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11px] py-1.5 border-b border-[#f0f0f0]">
-              <span className="font-bold text-[#1a2430]">{block.sectionKey === 'others' ? k : humanizeKey(k)}</span>
+              <span className="font-bold text-[#1a2430]">{isOthers ? k : humanizeKey(k)}</span>
               <span style={{ fontWeight: flag ? 600 : 400, color: '#111', fontFamily: 'Consolas, monospace' }}>
                 {flag === 'high' && <span style={{ color: arrowColor }}>▲ </span>}
                 {flag === 'low' && <span style={{ color: arrowColor }}>▼ </span>}
-                {data[k]}
+                {value}
               </span>
               <span>{unit}</span>
               <span>{range}</span>

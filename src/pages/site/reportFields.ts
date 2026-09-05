@@ -206,6 +206,33 @@ export function unitFor(sectionKey: string, fieldKey: string): string {
   return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
 }
 
+/**
+ * 'Others' rows have no fixed unit/reference — staff can type their own per row, unlike every
+ * fixed section where both come from FIELD_META. Since the whole section is still stored as
+ * Record<testName, string> (see custom_results in the DB), a row's value/unit/reference are
+ * packed into that single string as JSON rather than widening the storage shape everywhere.
+ * A row saved before this existed decodes as a plain result with blank unit/reference.
+ */
+export interface OtherRow { value: string; unit: string; reference: string }
+
+export function decodeOtherRow(raw: string | undefined): OtherRow {
+  if (!raw) return { value: '', unit: '', reference: '' }
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && 'value' in parsed) {
+      return { value: String(parsed.value ?? ''), unit: String(parsed.unit ?? ''), reference: String(parsed.reference ?? '') }
+    }
+  } catch {
+    // not JSON — a plain result string from before per-row unit/reference existed
+  }
+  return { value: raw, unit: '', reference: '' }
+}
+
+export function encodeOtherRow(row: OtherRow): string {
+  if (!row.unit && !row.reference) return row.value
+  return JSON.stringify(row)
+}
+
 function parseNumericRange(clean: string): [number, number] | null {
   let m = clean.match(/(-?\d+(?:\.\d+)?)\s*[–-]\s*(-?\d+(?:\.\d+)?)/)
   if (m) return [parseFloat(m[1]), parseFloat(m[2])]
