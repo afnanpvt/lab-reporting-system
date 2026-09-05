@@ -24,8 +24,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, externalMode, rangeOverrides }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; externalMode: boolean; rangeOverrides: Record<string, string>
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>
 }) {
   if (block.kind === 'patientInfo') {
     return (
@@ -98,23 +98,21 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode, ra
 
   return (
     <div className="avoid-break">
-      <div className="text-center text-[11.5px] font-medium text-[#444] border-t border-b border-[#ccc] py-1.5 my-4">
-        ----------- End of report -----------
+      <div className="text-center text-[11px] tracking-wide text-[#8593a3] border-t border-b border-[#ddd] py-1.5 my-5">
+        — End of report —
       </div>
-      {!externalMode && (
-        <div className="flex items-end justify-between mt-5">
-          <div>
-            <div className="border-t border-[#333] w-[150px] mb-1" />
-            <div className="text-[11.5px] font-bold">Lab Technician</div>
-          </div>
-          <div className="text-right">
-            <div className="border-t border-[#333] w-[150px] mb-1 ml-auto" />
-            <div className="text-[11.5px] font-bold">A. Noorul Ameen</div>
-            <div className="text-[10.5px] text-[#444]">MSC DMLT DMRT DCA</div>
-            <div className="text-[10.5px] text-[#444]">Lab Incharge</div>
-          </div>
+      <div className="flex items-end justify-between mt-8">
+        <div>
+          <div className="border-t border-[#1a2430] w-[160px] mb-1.5" />
+          <div className="text-[11px] font-semibold tracking-wide text-[#57677a] uppercase">Lab Technician</div>
         </div>
-      )}
+        <div className="text-right">
+          <div className="border-t border-[#1a2430] w-[160px] mb-1.5 ml-auto" />
+          <div className="text-[14px] font-bold text-[#1a2430] leading-tight">A. Noorul Ameen</div>
+          <div className="text-[10.5px] font-medium text-[#57677a] tracking-wide mt-0.5">MSC · DMLT · DMRT · DCA</div>
+          <div className="text-[10.5px] font-semibold text-[#1b6fae] tracking-wide uppercase mt-0.5">Lab Incharge</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -260,7 +258,7 @@ export default function ReportPreview() {
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} externalMode={externalMode} rangeOverrides={rangeOverrides} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} />
                   ))}
                 </div>
 
