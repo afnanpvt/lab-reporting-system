@@ -194,8 +194,31 @@ const FIELD_META: Record<string, Record<string, FieldMeta>> = {
   }
 }
 
-/** Reference range for a field, resolved to the patient's gender when the range differs by sex. Falls back to '' for fields without a defined clinical range (free-text or specimen-style fields). */
-export function getReferenceRange(sectionKey: string, fieldKey: string, gender?: string): string {
+/** The key a lab-wide range override is stored under — gender-specific only for fields whose default range actually differs by sex, so a single override on a non-gendered field (e.g. Total WBC) applies to every patient regardless of gender. */
+export function rangeOverrideKey(sectionKey: string, fieldKey: string, gender?: string): string {
+  const meta = FIELD_META[sectionKey]?.[fieldKey]
+  const gendered = meta && typeof meta.range === 'object'
+  return gendered ? `${sectionKey}.${fieldKey}.${gender === 'F' ? 'F' : 'M'}` : `${sectionKey}.${fieldKey}`
+}
+
+/**
+ * Reference range for a field, resolved to the patient's gender when the range differs by sex.
+ * Falls back to '' for fields without a defined clinical range (free-text or specimen-style
+ * fields). `overrides` is the lab-wide customization map from Settings (see api.ts) — when a
+ * field has been overridden, that replaces the hardcoded clinical default; anything not present
+ * in the map falls through to FIELD_META exactly as before overrides existed.
+ */
+export function getReferenceRange(sectionKey: string, fieldKey: string, gender?: string, overrides?: Record<string, string>): string {
+  const override = overrides?.[rangeOverrideKey(sectionKey, fieldKey, gender)]
+  if (override !== undefined) return override
+  const meta = FIELD_META[sectionKey]?.[fieldKey]
+  if (!meta) return ''
+  if (typeof meta.range === 'string') return meta.range
+  return gender === 'F' ? meta.range.F : meta.range.M
+}
+
+/** The unedited clinical default for a field — what "Reset to default" restores, ignoring any override. */
+export function defaultReferenceRange(sectionKey: string, fieldKey: string, gender?: string): string {
   const meta = FIELD_META[sectionKey]?.[fieldKey]
   if (!meta) return ''
   if (typeof meta.range === 'string') return meta.range
@@ -259,8 +282,14 @@ export function defaultValueForRange(range: string): string {
   return clean.split('<')[0].trim()
 }
 
-/** Whether an entered value falls outside its reference range — drives the abnormal (red) flagging on Result Entry and the printed report. */
-export function flagFor(value: string, range: string): 'high' | 'low' | null {
+// Abnormal (red, up/down arrow) flagging is deliberately limited to these three haematology
+// fields, not every numeric-range field — flagging everything made the report noisy with
+// arrows on fields where a clinically-trivial deviation isn't worth calling out visually.
+const FLAGGABLE_FIELDS = new Set(['haemoglobin', 'total_wbc', 'platelet_count'])
+
+/** Whether an entered value falls outside its reference range — drives the abnormal (red) flagging on Result Entry and the printed report. Only Haemoglobin, Total WBC, and Platelet Count ever flag; every other field always returns null regardless of range. `fieldKey` is optional so 'Others' rows (which have no fixed key) can still pass value/range through without flagging. */
+export function flagFor(value: string, range: string, fieldKey?: string): 'high' | 'low' | null {
+  if (fieldKey !== undefined && !FLAGGABLE_FIELDS.has(fieldKey)) return null
   if (!value || !range) return null
   const parsed = parseNumericRange(range.replace(/,/g, ''))
   if (!parsed) return null

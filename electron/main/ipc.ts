@@ -1,4 +1,4 @@
-import { IpcMain, BrowserWindow, app, shell } from 'electron'
+import { IpcMain, BrowserWindow, app, shell, dialog } from 'electron'
 import { join } from 'path'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { dbRun, dbGet, dbAll } from './db'
@@ -167,27 +167,31 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   // ---- Print to PDF ----
-  ipcMain.handle('print:pdf', async (_e, html: string, patientName: string) => {
-    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: false } })
+  // Renders the live report window itself rather than re-loading a detached HTML string, so the
+  // PDF is pixel-identical to the preview (same stylesheet, same bundled logo/badge assets), then
+  // asks where to save it. Margins are zero because the report's own .print-page box already owns
+  // the full 210x297mm sheet and applies the margin as internal padding — letting the PDF engine
+  // add its own margin on top would scale the page down and reintroduce the tiny-print bug.
+  ipcMain.handle('print:pdf', async (e, suggestedName: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (!win) return { saved: false as const, reason: 'no-window' }
 
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    const safe = (suggestedName || 'report').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Save report as PDF',
+      defaultPath: join(app.getPath('documents'), `${safe}.pdf`),
+      filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
+    })
+    if (canceled || !filePath) return { saved: false as const, reason: 'canceled' }
 
     const pdfBuffer = await win.webContents.printToPDF({
       pageSize: 'A4',
       printBackground: true,
-      margins: { marginType: 'custom', top: 0.4, bottom: 0.4, left: 0.5, right: 0.5 }
+      margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
     })
-
-    win.close()
-
-    const labDir = join(app.getPath('documents'), 'LabReports')
-    if (!existsSync(labDir)) mkdirSync(labDir, { recursive: true })
-
-    const safe = patientName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')
-    const filePath = join(labDir, `${safe}_${Date.now()}.pdf`)
     writeFileSync(filePath, pdfBuffer)
 
-    return filePath
+    return { saved: true as const, filePath }
   })
 
   // ---- Direct print ----

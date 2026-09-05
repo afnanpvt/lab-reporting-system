@@ -20,7 +20,7 @@ interface LabAPI {
     list(): Promise<Electron.PrinterInfo[]>
   }
   print: {
-    pdf(html: string, patientName: string): Promise<string>
+    pdf(suggestedName: string): Promise<{ saved: true; filePath: string } | { saved: false; reason: string }>
     direct(html: string, printerName: string): Promise<{ success: boolean; reason: string }>
   }
   shell: {

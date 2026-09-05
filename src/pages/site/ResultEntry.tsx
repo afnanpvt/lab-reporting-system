@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X } from 'lucide-react'
-import { getPatient, getResultsFor, setSectionResults, listPatients, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, decodeOtherRow, encodeOtherRow } from './reportFields'
+import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, type Patient, type ResultsBySection } from './api'
+import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, decodeOtherRow, encodeOtherRow } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 
 const FOCUSABLE_SELECTOR = 'input, .abx-btn'
+
+/**
+ * Lab-wide reference range overrides, threaded via context rather than as a prop through
+ * SectionBody -> every field group -> FieldRow — that chain is deep and mostly unrelated
+ * components that would otherwise all need to forward a prop they never use themselves.
+ */
+const RangeOverridesContext = createContext<{
+  overrides: Record<string, string>
+  setOverride: (key: string, range: string | null) => void
+}>({ overrides: {}, setOverride: () => {} })
 
 export default function ResultEntry() {
   const location = useLocation()
@@ -17,11 +27,19 @@ export default function ResultEntry() {
   const [results, setResults] = useState<ResultsBySection>({})
   const [resultsLoaded, setResultsLoaded] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Lab-wide reference range customizations (see api.ts) — loaded once, applied to every
+  // patient. Editing one here (see RangeEditor below) updates every open report immediately.
+  const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
   const paneRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef(false)
 
   useEffect(() => {
     listPatients().then(setPatients)
+    getRangeOverrides().then(setRangeOverrides)
+  }, [])
+
+  const setOverride = useCallback((key: string, range: string | null) => {
+    setRangeOverride(key, range).then(setRangeOverrides)
   }, [])
 
   useEffect(() => {
@@ -150,6 +168,7 @@ export default function ResultEntry() {
   const completion = getCompletionState(active.key, visibleData)
 
   return (
+    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride }}>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
         <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0">
@@ -304,6 +323,7 @@ export default function ResultEntry() {
           </div>
         </div>
       </div>
+    </RangeOverridesContext.Provider>
   )
 }
 
@@ -316,10 +336,15 @@ function Dot({ state }: { state: CompletionState }) {
 function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   sectionKey: string; fieldKey: string; gender: string; value: string; onChange: (v: string) => void; indent?: boolean
 }) {
+  const { overrides, setOverride } = useContext(RangeOverridesContext)
+  const [editing, setEditing] = useState(false)
+
   const label = humanizeKey(fieldKey)
   const unit = unitFor(sectionKey, fieldKey)
-  const range = getReferenceRange(sectionKey, fieldKey, gender)
-  const flag = flagFor(value, range)
+  const range = getReferenceRange(sectionKey, fieldKey, gender, overrides)
+  const key = rangeOverrideKey(sectionKey, fieldKey, gender)
+  const isOverridden = overrides[key] !== undefined
+  const flag = flagFor(value, range, fieldKey)
   const flagColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
 
   return (
@@ -335,24 +360,93 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
         style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? '#c7cfd9', color: flagColor ?? '#1a2430', fontWeight: flag ? 600 : 400 }}
       />
       <span className="text-[13.5px] text-[#57677a] flex-shrink-0" style={{ width: '6rem' }}>{unit}</span>
-      {range && (
-        !value ? (
-          <button
-            type="button"
-            onClick={() => onChange(defaultValueForRange(range))}
-            title="Use this range as the starting value"
-            className="text-[13px] text-[#57677a] hover:text-[#125483] hover:bg-[#e8f1f9] flex-1 text-right whitespace-nowrap rounded-md px-1.5 py-0.5 -mr-1.5 transition-colors"
-          >
-            {range}
-          </button>
+
+      <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
+        {editing ? (
+          <RangeEditor
+            initial={range}
+            defaultRange={defaultReferenceRange(sectionKey, fieldKey, gender)}
+            isOverridden={isOverridden}
+            onCancel={() => setEditing(false)}
+            onSave={(next) => { setOverride(key, next); setEditing(false) }}
+            onReset={() => { setOverride(key, null); setEditing(false) }}
+          />
         ) : (
-          <span className="text-[13px] text-[#57677a] flex-1 text-right whitespace-nowrap px-1.5">
-            {flag === 'high' && <span style={{ color: '#c23b33' }}>▲ </span>}
-            {flag === 'low' && <span style={{ color: '#1b6fae' }}>▼ </span>}
-            {range}
-          </span>
-        )
+          <>
+            {range ? (
+              !value ? (
+                <button
+                  type="button"
+                  onClick={() => onChange(defaultValueForRange(range))}
+                  title="Use this range as the starting value"
+                  className="text-[13px] text-[#57677a] hover:text-[#125483] hover:bg-[#e8f1f9] whitespace-nowrap rounded-md px-1.5 py-0.5 transition-colors truncate"
+                >
+                  {range}
+                </button>
+              ) : (
+                <span className="text-[13px] text-[#57677a] whitespace-nowrap px-1.5 truncate">
+                  {flag === 'high' && <span style={{ color: '#c23b33' }}>▲ </span>}
+                  {flag === 'low' && <span style={{ color: '#1b6fae' }}>▼ </span>}
+                  {range}
+                </span>
+              )
+            ) : (
+              <span className="text-[12.5px] text-[#a8b4c2] italic whitespace-nowrap px-1.5">No range set</span>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              title={isOverridden ? 'Custom range — click to edit or reset to default' : 'Edit reference range for every patient'}
+              className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors ${
+                isOverridden ? 'text-[#1b6fae] hover:bg-[#e8f1f9]' : 'text-[#c7cfd9] hover:text-[#57677a] hover:bg-[#f0f3f6]'
+              }`}
+            >
+              <Pencil size={12} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Inline popover-style editor for a field's reference range — no modal, no navigating away from Result Entry, since the whole point is editing the range right where staff already notice it looks wrong. */
+function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, onReset }: {
+  initial: string; defaultRange: string; isOverridden: boolean
+  onCancel: () => void; onSave: (range: string) => void; onReset: () => void
+}) {
+  const [draft, setDraft] = useState(initial)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
+
+  const commit = () => { if (draft.trim() !== '') onSave(draft.trim()) }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+        }}
+        placeholder="e.g. 13.0–17.0 gm/dl"
+        className="text-[13px] px-2 py-1 rounded-md border border-[#1b6fae] bg-white focus:outline-none"
+        style={{ width: '10rem' }}
+      />
+      <button type="button" onClick={commit} title="Save — applies to every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[#1f8a54] hover:bg-[#e7f6ee]">
+        <CheckCircle2 size={14} />
+      </button>
+      {isOverridden && (
+        <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[#8593a3] hover:text-[#125483] underline whitespace-nowrap">
+          Reset
+        </button>
       )}
+      <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[#a8b4c2] hover:bg-[#f0f3f6]">
+        <X size={14} />
+      </button>
     </div>
   )
 }

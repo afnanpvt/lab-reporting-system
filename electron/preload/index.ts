@@ -23,7 +23,7 @@ const api = {
     list: () => ipcRenderer.invoke('printers:list')
   },
   print: {
-    pdf: (html: string, patientName: string) => ipcRenderer.invoke('print:pdf', html, patientName),
+    pdf: (suggestedName: string) => ipcRenderer.invoke('print:pdf', suggestedName),
     direct: (html: string, printerName: string) => ipcRenderer.invoke('print:direct', html, printerName)
   },
   shell: {

@@ -331,6 +331,37 @@ export async function getLicenseInfo(): Promise<LicenseInfo | null> {
   return window.api.license.get()
 }
 
+// ---------------------------------------------------------------------------
+// Reference range overrides — lab-wide, apply to every patient from then on.
+// Stored as one JSON blob under a single lab_settings key rather than a new table, since it's
+// a small sparse map (only fields someone actually chose to customize, not all ~150 of them).
+// ---------------------------------------------------------------------------
+
+const RANGE_OVERRIDES_KEY = 'reference_range_overrides'
+
+export async function getRangeOverrides(): Promise<Record<string, string>> {
+  const raw = await window.api.settings.get()
+  const stored = raw[RANGE_OVERRIDES_KEY]
+  if (!stored) return {}
+  try {
+    return JSON.parse(stored)
+  } catch {
+    return {}
+  }
+}
+
+export async function setRangeOverride(key: string, range: string | null): Promise<Record<string, string>> {
+  const current = await getRangeOverrides()
+  const next = { ...current }
+  if (range === null || range.trim() === '') {
+    delete next[key]
+  } else {
+    next[key] = range
+  }
+  await window.api.settings.set(RANGE_OVERRIDES_KEY, JSON.stringify(next))
+  return next
+}
+
 /** Deliberately never writes lab_name — that's fixed by the signed license (see electron/main/license.ts) and re-asserted on every app launch, not something Settings can change. */
 export async function saveLabSettings(form: LabSettingsForm): Promise<void> {
   await Promise.all([

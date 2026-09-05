@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2 } from 'lucide-react'
-import { getPatient, getResultsFor, getLabSettings, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
+import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
+
+/**
+ * A4 is 210x297mm (ISO 216 — the same sheet worldwide, India included). The page box owns the
+ * whole sheet and applies the margin as its own padding, because @page margins shrink the
+ * printable area and make the engine scale the content down to fit. Sizing in mm rather than px
+ * means the preview is 1:1 with the paper at any screen DPI.
+ */
+const PAGE_W = '210mm'
+const PAGE_H = '297mm'
+const PAGE_PAD = '12mm 14mm'
 
 /** "Now", formatted to match the app's existing date/time style, with a 12-hour AM/PM clock. */
 function formatReportedAt(): string {
@@ -14,22 +24,22 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, externalMode }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; externalMode: boolean
+function ReportBlockView({ block, patient, results, reportedAt, externalMode, rangeOverrides }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; externalMode: boolean; rangeOverrides: Record<string, string>
 }) {
   if (block.kind === 'patientInfo') {
     return (
       <div className="avoid-break">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
-          <div className="text-[14px] font-bold uppercase tracking-widest text-[#1a2430]">Laboratory Report</div>
-          <div className="text-[10px] text-right text-[#444] leading-relaxed">
+        <div className="flex items-center justify-between mb-3 pb-2.5 border-b-2" style={{ borderColor: '#1a2430' }}>
+          <div className="text-[17px] font-bold uppercase tracking-widest text-[#1a2430]">Laboratory Report</div>
+          <div className="text-[11px] text-right text-[#333] leading-relaxed">
             SID (Unique Ref. No.) <b className="text-[#111]">{patient.sid}</b><br />
             Collected <b className="text-[#111]">{patient.date} {formatTime12h(patient.regTime)}</b><br />
             Received <b className="text-[#111]">{patient.date} {formatTime12h(patient.regTime)}</b><br />
             Reported <b className="text-[#111]">{reportedAt}</b>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] mb-1">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[13px] mb-1 text-[#333]">
           <div>Patient <b className="text-[#111]">{patient.name}</b></div>
           <div>Referred by <b className="text-[#111]">{patient.referredBy}</b></div>
           <div className="col-span-2">Age / Sex <b className="text-[#111]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></div>
@@ -41,10 +51,10 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode }: 
   if (block.kind === 'emptySection') {
     return (
       <div className="avoid-break mb-6">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-[#111] border-b border-[#ddd] pb-1 mb-1.5">
+        <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2">
           {block.label}
         </div>
-        <p className="text-[9.5px] text-[#b3261e] italic py-1">
+        <p className="text-[11.5px] text-[#b3261e] italic py-1">
           {block.label} was selected, but no results have been entered yet. This section will not appear in the final report.
         </p>
       </div>
@@ -54,10 +64,10 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode }: 
   if (block.kind === 'sectionChunk') {
     return (
       <div className="avoid-break mb-6">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-[#111] border-b border-[#ddd] pb-1 mb-1.5">
+        <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2">
           {block.label}{block.continued && <span className="font-normal italic text-[#8593a3]"> (continued)</span>}
         </div>
-        <div className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[9.5px] font-bold uppercase tracking-wide text-[#57677a] border-b border-[#ddd] pb-1 mb-1">
+        <div className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11.5px] font-bold uppercase tracking-wide text-[#1a2430] border-b border-[#bbb] pb-1.5 mb-1">
           <span>Test</span><span>Result</span><span>Unit</span><span>Reference</span>
         </div>
         {block.keys.map((k) => {
@@ -65,20 +75,20 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode }: 
           const isOthers = block.sectionKey === 'others'
           const other = isOthers ? decodeOtherRow(data[k]) : null
           const value = other ? other.value : data[k]
-          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender)
+          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
           const unit = other ? other.unit : unitFor(block.sectionKey, k)
-          const flag = flagFor(value, range)
+          const flag = flagFor(value, range, isOthers ? undefined : k)
           const arrowColor = flag === 'high' ? '#c0392b' : flag === 'low' ? '#3b6ea5' : undefined
           return (
-            <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11px] py-1.5 border-b border-[#f0f0f0]">
-              <span className="font-bold text-[#1a2430]">{isOthers ? k : humanizeKey(k)}</span>
-              <span style={{ fontWeight: flag ? 600 : 400, color: '#111', fontFamily: 'Consolas, monospace' }}>
-                {flag === 'high' && <span style={{ color: arrowColor }}>▲ </span>}
-                {flag === 'low' && <span style={{ color: arrowColor }}>▼ </span>}
+            <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] items-baseline text-[13px] py-2 border-b border-[#e8e8e8]">
+              <span className="font-bold text-[#111]">{isOthers ? k : humanizeKey(k)}</span>
+              <span style={{ fontWeight: flag ? 700 : 600, fontSize: '13.5px', color: flag ? arrowColor : '#111', fontFamily: 'Consolas, monospace' }}>
+                {flag === 'high' && <span>▲ </span>}
+                {flag === 'low' && <span>▼ </span>}
                 {value}
               </span>
-              <span>{unit}</span>
-              <span>{range}</span>
+              <span className="text-[#333]">{unit}</span>
+              <span className="text-[#333]">{range}</span>
             </div>
           )
         })}
@@ -88,20 +98,20 @@ function ReportBlockView({ block, patient, results, reportedAt, externalMode }: 
 
   return (
     <div className="avoid-break">
-      <div className="text-center text-[10px] text-[#555] border-t border-b border-[#ccc] py-1.5 my-5">
+      <div className="text-center text-[11.5px] font-medium text-[#444] border-t border-b border-[#ccc] py-1.5 my-4">
         ----------- End of report -----------
       </div>
       {!externalMode && (
-        <div className="flex items-end justify-between mt-6">
+        <div className="flex items-end justify-between mt-5">
           <div>
-            <div className="border-t border-[#333] w-[130px] mb-1" />
-            <div className="text-[10px] font-bold">Lab Technician</div>
+            <div className="border-t border-[#333] w-[150px] mb-1" />
+            <div className="text-[11.5px] font-bold">Lab Technician</div>
           </div>
           <div className="text-right">
-            <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
-            <div className="text-[10px] font-bold">A. Noorul Ameen</div>
-            <div className="text-[9px] text-[#555]">MSC DMLT DMRT DCA</div>
-            <div className="text-[9px] text-[#555]">Lab Incharge</div>
+            <div className="border-t border-[#333] w-[150px] mb-1 ml-auto" />
+            <div className="text-[11.5px] font-bold">A. Noorul Ameen</div>
+            <div className="text-[10.5px] text-[#444]">MSC DMLT DMRT DCA</div>
+            <div className="text-[10.5px] text-[#444]">Lab Incharge</div>
           </div>
         </div>
       )}
@@ -117,6 +127,7 @@ export default function ReportPreview() {
   const [patient, setPatient] = useState<Patient | null>((location.state as { patient?: Patient })?.patient ?? null)
   const [results, setResults] = useState<ResultsBySection | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
+  const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
   // For a sample tested on behalf of another lab that will print it on their own letterhead —
   // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
   // with blank space left at the top for their pre-printed stationery.
@@ -136,6 +147,7 @@ export default function ReportPreview() {
 
   useEffect(() => {
     getLabSettings().then(setSettings)
+    getRangeOverrides().then(setRangeOverrides)
   }, [])
 
   const pages = useMemo(() => (patient && results ? paginateReport(patient, results) : []), [patient, results])
@@ -146,6 +158,22 @@ export default function ReportPreview() {
     const digits = patient.mobile.replace(/\D/g, '') || '9876543210'
     const message = `Hi, your lab report from ${settings.labName} is ready. Please find it attached.`
     window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, '_blank')
+  }
+
+  const [savingPdf, setSavingPdf] = useState(false)
+
+  // Renders this same window to a PDF rather than opening the print dialog, so "Save PDF"
+  // actually saves a file the user picks a location for instead of routing through Windows'
+  // print picker (which is what the old window.print()-for-everything approach did).
+  const handleSavePdf = async () => {
+    if (!patient || savingPdf) return
+    setSavingPdf(true)
+    try {
+      const result = await window.api.print.pdf(`${patient.name}_${patient.sid}`)
+      if (result.saved) window.api.shell.openPath(result.filePath)
+    } finally {
+      setSavingPdf(false)
+    }
   }
 
   if (!patient || !results || !settings) {
@@ -184,9 +212,13 @@ export default function ReportPreview() {
               {externalMode ? 'External lab report: On' : 'External lab report'}
             </button>
             <div className="h-5 w-px bg-[#e1e6ec]" />
-            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#f6d9cd]">
+            <button
+              onClick={handleSavePdf}
+              disabled={savingPdf}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#f6d9cd] disabled:opacity-60"
+            >
               <Download size={14} />
-              Save PDF
+              {savingPdf ? 'Saving…' : 'Save PDF'}
             </button>
             <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#f6d9cd]">
               <Printer size={14} />
@@ -205,7 +237,7 @@ export default function ReportPreview() {
               <div
                 key={pageIndex}
                 className="print-page relative bg-white shadow-lg print:shadow-none flex flex-col"
-                style={{ width: 780, minHeight: 1260, padding: '32px 52px' }}
+                style={{ width: PAGE_W, height: PAGE_H, padding: PAGE_PAD, overflow: 'hidden' }}
               >
                 {pages.length > 1 && (
                   <div className="absolute top-2 right-3 text-[8.5px] text-[#a8b4c2] print:text-[#c7cfd9]" style={{ zIndex: 2 }}>
@@ -228,7 +260,7 @@ export default function ReportPreview() {
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} externalMode={externalMode} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} externalMode={externalMode} rangeOverrides={rangeOverrides} />
                   ))}
                 </div>
 

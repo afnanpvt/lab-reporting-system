@@ -6,25 +6,25 @@ import type { Patient } from './api'
  * exact same page breaks the printed report will have — no more finding out a section got
  * awkwardly split in half only after printing.
  *
- * CONTENT_HEIGHT and PATIENT_INFO_HEIGHT are calibrated against the actual rendered page in
- * ReportPreview.tsx (measured live: a 1260px page with the current letterhead leaves ~785px of
- * real content room, and the patient-info block itself measures ~132px) — keep them in sync with
- * that page's padding/header/footer if those change again, or short reports start wasting whole
- * pages on almost nothing, which is exactly the "blank first page" bug this was tuned to fix.
+ * These are calibrated against the real A4 page box in ReportPreview.tsx: a 297mm sheet with
+ * 12mm top/bottom padding leaves 273mm (~1032px) of box, minus the letterhead header (~118px)
+ * and footer (~205px), leaving ~700px of usable content room. Keep them in sync with that
+ * page's padding/header/footer and with the report's font sizes if either changes again, or
+ * short reports start wasting whole pages on almost nothing — or worse, overflow the sheet and
+ * silently push the footer onto an extra page.
  */
-const CONTENT_HEIGHT = 785
-// Rows grew from py-1/10.5px to py-1.5/11px (typography pass for legibility) — re-measure this
-// against the live page if row padding/font-size changes again.
-const ROW_HEIGHT = 29
-const SECTION_HEADER_HEIGHT = 26
-const COLUMN_HEADER_HEIGHT = 22
-const EMPTY_NOTICE_HEIGHT = 36
+const CONTENT_HEIGHT = 700
+// Report rows are 13px text on py-2 — re-measure against the live page if either changes.
+const ROW_HEIGHT = 34
+const SECTION_HEADER_HEIGHT = 32
+const COLUMN_HEADER_HEIGHT = 26
+const EMPTY_NOTICE_HEIGHT = 40
 // Title row + SID + Collected/Received/Reported timestamps + the patient/doctor/age grid.
-const PATIENT_INFO_HEIGHT = 140
+const PATIENT_INFO_HEIGHT = 158
 // End-of-report marker and the sign-off block always travel together as one unit — never
 // worth burning a whole extra page on two lines of signature separated from their context.
-const CLOSING_HEIGHT = 100
-const BLOCK_GAP = 24
+const CLOSING_HEIGHT = 108
+const BLOCK_GAP = 20
 // Below this many rows, a split chunk looks like an orphaned sliver — better to start the
 // whole remainder fresh on the next page than to dangle 1-2 rows before a "(continued)".
 const MIN_ROWS_TO_SPLIT = 4

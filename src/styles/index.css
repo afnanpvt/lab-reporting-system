@@ -123,13 +123,28 @@
 .titlebar-drag { -webkit-app-region: drag; }
 .titlebar-no-drag { -webkit-app-region: no-drag; }
 
+/* The report renders bold text (test names, headings, patient fields) in a variable font
+   (--font-ui is 'Segoe UI Variable Display'). Bolding a variable font by weight can make
+   Chromium's renderer draw a stray fallback glyph after the bolded text — reproduced in both
+   the on-screen preview and the printed/PDF output. A static, non-variable font stack for the
+   report specifically (it never needs to match the app chrome's font) sidesteps the bug
+   entirely rather than working around a specific weight or rendering path. */
+.print-page {
+  font-family: 'Segoe UI', Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
 /* Report print styles */
 @media print {
   body { overflow: visible !important; }
 
+  /* Zero page margin, with the real margin applied as padding inside .print-page instead.
+     With a @page margin the printable area shrinks to 190x277mm, and any page box wider than
+     that gets silently scaled down by the print engine — which is what made reports print
+     tiny and pushed the footer onto a second sheet. Owning the full 210x297mm sheet keeps
+     what's on screen at exactly 1:1 with what comes out of the printer. */
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 0;
   }
 
   /* Never split a table/section awkwardly across a page boundary — it either
