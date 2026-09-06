@@ -179,7 +179,7 @@ export default function IncentiveReport() {
             className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
           >
-            <LetterheadWatermark />
+            <LetterheadWatermark labName={settings.labName} />
             <div className="relative" style={{ zIndex: 1 }}>
               <LetterheadHeader labName={settings.labName} />
 

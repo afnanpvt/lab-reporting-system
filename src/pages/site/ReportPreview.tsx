@@ -24,8 +24,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string
 }) {
   if (block.kind === 'patientInfo') {
     return (
@@ -108,9 +108,8 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides }
         </div>
         <div className="text-right">
           <div className="border-t border-[#1a2430] w-[160px] mb-1.5 ml-auto" />
-          <div className="text-[14px] font-bold text-[#1a2430] leading-tight">A. Noorul Ameen</div>
-          <div className="text-[10.5px] font-medium text-[#57677a] tracking-wide mt-0.5">MSC · DMLT · DMRT · DCA</div>
-          <div className="text-[10.5px] font-semibold text-[#1b6fae] tracking-wide uppercase mt-0.5">Lab Incharge</div>
+          {labDoctor && <div className="text-[14px] font-bold text-[#1a2430] leading-tight">{labDoctor}</div>}
+          <div className="text-[10.5px] font-semibold text-[#1b6fae] tracking-wide uppercase mt-0.5">Authorised Signatory</div>
         </div>
       </div>
     </div>
@@ -249,7 +248,7 @@ export default function ReportPreview() {
                   <div style={{ height: 110 }} />
                 ) : (
                   <>
-                    <LetterheadWatermark />
+                    <LetterheadWatermark labName={settings.labName} />
                     <div className="relative" style={{ zIndex: 1 }}>
                       <LetterheadHeader labName={settings.labName} />
                     </div>
@@ -258,7 +257,7 @@ export default function ReportPreview() {
 
                 <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
                   {blocks.map((block, i) => (
-                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} />
+                    <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} />
                   ))}
                 </div>
 
