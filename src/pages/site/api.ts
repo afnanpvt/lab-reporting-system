@@ -313,7 +313,7 @@ export interface LabSettingsForm {
 export async function getLabSettings(): Promise<LabSettingsForm> {
   const raw = await window.api.settings.get()
   return {
-    labName: raw.lab_name || 'Your Lab Name',
+    labName: raw.lab_name || 'Diagnostic Laboratory',
     labAddress: raw.lab_address || '',
     labPhone: raw.lab_phone || '',
     labEmail: raw.lab_email || '',
@@ -362,12 +362,9 @@ export async function setRangeOverride(key: string, range: string | null): Promi
   return next
 }
 
-// Writes lab_name along with everything else. On a licensed build, main process's lockLabName()
-// re-asserts the license's name on every launch (see electron/main/index.ts), so this only
-// actually sticks when running unlicensed — this demo/pitch build included.
+/** Deliberately never writes lab_name — that's fixed by the signed license (see electron/main/license.ts) and re-asserted on every app launch, not something Settings can change. */
 export async function saveLabSettings(form: LabSettingsForm): Promise<void> {
   await Promise.all([
-    window.api.settings.set('lab_name', form.labName),
     window.api.settings.set('lab_address', form.labAddress),
     window.api.settings.set('lab_phone', form.labPhone),
     window.api.settings.set('lab_email', form.labEmail),

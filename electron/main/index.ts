@@ -73,10 +73,7 @@ app.whenReady().then(async () => {
   if (!gotLock) return
 
   const license = verifyLicense()
-  // Unpackaged dev builds (this demo/pitch branch included) run unlicensed — no lab has bought
-  // this install yet, so there's nothing to lock the name to. Packaged builds still require a
-  // real signed license, same as ever.
-  if (!license.ok && !is.dev) {
+  if (!license.ok) {
     dialog.showErrorBox(
       'LumaLabs — Unlicensed',
       'This installation does not have a valid license.\n\n' +
@@ -96,7 +93,7 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = 'light'
 
   await initDb()
-  if (license.ok) lockLabName(license.labName!)
+  lockLabName(license.labName!)
   registerIpcHandlers(ipcMain)
   createWindow()
 

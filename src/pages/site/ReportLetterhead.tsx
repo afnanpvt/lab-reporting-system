@@ -1,53 +1,64 @@
 import { Phone, Mail, MapPin } from 'lucide-react'
 import type { LabSettingsForm } from './api'
+import logo from '../../assets/superlab-logo.png'
+import badge from '../../assets/superlab-25years-badge.png'
+import bmqrLogo from '../../assets/certifications/bmqr.png'
+import bmqrSeal from '../../assets/certifications/bmqr-seal.png'
+import iso9001 from '../../assets/certifications/iso9001.png'
+import isac from '../../assets/certifications/isac.png'
 
 /**
  * The report is pre-paginated in JS (see pagination.ts) into discrete page boxes, each of which
  * renders its own copy of this header/footer in normal document flow — so what the on-screen
  * preview shows page-by-page is exactly what prints, no reliance on the browser's print engine
  * to repeat fixed-position chrome across pages.
- *
- * There's no logo image here — this is the unbranded demo/pitch build, so the lab name (fully
- * editable in Settings) renders as a plain text wordmark instead. A licensed, branded build would
- * swap this for the lab's actual logo.
  */
 export function LetterheadHeader({ labName }: { labName: string }) {
   return (
-    <div className="flex items-center justify-between bg-white pb-3" style={{ borderBottom: '2px solid #1b6fae' }}>
-      <div className="text-[28px] font-bold tracking-tight" style={{ color: '#1b6fae' }}>{labName}</div>
+    <div className="flex items-center justify-between bg-white">
+      <img src={logo} alt={labName} className="h-[92px] w-auto" />
+      <img src={badge} alt="Celebrating 25 years of service" className="h-[92px] w-auto" />
     </div>
   )
 }
 
 /** Faint centered security watermark behind the page content. */
-export function LetterheadWatermark({ labName }: { labName: string }) {
+export function LetterheadWatermark() {
   return (
-    <div
+    <img
+      src={logo}
+      alt=""
       aria-hidden="true"
-      className="absolute pointer-events-none select-none text-center font-bold uppercase"
-      style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', opacity: 0.045, zIndex: 0, fontSize: '56px', lineHeight: 1.15, color: '#1a2430' }}
-    >
-      {labName}
-    </div>
+      className="absolute pointer-events-none select-none"
+      style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '65%', opacity: 0.045, zIndex: 0 }}
+    />
   )
 }
 
+const CERTIFICATIONS = [bmqrLogo, bmqrSeal, iso9001, isac]
+
 /**
- * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer,
- * 'incentive' and 'billing' each get their own genuinely relevant note instead of a single
- * generic line borrowed from the patient report.
+ * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer
+ * and the CMC Hospital quality-check line — neither of which belongs on a billing or accounts
+ * document. 'incentive' and 'billing' each get their own genuinely relevant note instead of a
+ * single generic line borrowed from the patient report.
  */
-export function LetterheadFooter({ variant = 'report', settings }: { variant?: 'report' | 'incentive' | 'billing'; settings: Pick<LabSettingsForm, 'labName' | 'labPhone' | 'labEmail' | 'labAddress'> }) {
+export function LetterheadFooter({ variant = 'report', settings }: { variant?: 'report' | 'incentive' | 'billing'; settings: Pick<LabSettingsForm, 'labPhone' | 'labEmail' | 'labAddress'> }) {
   return (
     <div className="bg-white">
       <div className="flex items-start justify-between gap-4 pt-4" style={{ borderTop: '1px solid #dde3ea' }}>
         <div className="flex-1 min-w-0">
           {variant === 'report' && (
-            <p className="text-[10px] text-[#555] leading-snug">
-              The report is based on the specimen received / submitted to the laboratory. Laboratory results are
-              dependent on multiple factors. Results need to be correlated clinically. This result is not valid for
-              medico-legal purpose.
-            </p>
+            <>
+              <p className="text-[10px] text-[#555] leading-snug">
+                The report is based on the specimen received / submitted to the laboratory. Laboratory results are
+                dependent on multiple factors. Results need to be correlated clinically. This result is not valid for
+                medico-legal purpose.
+              </p>
+              <p className="text-[10.5px] font-semibold text-[#1a2430] mt-1.5">
+                Test done here have quality - control check with <span style={{ color: '#c2185b' }}>CMC Hospital, Vellore.</span>
+              </p>
+            </>
           )}
           {variant === 'billing' && (
             <>
@@ -56,7 +67,7 @@ export function LetterheadFooter({ variant = 'report', settings }: { variant?: '
                 for the investigations listed above, correct as of the date printed.
               </p>
               <p className="text-[10.5px] font-semibold text-[#1a2430] mt-1.5">
-                Thank you for choosing <span style={{ color: '#1b6fae' }}>{settings.labName}.</span> For any billing
+                Thank you for choosing <span style={{ color: '#1b6fae' }}>Super Lab Service.</span> For any billing
                 query, please contact us using the details below.
               </p>
             </>
@@ -82,18 +93,26 @@ export function LetterheadFooter({ variant = 'report', settings }: { variant?: '
 
       <div className="h-[3px] my-3 rounded-full" style={{ background: 'linear-gradient(to right, #1b6fae, #ff4fa0)' }} />
 
-      <div className="space-y-1.5 text-[11px] text-[#1a2430]">
-        <div className="flex items-center gap-2">
-          <Phone size={13} className="text-[#1b6fae]" />
-          <span className="tracking-wider font-medium">{settings.labPhone}</span>
+      <div className="flex items-end justify-between gap-6">
+        <div className="space-y-1.5 text-[11px] text-[#1a2430]">
+          <div className="flex items-center gap-2">
+            <Phone size={13} className="text-[#1b6fae]" />
+            <span className="tracking-wider font-medium">{settings.labPhone}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Mail size={13} className="text-[#1b6fae]" />
+            {settings.labEmail}
+          </div>
+          <div className="flex items-start gap-2">
+            <MapPin size={13} className="text-[#1b6fae] flex-shrink-0 mt-0.5" />
+            <span className="max-w-[380px]">{settings.labAddress}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Mail size={13} className="text-[#1b6fae]" />
-          {settings.labEmail}
-        </div>
-        <div className="flex items-start gap-2">
-          <MapPin size={13} className="text-[#1b6fae] flex-shrink-0 mt-0.5" />
-          <span className="max-w-[380px]">{settings.labAddress}</span>
+
+        <div className="flex items-center gap-3.5 flex-shrink-0">
+          {CERTIFICATIONS.map((src, i) => (
+            <img key={i} src={src} alt="" className="h-[46px] w-auto object-contain" />
+          ))}
         </div>
       </div>
 

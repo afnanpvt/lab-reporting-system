@@ -292,14 +292,15 @@ function createTables(): void {
   // Seed defaults for any key not already present — INSERT OR IGNORE is a no-op against an
   // existing row, so this only backfills what's missing (e.g. a dev DB seeded before
   // sid_counter/lab_email existed) and never overwrites a value staff already set.
-  // This is the unbranded demo/pitch build (no license locks lab_name here — see index.ts),
-  // so every contact detail starts blank/placeholder for a prospect to fill in as their own.
+  // This build is licensed exclusively to Super Lab Service (see license.ts), so their real
+  // contact details are the actual defaults here rather than blanks waiting to be typed in —
+  // still editable in Settings if any of it ever changes, just not empty on first launch.
   const defaults = [
-    ['lab_name', 'Your Lab Name'],
-    ['lab_address', ''],
-    ['lab_phone', ''],
-    ['lab_email', ''],
-    ['lab_doctor', 'A. Noorul Ameen, M.Sc. (Biochem), DMLT, DMRT, DCA'],
+    ['lab_name', 'Diagnostic Laboratory'],
+    ['lab_address', '#92, Opp. Azeem Hospital, Moolakadai Street, P.J. Nehru Road, Vaniyambadi.'],
+    ['lab_phone', '99442 38110'],
+    ['lab_email', 'superlab.vaniyambadi@gmail.com'],
+    ['lab_doctor', 'Dr. Arvind Nair'],
     ['default_printer', ''],
     ['sid_counter', '1']
   ]

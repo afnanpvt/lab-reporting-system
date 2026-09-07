@@ -28,7 +28,6 @@ export default function Settings() {
   }
 
   const fields: { key: keyof typeof form; label: string; placeholder: string }[] = [
-    { key: 'labName', label: 'Lab Name', placeholder: 'Your Lab Name' },
     { key: 'labAddress', label: 'Address', placeholder: 'Full address' },
     { key: 'labPhone', label: 'Phone / Contact', placeholder: 'e.g. 99442 38110' },
     { key: 'labEmail', label: 'Email', placeholder: 'e.g. lab@example.com' },
@@ -71,31 +70,21 @@ export default function Settings() {
                   <h2 className="text-[11px] font-bold uppercase tracking-widest text-[#8593a3]">Laboratory Information</h2>
                 </div>
 
-                {license ? (
-                  <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[#f5f7fa] border border-[#e1e6ec]">
-                    <Lock size={13} className="text-[#8593a3] flex-shrink-0" />
-                    <div className="text-[13px] text-[#57677a]">
-                      Licensed to <span className="font-medium text-[#1a2430]">{license.labName}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
-                    </div>
+                <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[#f5f7fa] border border-[#e1e6ec]">
+                  <Lock size={13} className="text-[#8593a3] flex-shrink-0" />
+                  <div className="text-[13px] text-[#57677a]">
+                    Licensed to <span className="font-medium text-[#1a2430]">{license?.labName ?? '…'}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[#f5f7fa] border border-[#e1e6ec]">
-                    <Building2 size={13} className="text-[#8593a3] flex-shrink-0" />
-                    <div className="text-[13px] text-[#57677a]">
-                      Demo mode — no license installed. Every field below, including the lab name, is fully editable.
-                    </div>
-                  </div>
-                )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   {fields.map(({ key, label, placeholder }) => (
                     <div key={key} className={key === 'labAddress' ? 'col-span-2' : ''}>
                       <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">{label}</label>
                       <input
-                        className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae] disabled:opacity-60"
+                        className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
                         placeholder={placeholder}
                         value={form[key]}
-                        disabled={key === 'labName' && !!license}
                         onChange={(e) => update(key, e.target.value)}
                       />
                     </div>

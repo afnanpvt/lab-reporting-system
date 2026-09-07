@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutGrid, Users, FileBarChart, Settings, Stethoscope } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { getLabSettings } from './api'
+import logo from '../../assets/superlab-logo.png'
 
 const NAV = [
   { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/' },
@@ -22,23 +22,18 @@ export default function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [expanded, setExpanded] = useState(false)
-  const [labName, setLabName] = useState('')
-
-  useEffect(() => {
-    getLabSettings().then((s) => setLabName(s.labName))
-  }, [])
 
   return (
     <div className="h-screen overflow-hidden print:h-auto print:overflow-visible bg-[#f5f7fa] flex flex-col">
-      {/* Unbranded demo/pitch build — no logo image, just the lab name from Settings rendered as a
-          text wordmark, so it rebrands live as a prospect types in their own name. print:hidden
-          because every printable page already carries its own letterhead — without this, the
-          app's chrome was bleeding into the printed/saved PDF above the document. */}
+      {/* Branded header — this build is exclusively Super Lab Service's, so their logo lives right
+          in the app itself. print:hidden because every printable page already carries its own
+          letterhead — without this, the app's chrome was bleeding into the printed/saved PDF above
+          the document. */}
       <header
         className="titlebar-drag flex items-center gap-4 pl-6 flex-shrink-0 bg-white border-b border-[#e1e6ec] print:hidden"
         style={{ height: 104, paddingRight: 170 }}
       >
-        <div className="text-[26px] font-bold tracking-tight" style={{ color: '#1b6fae' }}>{labName}</div>
+        <img src={logo} alt="Super Lab Service" className="titlebar-no-drag h-24 w-auto flex-shrink-0" draggable={false} />
       </header>
 
       <div className="flex-1 flex min-h-0 print:h-auto print:overflow-visible">
