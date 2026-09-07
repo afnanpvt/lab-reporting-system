@@ -109,7 +109,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides }
         <div className="text-right">
           <div className="border-t border-[#1a2430] w-[160px] mb-1.5 ml-auto" />
           <div className="text-[14px] font-bold text-[#1a2430] leading-tight">A. Noorul Ameen</div>
-          <div className="text-[10.5px] font-medium text-[#57677a] tracking-wide mt-0.5">MSC · DMLT · DMRT · DCA</div>
+          <div className="text-[10.5px] font-medium text-[#57677a] tracking-wide mt-0.5">M.Sc. (Biochem), DMLT, DMRT, DCA</div>
           <div className="text-[10.5px] font-semibold text-[#1b6fae] tracking-wide uppercase mt-0.5">Lab Incharge</div>
         </div>
       </div>
