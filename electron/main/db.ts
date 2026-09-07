@@ -299,7 +299,7 @@ function createTables(): void {
     ['lab_address', ''],
     ['lab_phone', ''],
     ['lab_email', ''],
-    ['lab_doctor', ''],
+    ['lab_doctor', 'A. Noorul Ameen, M.Sc. (Biochem), DMLT, DMRT, DCA'],
     ['default_printer', ''],
     ['sid_counter', '1']
   ]
