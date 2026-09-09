@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Download, Calendar } from 'lucide-react'
-import { getDoctor, listPatients, loadBillingContext, incentiveLineItemsFor, getLabSettings, type Doctor, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import { getDoctor, listPatients, loadBillingContext, incentiveLineItemsFor, getLabSettings, getLogoDataUrl, type Doctor, type Patient, type BillingContext, type LabSettingsForm } from './api'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
 type Preset = 'thisMonth' | 'lastMonth' | 'thisYear' | 'allTime' | 'custom'
@@ -63,6 +63,7 @@ export default function IncentiveReport() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
+  const [logo, setLogo] = useState<string | null>(null)
 
   const now = new Date()
   const [preset, setPreset] = useState<Preset>('thisMonth')
@@ -75,12 +76,13 @@ export default function IncentiveReport() {
     listPatients().then(setPatients)
     loadBillingContext().then(setBilling)
     getLabSettings().then(setSettings)
+    getLogoDataUrl().then(setLogo)
   }, [id])
 
   if (doctorLoaded && !doctor) {
     return (
         <main className="px-10 py-9">
-          <p className="text-[15px] text-[#57677a]">Doctor not found.</p>
+          <p className="text-[15px] text-[var(--ink-2)]">Doctor not found.</p>
         </main>
     )
   }
@@ -88,7 +90,7 @@ export default function IncentiveReport() {
   if (!doctor || !billing || !settings) {
     return (
         <main className="px-10 py-9">
-          <p className="text-[15px] text-[#57677a]">Loading…</p>
+          <p className="text-[15px] text-[var(--ink-2)]">Loading…</p>
         </main>
     )
   }
@@ -105,27 +107,27 @@ export default function IncentiveReport() {
   return (
       <div className="flex flex-col h-full print:h-auto">
         {/* Review bar — this is a document to check before it goes out, not a raw data dump */}
-        <div className="flex flex-col gap-3 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
+        <div className="flex flex-col gap-3 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/doctors')}
-              className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
+              className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
             >
               <ArrowLeft size={15} />
               Back to doctors
             </button>
-            <div className="h-5 w-px bg-[#e1e6ec]" />
+            <div className="h-5 w-px bg-[var(--border)]" />
             <div>
-              <div className="text-[15px] font-semibold text-[#1a2430]">Incentive Report — Review</div>
-              <div className="text-[13px] text-[#57677a]">{doctor.name} · {filtered.length} line item{filtered.length === 1 ? '' : 's'} · {period}</div>
+              <div className="text-[15px] font-semibold text-[var(--ink)]">Incentive Report — Review</div>
+              <div className="text-[13px] text-[var(--ink-2)]">{doctor.name} · {filtered.length} line item{filtered.length === 1 ? '' : 's'} · {period}</div>
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#bfdcf0]">
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
                 <Download size={14} />
                 Save PDF
               </button>
-              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm">
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white text-[14px] font-medium rounded-xl hover:bg-[var(--accent-ink)] shadow-sm">
                 <Printer size={14} />
                 Print
               </button>
@@ -136,17 +138,17 @@ export default function IncentiveReport() {
               window you're paying for, then the table/total below update immediately. Defaults to
               the current month, since that's the normal payout cycle, not a lifetime total. */}
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[#8593a3]">
+            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ink-3)]">
               <Calendar size={13} />
               Period
             </span>
-            <div className="inline-flex items-center gap-1 bg-[#f5f7fa] rounded-xl p-1">
+            <div className="inline-flex items-center gap-1 bg-[var(--bg-app)] rounded-xl p-1">
               {PRESETS.map((p) => (
                 <button
                   key={p.key}
                   onClick={() => setPreset(p.key)}
                   className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
-                    preset === p.key ? 'bg-[#1b6fae] text-white shadow-sm' : 'text-[#57677a] hover:bg-[#eef2f6]'
+                    preset === p.key ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'
                   }`}
                 >
                   {p.label}
@@ -159,14 +161,14 @@ export default function IncentiveReport() {
                   type="date"
                   value={customFrom}
                   onChange={(e) => setCustomFrom(e.target.value)}
-                  className="px-2.5 py-1.5 text-[13px] border border-[#c7cfd9] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+                  className="px-2.5 py-1.5 text-[13px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
                 />
-                <span className="text-[13px] text-[#8593a3]">to</span>
+                <span className="text-[13px] text-[var(--ink-3)]">to</span>
                 <input
                   type="date"
                   value={customTo}
                   onChange={(e) => setCustomTo(e.target.value)}
-                  className="px-2.5 py-1.5 text-[13px] border border-[#c7cfd9] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25"
+                  className="px-2.5 py-1.5 text-[13px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
                 />
               </div>
             )}
@@ -174,30 +176,30 @@ export default function IncentiveReport() {
         </div>
 
         {/* The document itself — what's on screen here is exactly what prints, so reviewing it here IS reviewing the final report */}
-        <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[var(--bg-canvas)] p-8 print:bg-white print:p-0">
           <div
-            className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
+            className="report-paper relative max-w-[780px] mx-auto bg-[var(--surface)] shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
           >
             <LetterheadWatermark labName={settings.labName} />
             <div className="relative" style={{ zIndex: 1 }}>
-              <LetterheadHeader labName={settings.labName} />
+              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} />
 
-              <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
+              <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: 'var(--ink)' }}>
                 <div>
-                  <div className="text-[11px] uppercase tracking-widest text-[#8593a3] mb-1">Referral Incentive Report</div>
-                  <div className="text-[18px] font-bold text-[#1a2430]">{doctor.name}</div>
-                  <div className="text-[12px] text-[#57677a]">{doctor.specialty} · {doctor.phone}</div>
+                  <div className="text-[11px] uppercase tracking-widest text-[var(--ink-3)] mb-1">Referral Incentive Report</div>
+                  <div className="text-[18px] font-bold text-[var(--ink)]">{doctor.name}</div>
+                  <div className="text-[12px] text-[var(--ink-2)]">{doctor.specialty} · {doctor.phone}</div>
                 </div>
-                <div className="text-[11px] text-right text-[#57677a] leading-relaxed">
-                  Generated <b className="text-[#1a2430]">{today}</b><br />
-                  Period <b className="text-[#1a2430]">{period}</b>
+                <div className="text-[11px] text-right text-[var(--ink-2)] leading-relaxed">
+                  Generated <b className="text-[var(--ink)]">{today}</b><br />
+                  Period <b className="text-[var(--ink)]">{period}</b>
                 </div>
               </div>
 
               <table className="w-full text-[12.5px] mb-1">
               <thead>
-                <tr className="text-left text-[#8593a3] text-[10.5px] uppercase tracking-wide border-b-2 border-[#1a2430]">
+                <tr className="text-left text-[var(--ink-3)] text-[10.5px] uppercase tracking-wide border-b-2 border-[var(--ink)]">
                   <th className="py-2 pr-2 font-semibold">S.No</th>
                   <th className="py-2 pr-2 font-semibold">Date</th>
                   <th className="py-2 pr-2 font-semibold">Patient No.</th>
@@ -209,34 +211,34 @@ export default function IncentiveReport() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-[#8593a3]">
+                    <td colSpan={6} className="py-8 text-center text-[var(--ink-3)]">
                       No referrals from this doctor in this period.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((r) => (
-                    <tr key={r.sno} className="border-b border-[#eaeef2]">
-                      <td className="py-2 pr-2 text-[#57677a]">{r.sno}</td>
-                      <td className="py-2 pr-2 text-[#1a2430]">{r.date}</td>
-                      <td className="py-2 pr-2 font-mono text-[#1a2430]">{r.patientSid}</td>
-                      <td className="py-2 pr-2 text-[#57677a]">{r.gender === 'M' ? 'Male' : 'Female'}</td>
-                      <td className="py-2 pr-2 text-[#1a2430]">{r.investigation}</td>
-                      <td className="py-2 pl-2 text-right font-medium text-[#1a2430]">₹{r.amount.toLocaleString('en-IN')}</td>
+                    <tr key={r.sno} className="border-b border-[var(--border-soft)]">
+                      <td className="py-2 pr-2 text-[var(--ink-2)]">{r.sno}</td>
+                      <td className="py-2 pr-2 text-[var(--ink)]">{r.date}</td>
+                      <td className="py-2 pr-2 font-mono text-[var(--ink)]">{r.patientSid}</td>
+                      <td className="py-2 pr-2 text-[var(--ink-2)]">{r.gender === 'M' ? 'Male' : 'Female'}</td>
+                      <td className="py-2 pr-2 text-[var(--ink)]">{r.investigation}</td>
+                      <td className="py-2 pl-2 text-right font-medium text-[var(--ink)]">₹{r.amount.toLocaleString('en-IN')}</td>
                     </tr>
                   ))
                 )}
               </tbody>
               {filtered.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-[#1a2430]">
-                    <td colSpan={5} className="py-3 pr-2 text-right text-[13px] font-semibold text-[#1a2430]">Total</td>
-                    <td className="py-3 pl-2 text-right text-[15px] font-bold text-[#1b6fae]">₹{total.toLocaleString('en-IN')}</td>
+                  <tr className="border-t-2 border-[var(--ink)]">
+                    <td colSpan={5} className="py-3 pr-2 text-right text-[13px] font-semibold text-[var(--ink)]">Total</td>
+                    <td className="py-3 pl-2 text-right text-[15px] font-bold text-[var(--accent)]">₹{total.toLocaleString('en-IN')}</td>
                   </tr>
                 </tfoot>
               )}
               </table>
 
-              <p className="text-[9.5px] text-[#8593a3] italic mt-2">
+              <p className="text-[9.5px] text-[var(--ink-3)] italic mt-2">
                 Amounts shown are what patients were charged for each investigation, not a pre-calculated commission.
               </p>
 
@@ -248,7 +250,7 @@ export default function IncentiveReport() {
                 <div className="text-right">
                   <div className="border-t border-[#333] w-[130px] mb-1 ml-auto" />
                   <div className="text-[10px] font-bold">{settings.labDoctor}</div>
-                  <div className="text-[9px] text-[#57677a]">Consultant Pathologist</div>
+                  <div className="text-[9px] text-[var(--ink-2)]">Consultant Pathologist</div>
                 </div>
               </div>
             </div>

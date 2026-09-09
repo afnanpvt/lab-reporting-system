@@ -7,7 +7,8 @@
     "dev": "cross-env ELECTRON_EXEC_PATH=./node_modules/electron/dist/electron.exe electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder"
+    "package": "electron-vite build && electron-builder",
+    "profile": "node scripts/apply-profile.js"
   },
   "dependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",

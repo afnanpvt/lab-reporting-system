@@ -6,6 +6,13 @@ const api = {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
+  branding: {
+    getLogo: () => ipcRenderer.invoke('branding:getLogo')
+  },
+  profiles: {
+    list: () => ipcRenderer.invoke('profiles:list'),
+    get: (name: string) => ipcRenderer.invoke('profiles:get', name)
+  },
   patients: {
     list: (search?: string) => ipcRenderer.invoke('patients:list', search),
     create: (data: unknown) => ipcRenderer.invoke('patients:create', data),
@@ -49,6 +56,10 @@ const api = {
   },
   license: {
     get: () => ipcRenderer.invoke('license:get')
+  },
+  window: {
+    setTitleBarOverlay: (options: { color: string; symbolColor: string }) =>
+      ipcRenderer.invoke('window:setTitleBarOverlay', options)
   }
 }
 

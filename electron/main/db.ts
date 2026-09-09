@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
+import { getBranding } from './branding'
 
 // sql.js types
 type SqlDatabase = {
@@ -291,15 +292,19 @@ function createTables(): void {
 
   // Seed defaults for any key not already present — INSERT OR IGNORE is a no-op against an
   // existing row, so this only backfills what's missing (e.g. a dev DB seeded before
-  // sid_counter/lab_email existed) and never overwrites a value staff already set.
-  // This is the unbranded demo/pitch build (no license locks lab_name here — see index.ts),
-  // so every contact detail starts blank/placeholder for a prospect to fill in as their own.
+  // sid_counter/lab_email existed) and never overwrites a value staff already set. The contact
+  // fields come from whichever profile was staged at resources/branding.json (see
+  // profiles/README.md and branding.ts) — a fresh, no-profile-applied DB still gets the
+  // generic "Your Lab Name" placeholder defaults, same as before profiles existed. A licensed
+  // build separately force-locks lab_name on every launch (see lockLabName/index.ts); this only
+  // governs the one-time starting values, which stay editable in Settings after that.
+  const branding = getBranding()
   const defaults = [
-    ['lab_name', 'Your Lab Name'],
-    ['lab_address', ''],
-    ['lab_phone', ''],
-    ['lab_email', ''],
-    ['lab_doctor', ''],
+    ['lab_name', branding.labName],
+    ['lab_address', branding.labAddress],
+    ['lab_phone', branding.labPhone],
+    ['lab_email', branding.labEmail],
+    ['lab_doctor', branding.labDoctor],
     ['default_printer', ''],
     ['sid_counter', '1']
   ]

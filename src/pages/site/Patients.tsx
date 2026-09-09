@@ -32,12 +32,12 @@ export default function Patients() {
       <main className="px-10 py-9">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-[26px] font-semibold text-[#1a2430]">Patients</h1>
-            <p className="text-[15px] text-[#57677a]">{rows.length} registered · who handled each one, at a glance</p>
+            <h1 className="text-[26px] font-semibold text-[var(--ink)]">Patients</h1>
+            <p className="text-[15px] text-[var(--ink-2)]">{rows.length} registered · who handled each one, at a glance</p>
           </div>
           <button
             onClick={newPatient}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--accent)] text-white text-[15px] font-medium rounded-2xl hover:bg-[var(--accent-ink)] shadow-sm"
           >
             <Plus size={16} />
             New Patient
@@ -60,12 +60,12 @@ export default function Patients() {
         </div>
 
         <div className="relative mb-6 max-w-sm">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8593a3]" />
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ink-3)]" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name or SID"
-            className="w-full pl-10 pr-3.5 py-2.5 text-[14.5px] border border-[#c7cfd9] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+            className="w-full pl-10 pr-3.5 py-2.5 text-[14.5px] border border-[var(--border-strong)] rounded-xl bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
           />
         </div>
 
@@ -74,7 +74,7 @@ export default function Patients() {
             <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} />
           ))}
           {filtered.length === 0 && (
-            <p className="text-[14px] text-[#8593a3] col-span-full py-8 text-center">No patients match "{query}".</p>
+            <p className="text-[14px] text-[var(--ink-3)] col-span-full py-8 text-center">No patients match "{query}".</p>
           )}
         </div>
       </main>

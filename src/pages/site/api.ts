@@ -321,6 +321,22 @@ export async function getLabSettings(): Promise<LabSettingsForm> {
   }
 }
 
+// The active profile's logo (see profiles/README.md), if it staged one — null falls back to
+// the plain text wordmark everywhere it's used (Shell header, report letterhead).
+export async function getLogoDataUrl(): Promise<string | null> {
+  return window.api.branding.getLogo()
+}
+
+// Dev-only vendor-profile listing (see profiles/README.md) — the main process itself gates
+// these to is.dev, so a packaged build gets an empty list / null even if this were still called.
+export async function listProfiles(): Promise<string[]> {
+  return window.api.profiles.list()
+}
+
+export async function getProfile(name: string): Promise<LabSettingsForm | null> {
+  return window.api.profiles.get(name)
+}
+
 export interface LicenseInfo {
   labName: string
   licenseId: string

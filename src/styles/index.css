@@ -5,26 +5,115 @@
 :root {
   /* Mirrors tailwind.config.js exactly — used for inline styles (report output, shell chrome). */
   --bg-app: #f5f7fa;
+  --bg-canvas: #e4e8ee;
+  --bg-hover: #eef2f6;
   --surface: #ffffff;
   --border: #e1e6ec;
   --border-strong: #c7cfd9;
+  --border-soft: #eaeef2;
   --ink: #1a2430;
   --ink-2: #57677a;
   --ink-3: #8593a3;
+  --ink-4: #a8b4c2;
+  /* Accent — the app's one themeable color family (see [data-theme] blocks below). Every page
+     component references these via Tailwind arbitrary values, e.g. bg-[var(--accent)], rather
+     than a hardcoded hex, so switching data-theme on <html> re-colors the whole app live. The
+     -ring-25/-ring-40 pair exist because Tailwind's opacity-modifier syntax (bg-accent/25) only
+     works on colors it can resolve to a literal hex at build time, not on a CSS variable — these
+     bake the same opacity into the variable itself instead, derived live from whatever --accent
+     is active so every theme (including dark mode) gets a correct ring for free. */
   --accent: #1b6fae;
   --accent-ink: #125483;
   --accent-soft: #e8f1f9;
   --accent-soft-border: #bfdcf0;
+  --accent-ring-25: color-mix(in srgb, var(--accent) 25%, transparent);
+  --accent-ring-40: color-mix(in srgb, var(--accent) 40%, transparent);
   --success: #1f8a54;
+  --success-muted: #7fae90;
   --success-soft: #e7f6ee;
+  --success-soft-border: #cfe9d7;
   --warning: #9a6b00;
+  --warning-ink: #8a5a00;
   --warning-soft: #fdf3df;
+  --warning-soft-border: #f0dca6;
   --danger: #c23b33;
+  --danger-ink: #b3261e;
   --danger-soft: #fceae8;
-  --info: #1b6fae;
-  --info-soft: #e8f1f9;
+  --danger-soft-border: #f0c9c5;
+  --info: var(--accent);
+  --info-soft: var(--accent-soft);
   --font-ui: 'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-num: 'Segoe UI Variable Text', 'Segoe UI', ui-monospace, 'SF Mono', 'Consolas', monospace;
+}
+
+/* Aesthetic theme presets — swap just the accent family; neutrals and semantic (success/warning/
+   danger) colors stay put so status meaning doesn't shift with the look. Applied via a
+   data-theme attribute on <html> (see theme.ts); "blue" isn't listed since it's the :root
+   default above. --accent-ring-25/-40 aren't repeated per theme — they're derived from --accent
+   with color-mix() once at :root, and follow whichever theme is active automatically. */
+[data-theme='green'] {
+  --accent: #16794a;
+  --accent-ink: #0f5636;
+  --accent-soft: #e5f5ec;
+  --accent-soft-border: #c3e8d5;
+}
+
+[data-theme='slate'] {
+  --accent: #475569;
+  --accent-ink: #334155;
+  --accent-soft: #eef1f5;
+  --accent-soft-border: #d7dee6;
+}
+
+[data-theme='violet'] {
+  --accent: #7c3aed;
+  --accent-ink: #6425c4;
+  --accent-soft: #f1ebfd;
+  --accent-soft-border: #ddc9fa;
+}
+
+[data-theme='yellow'] {
+  --accent: #a16207;
+  --accent-ink: #7c4a03;
+  --accent-soft: #fef3c7;
+  --accent-soft-border: #fde68a;
+}
+
+/* Dark mode — recolors neutrals and semantic tones; the accent family is left alone so whichever
+   [data-theme] is active keeps its own hue, just recomputing --accent-soft/-soft-border against
+   the dark --surface via color-mix() instead of hand-authoring a dark variant per theme. Must
+   stay below the [data-theme] blocks above so it wins the cascade for those two properties.
+   Report/PDF content is exempted from all of this — see .print-page, .report-paper below. */
+[data-mode='dark'] {
+  --bg-app: #10151b;
+  --bg-canvas: #0b0f14;
+  --bg-hover: #232b35;
+  --surface: #1a212a;
+  --border: #2b333e;
+  --border-strong: #3a4450;
+  --border-soft: #232b35;
+  --ink: #eef2f6;
+  --ink-2: #aab6c4;
+  --ink-3: #8593a3;
+  --ink-4: #5c6874;
+
+  --success: #34c281;
+  --success-muted: #4f8a68;
+  --success-soft: color-mix(in srgb, var(--success) 20%, var(--surface));
+  --success-soft-border: color-mix(in srgb, var(--success) 40%, var(--surface));
+
+  --warning: #e0a72e;
+  --warning-ink: #f0c05a;
+  --warning-soft: color-mix(in srgb, var(--warning) 20%, var(--surface));
+  --warning-soft-border: color-mix(in srgb, var(--warning) 40%, var(--surface));
+
+  --danger: #e2564b;
+  --danger-ink: #f0857a;
+  --danger-soft: color-mix(in srgb, var(--danger) 20%, var(--surface));
+  --danger-soft-border: color-mix(in srgb, var(--danger) 40%, var(--surface));
+
+  --accent-soft: color-mix(in srgb, var(--accent) 25%, var(--surface));
+  --accent-soft-border: color-mix(in srgb, var(--accent) 45%, var(--surface));
 }
 
 @layer base {
@@ -133,6 +222,37 @@
   font-family: 'Segoe UI', Arial, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* Report/PDF content always renders in the light palette, regardless of dark mode — a printed
+   lab report is a physical/PDF document, not app chrome, so it shouldn't shift with a UI
+   preference. Re-declaring these custom properties on a closer-scoped ancestor overrides
+   whatever [data-mode='dark'] set on <html>, for every var(--...) used inside. */
+.print-page,
+.report-paper {
+  --bg-app: #f5f7fa;
+  --bg-canvas: #e4e8ee;
+  --bg-hover: #eef2f6;
+  --surface: #ffffff;
+  --border: #e1e6ec;
+  --border-strong: #c7cfd9;
+  --border-soft: #eaeef2;
+  --ink: #1a2430;
+  --ink-2: #57677a;
+  --ink-3: #8593a3;
+  --ink-4: #a8b4c2;
+  --success: #1f8a54;
+  --success-muted: #7fae90;
+  --success-soft: #e7f6ee;
+  --success-soft-border: #cfe9d7;
+  --warning: #9a6b00;
+  --warning-ink: #8a5a00;
+  --warning-soft: #fdf3df;
+  --warning-soft-border: #f0dca6;
+  --danger: #c23b33;
+  --danger-ink: #b3261e;
+  --danger-soft: #fceae8;
+  --danger-soft-border: #f0c9c5;
+}
+
 /* Report print styles */
 @media print {
   body { overflow: visible !important; }
@@ -165,6 +285,12 @@
   .print-page:last-child {
     break-after: auto;
     page-break-after: auto;
+  }
+
+  /* On-screen zoom (ReportPreview's viewer toolbar) never affects the printed/PDF output —
+     it's always rendered at 100%, independent of whatever the user last zoomed to on screen. */
+  .report-viewer {
+    zoom: 1 !important;
   }
 }
 

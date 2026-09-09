@@ -5,6 +5,13 @@ interface LabAPI {
     get(): Promise<Record<string, string>>
     set(key: string, value: string): Promise<boolean>
   }
+  branding: {
+    getLogo(): Promise<string | null>
+  }
+  profiles: {
+    list(): Promise<string[]>
+    get(name: string): Promise<{ labName: string; labAddress: string; labPhone: string; labEmail: string; labDoctor: string } | null>
+  }
   patients: {
     list(search?: string): Promise<import('./lab').Patient[]>
     create(data: Omit<import('./lab').Patient, 'id' | 'created_at'>): Promise<{ id: number; sid: string }>
@@ -45,6 +52,9 @@ interface LabAPI {
   }
   license: {
     get(): Promise<{ labName: string; licenseId: string; issuedAt: string } | null>
+  }
+  window: {
+    setTitleBarOverlay(options: { color: string; symbolColor: string }): Promise<void>
   }
 }
 

@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LumaLabs</title>
+    <script>
+      // Applies the saved theme/mode before React mounts (and before first paint), so the app
+      // never flashes the default blue/light before switching to whatever the user picked last —
+      // see src/pages/site/theme.ts, which owns these same localStorage keys at runtime.
+      (function () {
+        try {
+          var theme = localStorage.getItem('labapp:theme')
+          if (theme) document.documentElement.setAttribute('data-theme', theme)
+          var mode = localStorage.getItem('labapp:mode')
+          if (mode) document.documentElement.setAttribute('data-mode', mode)
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

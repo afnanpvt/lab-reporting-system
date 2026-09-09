@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutGrid, Users, FileBarChart, Settings, Stethoscope } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { getLabSettings } from './api'
+import { getLabSettings, getLogoDataUrl } from './api'
+import { syncTitleBarOverlay } from './theme'
 
 const NAV = [
   { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/' },
@@ -23,22 +24,30 @@ export default function Shell({ children }: { children: ReactNode }) {
   const location = useLocation()
   const [expanded, setExpanded] = useState(false)
   const [labName, setLabName] = useState('')
+  const [logo, setLogo] = useState<string | null>(null)
 
   useEffect(() => {
     getLabSettings().then((s) => setLabName(s.labName))
+    getLogoDataUrl().then(setLogo)
+    syncTitleBarOverlay()
   }, [])
 
   return (
-    <div className="h-screen overflow-hidden print:h-auto print:overflow-visible bg-[#f5f7fa] flex flex-col">
-      {/* Unbranded demo/pitch build — no logo image, just the lab name from Settings rendered as a
-          text wordmark, so it rebrands live as a prospect types in their own name. print:hidden
-          because every printable page already carries its own letterhead — without this, the
-          app's chrome was bleeding into the printed/saved PDF above the document. */}
+    <div className="h-screen overflow-hidden print:h-auto print:overflow-visible bg-[var(--bg-app)] flex flex-col">
+      {/* No logo image unless the active profile staged one (see profiles/README.md) — otherwise
+          just the lab name from Settings rendered as a text wordmark, so it rebrands live as
+          whoever's typing enters their own name. print:hidden because every printable page
+          already carries its own letterhead — without this, the app's chrome was bleeding into
+          the printed/saved PDF above the document. */}
       <header
-        className="titlebar-drag flex items-center gap-4 pl-6 flex-shrink-0 bg-white border-b border-[#e1e6ec] print:hidden"
+        className="titlebar-drag flex items-center gap-4 pl-6 flex-shrink-0 bg-[var(--surface)] border-b border-[var(--border)] print:hidden"
         style={{ height: 104, paddingRight: 170 }}
       >
-        <div className="text-[26px] font-bold tracking-tight" style={{ color: '#1b6fae' }}>{labName}</div>
+        {logo ? (
+          <img src={logo} alt={labName} style={{ height: 48 }} />
+        ) : (
+          <div className="text-[26px] font-bold tracking-tight" style={{ color: 'var(--accent)' }}>{labName}</div>
+        )}
       </header>
 
       <div className="flex-1 flex min-h-0 print:h-auto print:overflow-visible">
@@ -46,7 +55,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             grows on hover is absolutely positioned and overlays the content instead. */}
         <aside className="relative flex-shrink-0 z-20 print:hidden" style={{ width: 80 }} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>
           <div
-            className="absolute top-0 left-0 h-full bg-white border-r border-[#e1e6ec] flex flex-col items-stretch py-6 gap-1.5 overflow-hidden transition-[width] duration-200 ease-out"
+            className="absolute top-0 left-0 h-full bg-[var(--surface)] border-r border-[var(--border)] flex flex-col items-stretch py-6 gap-1.5 overflow-hidden transition-[width] duration-200 ease-out"
             style={{ width: expanded ? 248 : 80, boxShadow: expanded ? '4px 0 16px rgba(26,36,48,0.12)' : 'none' }}
           >
             <nav className="flex flex-col gap-1.5 px-3">
@@ -58,14 +67,14 @@ export default function Shell({ children }: { children: ReactNode }) {
                     title={label}
                     aria-label={label}
                     onClick={() => { navigate(path); setExpanded(false) }}
-                    className={`flex items-center gap-3 h-12 rounded-xl px-3 flex-shrink-0 transition-all duration-150 active:scale-[0.96] active:bg-[#bfdcf0] ${
-                      active ? 'bg-[#e8f1f9] text-[#1b6fae]' : 'text-[#8593a3] hover:bg-[#eef2f6]'
+                    className={`flex items-center gap-3 h-12 rounded-xl px-3 flex-shrink-0 transition-all duration-150 active:scale-[0.96] active:bg-[var(--accent-soft-border)] ${
+                      active ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-3)] hover:bg-[var(--bg-hover)]'
                     }`}
                   >
                     <Icon size={19} className="flex-shrink-0" />
                     <span className={`text-left leading-tight overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
-                      <span className={`block text-[14px] font-medium ${active ? 'text-[#1b6fae]' : 'text-[#1a2430]'}`}>{label}</span>
-                      <span className="block text-[11.5px] text-[#8593a3]">{description}</span>
+                      <span className={`block text-[14px] font-medium ${active ? 'text-[var(--accent)]' : 'text-[var(--ink)]'}`}>{label}</span>
+                      <span className="block text-[11.5px] text-[var(--ink-3)]">{description}</span>
                     </span>
                   </button>
                 )

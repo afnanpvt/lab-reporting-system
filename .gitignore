@@ -10,6 +10,18 @@ release/
 lab-data.db
 lab-data.db-journal
 
+# Vendor profiles — only the generic demo profile ships in the repo (see profiles/README.md);
+# every other profile (a real customer's name, logo, signed license) stays local.
+/profiles/*
+!/profiles/demo/
+!/profiles/README.md
+
+# Staged branding/license/logo — whatever profiles/apply-profile.js last staged here for the
+# local dev run or build. Regenerated from a profile, never hand-edited, never committed.
+resources/branding.json
+resources/license.json
+resources/logo.png
+
 # Logs
 *.log
 npm-debug.log*

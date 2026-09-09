@@ -40,12 +40,12 @@ export default function Dashboard() {
       <main className="px-10 py-9">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-[26px] font-semibold text-[#1a2430]">{greeting}</h1>
-            <p className="text-[15px] text-[#57677a]">Here's where things stand across the lab today</p>
+            <h1 className="text-[26px] font-semibold text-[var(--ink)]">{greeting}</h1>
+            <p className="text-[15px] text-[var(--ink-2)]">Here's where things stand across the lab today</p>
           </div>
           <button
             onClick={() => navigate('/patient/new')}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--accent)] text-white text-[15px] font-medium rounded-2xl hover:bg-[var(--accent-ink)] shadow-sm"
           >
             <Plus size={16} />
             New Patient
@@ -53,23 +53,23 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-9 max-w-3xl">
-          <button onClick={() => navigate('/patients')} className="text-left rounded-2xl p-5 bg-white border border-[#e1e6ec] shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 text-[#8593a3] mb-2"><ClipboardList size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Registered</span></div>
-            <div className="text-[32px] font-semibold text-[#1a2430]">{stats.today}</div>
+          <button onClick={() => navigate('/patients')} className="text-left rounded-2xl p-5 bg-[var(--surface)] border border-[var(--border)] shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 text-[var(--ink-3)] mb-2"><ClipboardList size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Registered</span></div>
+            <div className="text-[32px] font-semibold text-[var(--ink)]">{stats.today}</div>
           </button>
-          <button onClick={() => navigate('/patients')} className="text-left rounded-2xl p-5 bg-white border border-[#e1e6ec] shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 text-[#9a6b00] mb-2"><Clock3 size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Needs attention</span></div>
-            <div className="text-[32px] font-semibold text-[#1a2430]">{stats.pending}</div>
+          <button onClick={() => navigate('/patients')} className="text-left rounded-2xl p-5 bg-[var(--surface)] border border-[var(--border)] shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 text-[var(--warning)] mb-2"><Clock3 size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Needs attention</span></div>
+            <div className="text-[32px] font-semibold text-[var(--ink)]">{stats.pending}</div>
           </button>
-          <button onClick={() => navigate('/reports')} className="text-left rounded-2xl p-5 bg-white border border-[#e1e6ec] shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 text-[#1f8a54] mb-2"><CheckCircle2 size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Completed</span></div>
-            <div className="text-[32px] font-semibold text-[#1a2430]">{stats.completed}</div>
+          <button onClick={() => navigate('/reports')} className="text-left rounded-2xl p-5 bg-[var(--surface)] border border-[var(--border)] shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 text-[var(--success)] mb-2"><CheckCircle2 size={15} /><span className="text-[12.5px] font-semibold uppercase tracking-wide">Completed</span></div>
+            <div className="text-[32px] font-semibold text-[var(--ink)]">{stats.completed}</div>
           </button>
         </div>
 
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[15px] font-semibold text-[#1a2430]">Recent patients</h2>
-          <button onClick={() => navigate('/patients')} className="text-[13.5px] text-[#1b6fae] hover:text-[#125483] font-medium inline-flex items-center gap-1">
+          <h2 className="text-[15px] font-semibold text-[var(--ink)]">Recent patients</h2>
+          <button onClick={() => navigate('/patients')} className="text-[13.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium inline-flex items-center gap-1">
             View all patients <ChevronRight size={14} />
           </button>
         </div>

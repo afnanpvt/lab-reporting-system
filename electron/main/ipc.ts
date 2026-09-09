@@ -1,8 +1,10 @@
 import { IpcMain, BrowserWindow, app, shell, dialog } from 'electron'
+import { is } from '@electron-toolkit/utils'
 import { join } from 'path'
-import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'fs'
 import { dbRun, dbGet, dbAll } from './db'
 import { verifyLicense } from './license'
+import { getLogoDataUrl } from './branding'
 
 const SECTION_TABLES: Record<string, string> = {
   haematology: 'haematology',
@@ -29,6 +31,11 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('settings:set', (_e, key: string, value: string) => {
     dbRun('INSERT OR REPLACE INTO lab_settings (key, value) VALUES (?, ?)', [key, value])
     return true
+  })
+
+  // ---- Branding ----
+  ipcMain.handle('branding:getLogo', () => {
+    return getLogoDataUrl()
   })
 
   // ---- Patients ----
@@ -322,6 +329,33 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return result.ok ? { labName: result.labName, licenseId: result.licenseId, issuedAt: result.issuedAt } : null
   })
 
+  // ---- Vendor profiles (dev-only) ----
+  // Lets Settings offer a "preview a profile's branding" switcher while developing/pitching —
+  // reads profiles/ straight off disk rather than the staged resources/branding.json, so it can
+  // list every profile, not just whichever one is currently applied. Gated on is.dev for defense
+  // in depth; the renderer-side switcher itself is compiled out of packaged builds entirely
+  // (see the import.meta.env.DEV guard in Settings.tsx), and profiles/ isn't packaged anyway.
+  const profilesDir = join(process.cwd(), 'profiles')
+
+  ipcMain.handle('profiles:list', () => {
+    if (!is.dev || !existsSync(profilesDir)) return []
+    return readdirSync(profilesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(profilesDir, entry.name, 'config.json')))
+      .map((entry) => entry.name)
+      .sort()
+  })
+
+  ipcMain.handle('profiles:get', (_e, name: string) => {
+    if (!is.dev) return null
+    const configPath = join(profilesDir, name, 'config.json')
+    if (!existsSync(configPath)) return null
+    try {
+      return JSON.parse(readFileSync(configPath, 'utf8'))
+    } catch {
+      return null
+    }
+  })
+
   // ---- Shell ----
   ipcMain.handle('shell:openPath', (_e, path: string) => {
     shell.showItemInFolder(path)
@@ -337,5 +371,14 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('shell:openExternal', (_e, url: string) => {
     if (!/^https:\/\//.test(url)) return
     shell.openExternal(url)
+  })
+
+  // ---- Window ----
+  // The native Windows caption-button overlay (minimize/maximize/close) is drawn by the OS, not
+  // the web page, so it can't be re-themed with CSS — the renderer calls this whenever the user's
+  // light/dark preference changes (and once on launch) to keep it in sync with the app chrome.
+  ipcMain.handle('window:setTitleBarOverlay', (e, options: { color: string; symbolColor: string }) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    win?.setTitleBarOverlay({ color: options.color, symbolColor: options.symbolColor, height: 76 })
   })
 }

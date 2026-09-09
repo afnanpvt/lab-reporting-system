@@ -34,49 +34,49 @@ export default function PatientEntry() {
       <main className="px-10 py-9">
         <button
           onClick={() => navigate('/patients')}
-          className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430] mb-5"
+          className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)] mb-5"
         >
           <ArrowLeft size={15} />
           Back to patients
         </button>
 
-        <h1 className="text-[24px] font-semibold text-[#1a2430] mb-1">{editing ? 'Edit Patient' : 'New Patient'}</h1>
-        <p className="text-[15px] text-[#57677a] mb-5">
-          {editing ? <>SID <span className="font-mono text-[#1a2430]">{form.sid}</span></> : 'SID will be assigned once saved'}
+        <h1 className="text-[24px] font-semibold text-[var(--ink)] mb-1">{editing ? 'Edit Patient' : 'New Patient'}</h1>
+        <p className="text-[15px] text-[var(--ink-2)] mb-5">
+          {editing ? <>SID <span className="font-mono text-[var(--ink)]">{form.sid}</span></> : 'SID will be assigned once saved'}
         </p>
 
         {error && (
-          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-[14px] mb-5 max-w-2xl" style={{ background: '#fceae8', color: '#c23b33', border: '1px solid #f0c9c5' }}>
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-[14px] mb-5 max-w-2xl" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger-soft-border)' }}>
             <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
-          <div className="bg-white rounded-2xl border border-[#e1e6ec] p-6 space-y-5 shadow-sm">
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-6 space-y-5 shadow-sm">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">Full Name</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Full Name</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                  className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
                   placeholder="e.g. Ravi Kumar Sharma"
                 />
               </div>
               <div>
-                <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">Age</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Age</label>
                 <div className="flex gap-2">
                   <input
                     value={form.age}
                     onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                    className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
                     placeholder="45"
                   />
                   <select
                     value={form.ageUnit}
                     onChange={(e) => setForm({ ...form, ageUnit: e.target.value as typeof form.ageUnit })}
-                    className="px-2 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none"
+                    className="px-2 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none"
                   >
                     <option value="Y">Yrs</option>
                     <option value="M">Mos</option>
@@ -85,14 +85,14 @@ export default function PatientEntry() {
                 </div>
               </div>
               <div>
-                <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">Gender</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Gender</label>
                 <div className="flex gap-2">
                   {(['M', 'F'] as const).map((g) => (
                     <button
                       key={g}
                       onClick={() => setForm({ ...form, gender: g })}
                       className={`flex-1 py-2.5 rounded-xl text-[15px] font-medium border transition-colors ${
-                        form.gender === g ? 'bg-[#e8f1f9] border-[#bfdcf0] text-[#125483]' : 'bg-[#f5f7fa] border-[#c7cfd9] text-[#57677a]'
+                        form.gender === g ? 'bg-[var(--accent-soft)] border-[var(--accent-soft-border)] text-[var(--accent-ink)]' : 'bg-[var(--bg-app)] border-[var(--border-strong)] text-[var(--ink-2)]'
                       }`}
                     >
                       {g === 'M' ? 'Male' : 'Female'}
@@ -102,11 +102,11 @@ export default function PatientEntry() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[14px] font-medium text-[#1a2430]">Referred By</label>
+                  <label className="block text-[14px] font-medium text-[var(--ink)]">Referred By</label>
                   <button
                     type="button"
                     onClick={() => navigate('/doctors/new')}
-                    className="inline-flex items-center gap-1 text-[12.5px] text-[#1b6fae] hover:text-[#125483] font-medium"
+                    className="inline-flex items-center gap-1 text-[12.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium"
                   >
                     <Plus size={12} />
                     New doctor
@@ -115,7 +115,7 @@ export default function PatientEntry() {
                 <select
                   value={form.referredBy}
                   onChange={(e) => setForm({ ...form, referredBy: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                  className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
                 >
                   <option value="Self">Self (no referring doctor)</option>
                   {doctors.map((d) => (
@@ -124,28 +124,28 @@ export default function PatientEntry() {
                 </select>
               </div>
               <div>
-                <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">Mobile</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Mobile</label>
                 <input
                   value={form.mobile}
                   onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                  className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
                   placeholder="98765 43210"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-[14px] font-medium text-[#1a2430] mb-1.5">Address</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Address</label>
                 <textarea
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                   rows={2}
-                  className="w-full px-3.5 py-2.5 text-[15px] border border-[#c7cfd9] rounded-xl bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae] resize-none"
+                  className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)] resize-none"
                   placeholder="Optional"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-[#1a2430] mb-2">Sections to Report</label>
+              <label className="block text-[14px] font-medium text-[var(--ink)] mb-2">Sections to Report</label>
               <div className="flex flex-wrap gap-2">
                 {ALL_SECTIONS.map((s) => {
                   const active = form.sections.includes(s)
@@ -154,7 +154,7 @@ export default function PatientEntry() {
                       key={s}
                       onClick={() => toggleSection(s)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13.5px] font-medium border transition-colors ${
-                        active ? 'bg-[#1b6fae] border-[#1b6fae] text-white' : 'bg-[#f5f7fa] border-[#c7cfd9] text-[#57677a]'
+                        active ? 'bg-[var(--accent)] border-[var(--accent)] text-white' : 'bg-[var(--bg-app)] border-[var(--border-strong)] text-[var(--ink-2)]'
                       }`}
                     >
                       {active && <Check size={12} />}
@@ -170,9 +170,9 @@ export default function PatientEntry() {
                 type="checkbox"
                 checked={form.consentGiven}
                 onChange={(e) => setForm({ ...form, consentGiven: e.target.checked })}
-                className="mt-0.5 w-4 h-4 rounded border-[#c7cfd9] text-[#1b6fae] focus:ring-[#1b6fae]/25 flex-shrink-0"
+                className="mt-0.5 w-4 h-4 rounded border-[var(--border-strong)] text-[var(--accent)] focus:ring-[var(--accent-ring-25)] flex-shrink-0"
               />
-              <span className="text-[13.5px] text-[#57677a] leading-snug">
+              <span className="text-[13.5px] text-[var(--ink-2)] leading-snug">
                 The patient (or their guardian) has consented to their personal and health data being
                 collected and stored for testing, reporting, and billing purposes.
               </span>
@@ -182,13 +182,13 @@ export default function PatientEntry() {
               <button
                 onClick={handleSubmit}
                 disabled={saving}
-                className="px-5 py-2.5 bg-[#1b6fae] text-white text-[15px] font-medium rounded-2xl hover:bg-[#125483] shadow-sm disabled:opacity-60"
+                className="px-5 py-2.5 bg-[var(--accent)] text-white text-[15px] font-medium rounded-2xl hover:bg-[var(--accent-ink)] shadow-sm disabled:opacity-60"
               >
                 {saving ? 'Saving…' : editing ? 'Save & Continue' : 'Start Entering Results'}
               </button>
               <button
                 onClick={() => navigate('/patients')}
-                className="px-5 py-2.5 bg-white text-[#1a2430] text-[15px] font-medium border border-[#c7cfd9] rounded-2xl hover:bg-[#eef2f6]"
+                className="px-5 py-2.5 bg-[var(--surface)] text-[var(--ink)] text-[15px] font-medium border border-[var(--border-strong)] rounded-2xl hover:bg-[var(--bg-hover)]"
               >
                 Cancel
               </button>
@@ -196,25 +196,25 @@ export default function PatientEntry() {
           </div>
 
           {/* Live preview — the card this patient will show up as, filled in as you type */}
-          <div className="bg-white rounded-2xl border border-[#e1e6ec] p-5 shadow-sm sticky top-9">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-[#8593a3] mb-4">Preview</h2>
-            <div className="w-10 h-10 rounded-full bg-[#eef2f6] flex items-center justify-center mb-3">
-              <User2 size={17} className="text-[#8593a3]" />
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 shadow-sm sticky top-9">
+            <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)] mb-4">Preview</h2>
+            <div className="w-10 h-10 rounded-full bg-[var(--bg-hover)] flex items-center justify-center mb-3">
+              <User2 size={17} className="text-[var(--ink-3)]" />
             </div>
-            <div className="text-[16.5px] font-semibold text-[#1a2430] mb-0.5">{form.name.trim() || 'Unnamed Patient'}</div>
-            <div className="text-[13.5px] text-[#57677a] mb-3.5">
+            <div className="text-[16.5px] font-semibold text-[var(--ink)] mb-0.5">{form.name.trim() || 'Unnamed Patient'}</div>
+            <div className="text-[13.5px] text-[var(--ink-2)] mb-3.5">
               {form.age || '—'}{form.ageUnit} · {form.gender === 'M' ? 'Male' : 'Female'} · {form.sid || 'SID pending'}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap mb-3.5">
               {form.sections.length === 0 ? (
-                <span className="text-[13px] text-[#8593a3]">No tests selected yet</span>
+                <span className="text-[13px] text-[var(--ink-3)]">No tests selected yet</span>
               ) : (
                 form.sections.map((sec) => (
-                  <span key={sec} className="text-[11.5px] px-2 py-1 rounded-full bg-[#eef2f6] text-[#57677a]">{sec}</span>
+                  <span key={sec} className="text-[11.5px] px-2 py-1 rounded-full bg-[var(--bg-hover)] text-[var(--ink-2)]">{sec}</span>
                 ))
               )}
             </div>
-            <div className="pt-3 border-t border-[#eaeef2] text-[13px] text-[#8593a3]">
+            <div className="pt-3 border-t border-[var(--border-soft)] text-[13px] text-[var(--ink-3)]">
               {form.referredBy === 'Self' ? 'Self-referred' : form.referredBy}
             </div>
           </div>

@@ -256,30 +256,53 @@ export function encodeOtherRow(row: OtherRow): string {
   return JSON.stringify(row)
 }
 
-function parseNumericRange(clean: string): [number, number] | null {
+function decimalPlaces(numStr: string): number {
+  const i = numStr.indexOf('.')
+  return i === -1 ? 0 : numStr.length - i - 1
+}
+
+export interface NumericRangeInfo {
+  min: number
+  max: number
+  /** Smallest sensible increment — 0.1 for a range written as "13.0–17.0", 1 for "0–15", etc.,
+   * so ArrowUp/ArrowDown steps (see FieldRow) match the precision the range was defined at. */
+  step: number
+  decimals: number
+}
+
+function rangeInfo(minStr: string, maxStr: string): NumericRangeInfo {
+  const decimals = Math.max(decimalPlaces(minStr), decimalPlaces(maxStr))
+  return { min: parseFloat(minStr), max: parseFloat(maxStr), step: decimals > 0 ? 1 / 10 ** decimals : 1, decimals }
+}
+
+/** Extracts [min, max] (plus step/decimals — see NumericRangeInfo) from a reference range string
+ * like "13.0–17.0 gm/dl", "Upto 140.0 mg/dl", "> 40 mg/dl", "< 200 mg/dl", or "-2 to +2". Returns
+ * null for non-numeric ranges (e.g. "Negative", "Nil"). */
+export function numericRangeInfo(range: string): NumericRangeInfo | null {
+  if (!range) return null
+  const clean = range.replace(/,/g, '')
   let m = clean.match(/(-?\d+(?:\.\d+)?)\s*[–-]\s*(-?\d+(?:\.\d+)?)/)
-  if (m) return [parseFloat(m[1]), parseFloat(m[2])]
+  if (m) return rangeInfo(m[1], m[2])
   m = clean.match(/upto\s*(-?\d+(?:\.\d+)?)/i)
-  if (m) return [0, parseFloat(m[1])]
+  if (m) return rangeInfo('0', m[1])
   m = clean.match(/^\s*>\s*(-?\d+(?:\.\d+)?)/)
-  if (m) return [parseFloat(m[1]), parseFloat(m[1]) * 1.3]
+  if (m) return rangeInfo(m[1], String(parseFloat(m[1]) * 1.3))
   m = clean.match(/^\s*<\s*(-?\d+(?:\.\d+)?)/)
-  if (m) return [0, parseFloat(m[1])]
+  if (m) return rangeInfo('0', m[1])
   m = clean.match(/(-?\d+(?:\.\d+)?)\s*to\s*\+?(-?\d+(?:\.\d+)?)/i)
-  if (m) return [parseFloat(m[1]), parseFloat(m[2])]
+  if (m) return rangeInfo(m[1], m[2])
   return null
 }
 
 /** Turns a reference range into a real, editable starting value — the midpoint for a numeric range, or the plain qualitative word for text ranges (e.g. "Negative < 1:20" -> "Negative"). Used to let a technician click the range to prefill the field rather than type the normal reading from scratch. */
 export function defaultValueForRange(range: string): string {
   if (!range) return ''
-  const clean = range.replace(/,/g, '')
-  const parsed = parseNumericRange(clean)
-  if (parsed) {
-    const mid = (parsed[0] + parsed[1]) / 2
+  const info = numericRangeInfo(range)
+  if (info) {
+    const mid = (info.min + info.max) / 2
     return Number.isInteger(mid) ? String(mid) : mid.toFixed(1)
   }
-  return clean.split('<')[0].trim()
+  return range.replace(/,/g, '').split('<')[0].trim()
 }
 
 // Abnormal (red, up/down arrow) flagging is deliberately limited to these three haematology
@@ -291,11 +314,11 @@ const FLAGGABLE_FIELDS = new Set(['haemoglobin', 'total_wbc', 'platelet_count'])
 export function flagFor(value: string, range: string, fieldKey?: string): 'high' | 'low' | null {
   if (fieldKey !== undefined && !FLAGGABLE_FIELDS.has(fieldKey)) return null
   if (!value || !range) return null
-  const parsed = parseNumericRange(range.replace(/,/g, ''))
-  if (!parsed) return null
+  const info = numericRangeInfo(range)
+  if (!info) return null
   const v = parseFloat(value)
   if (isNaN(v)) return null
-  if (v > parsed[1]) return 'high'
-  if (v < parsed[0]) return 'low'
+  if (v > info.max) return 'high'
+  if (v < info.min) return 'low'
   return null
 }

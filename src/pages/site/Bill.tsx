@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Download, MessageCircle } from 'lucide-react'
-import { getPatient, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import { getPatient, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, getLogoDataUrl, type Patient, type BillingContext, type LabSettingsForm } from './api'
 import { formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
@@ -13,6 +13,7 @@ export default function Bill() {
   const [patient, setPatient] = useState<Patient | null>((location.state as { patient?: Patient })?.patient ?? null)
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
+  const [logo, setLogo] = useState<string | null>(null)
 
   useEffect(() => {
     const fromState = (location.state as { patient?: Patient })?.patient
@@ -24,6 +25,7 @@ export default function Bill() {
   useEffect(() => {
     loadBillingContext().then(setBilling)
     getLabSettings().then(setSettings)
+    getLogoDataUrl().then(setLogo)
   }, [])
 
   const refreshBilling = () => loadBillingContext().then(setBilling)
@@ -44,7 +46,7 @@ export default function Bill() {
   if (!patient || !billing || !settings) {
     return (
         <main className="px-10 py-9">
-          <p className="text-[15px] text-[#57677a]">Loading…</p>
+          <p className="text-[15px] text-[var(--ink-2)]">Loading…</p>
         </main>
     )
   }
@@ -54,49 +56,49 @@ export default function Bill() {
 
   return (
       <div className="flex flex-col h-full print:h-auto">
-        <div className="flex items-center gap-4 px-8 py-4 bg-white border-b border-[#e1e6ec] flex-shrink-0 print:hidden">
+        <div className="flex items-center gap-4 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <button
             onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
-            className="inline-flex items-center gap-1.5 text-[14px] text-[#8593a3] hover:text-[#1a2430]"
+            className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
           >
             <ArrowLeft size={15} />
             Back to patient
           </button>
-          <div className="h-5 w-px bg-[#e1e6ec]" />
+          <div className="h-5 w-px bg-[var(--border)]" />
           <div>
-            <div className="text-[15px] font-semibold text-[#1a2430]">Bill</div>
-            <div className="text-[13px] text-[#57677a]">{patient.name} · {patient.sid}</div>
+            <div className="text-[15px] font-semibold text-[var(--ink)]">Bill</div>
+            <div className="text-[13px] text-[var(--ink-2)]">{patient.name} · {patient.sid}</div>
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#bfdcf0]">
+            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
               <Download size={14} />
               Save PDF
             </button>
-            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b6fae] text-white text-[14px] font-medium rounded-xl hover:bg-[#125483] shadow-sm">
+            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white text-[14px] font-medium rounded-xl hover:bg-[var(--accent-ink)] shadow-sm">
               <Printer size={14} />
               Print
             </button>
-            <button onClick={handleWhatsApp} className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8f1f9] text-[#125483] text-[14px] font-medium rounded-xl hover:bg-[#bfdcf0]">
+            <button onClick={handleWhatsApp} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
               <MessageCircle size={14} />
               Share
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[#e4e8ee] p-8 print:bg-white print:p-0">
+        <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[var(--bg-canvas)] p-8 print:bg-white print:p-0">
           <div
-            className="relative max-w-[780px] mx-auto bg-white shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
+            className="report-paper relative max-w-[780px] mx-auto bg-[var(--surface)] shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
           >
             <LetterheadWatermark labName={settings.labName} />
             <div className="relative" style={{ zIndex: 1 }}>
-              <LetterheadHeader labName={settings.labName} />
+              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} />
 
-              <div className="avoid-break mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: '#1a2430' }}>
-                <div className="text-[14px] font-bold uppercase tracking-widest text-[#1a2430] mb-1">Bill</div>
-                <div className="text-[12px] text-[#57677a]">
-                  Bill No. <b className="text-[#1a2430]">{patient.sid}</b> · {patient.date} {formatTime12h(patient.regTime)}
+              <div className="avoid-break mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: 'var(--ink)' }}>
+                <div className="text-[14px] font-bold uppercase tracking-widest text-[var(--ink)] mb-1">Bill</div>
+                <div className="text-[12px] text-[var(--ink-2)]">
+                  Bill No. <b className="text-[var(--ink)]">{patient.sid}</b> · {patient.date} {formatTime12h(patient.regTime)}
                 </div>
               </div>
 
@@ -108,7 +110,7 @@ export default function Bill() {
 
               <table className="w-full text-[12.5px] mb-1">
                 <thead>
-                  <tr className="text-left text-[#8593a3] text-[10.5px] uppercase tracking-wide border-b-2 border-[#1a2430]">
+                  <tr className="text-left text-[var(--ink-3)] text-[10.5px] uppercase tracking-wide border-b-2 border-[var(--ink)]">
                     <th className="py-2 pr-2 font-semibold">S.No</th>
                     <th className="py-2 pr-2 font-semibold">Investigation</th>
                     <th className="py-2 pl-2 font-semibold text-right">Amount (₹)</th>
@@ -117,14 +119,14 @@ export default function Bill() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-8 text-center text-[#8593a3]">No investigations on file for this patient.</td>
+                      <td colSpan={3} className="py-8 text-center text-[var(--ink-3)]">No investigations on file for this patient.</td>
                     </tr>
                   ) : (
                     rows.map((r) => (
-                      <tr key={r.sno} className="border-b border-[#eaeef2]">
-                        <td className="py-2 pr-2 text-[#57677a]">{r.sno}</td>
-                        <td className="py-2 pr-2 text-[#1a2430]">{r.investigation}</td>
-                        <td className="py-1.5 pl-2 text-right font-medium text-[#1a2430]">
+                      <tr key={r.sno} className="border-b border-[var(--border-soft)]">
+                        <td className="py-2 pr-2 text-[var(--ink-2)]">{r.sno}</td>
+                        <td className="py-2 pr-2 text-[var(--ink)]">{r.investigation}</td>
+                        <td className="py-1.5 pl-2 text-right font-medium text-[var(--ink)]">
                           <span className="print:inline hidden">₹{r.amount.toLocaleString('en-IN')}</span>
                           <span className="print:hidden inline-flex items-center justify-end gap-1">
                             ₹
@@ -133,7 +135,7 @@ export default function Bill() {
                               min={0}
                               value={r.amount}
                               onChange={(e) => handleAmountChange(r.investigation, Number(e.target.value) || 0)}
-                              className="w-20 text-right px-1.5 py-1 rounded-md border border-[#c7cfd9] bg-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-[#1b6fae]/25 focus:border-[#1b6fae]"
+                              className="w-20 text-right px-1.5 py-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
                             />
                           </span>
                         </td>
@@ -143,15 +145,15 @@ export default function Bill() {
                 </tbody>
                 {rows.length > 0 && (
                   <tfoot>
-                    <tr className="border-t-2 border-[#1a2430]">
-                      <td colSpan={2} className="py-3 pr-2 text-right text-[13px] font-semibold text-[#1a2430]">Total</td>
-                      <td className="py-3 pl-2 text-right text-[15px] font-bold text-[#1b6fae]">₹{total.toLocaleString('en-IN')}</td>
+                    <tr className="border-t-2 border-[var(--ink)]">
+                      <td colSpan={2} className="py-3 pr-2 text-right text-[13px] font-semibold text-[var(--ink)]">Total</td>
+                      <td className="py-3 pl-2 text-right text-[15px] font-bold text-[var(--accent)]">₹{total.toLocaleString('en-IN')}</td>
                     </tr>
                   </tfoot>
                 )}
               </table>
 
-              <p className="text-[9.5px] text-[#8593a3] italic mt-2 print:hidden">
+              <p className="text-[9.5px] text-[var(--ink-3)] italic mt-2 print:hidden">
                 Click an amount above to adjust it for this patient — rates aren't fixed.
               </p>
 
