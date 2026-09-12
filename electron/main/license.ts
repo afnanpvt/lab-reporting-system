@@ -7,7 +7,7 @@ import { createPublicKey, verify } from 'crypto'
 // produce a new valid license. The matching private key stays with Scalyft, outside
 // this repo and outside every build; see scripts/issue-license.js.
 const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAUm8HVMKX4ovT4ylhWzwfD62KsZBnPRgE9uOn9ZIXvoI=
+MCowBQYDK2VwAyEACFJimm0hq/NFh/7ubcGwfwwPwPe+G7SWNPBvi24GS5s=
 -----END PUBLIC KEY-----`
 
 interface LicenseFile {
