@@ -9,33 +9,74 @@
  *   npm run package                 (uses whichever profile resources/.profile-name says, or
  *                                     falls back to "demo" if no profile has been applied yet)
  *   npm run package -- superlab     (applies the "superlab" profile first, then builds)
+ *   npm run package -- --all-profiles   (builds one installer per profiles/<name>/ folder —
+ *                                         the renderer only needs compiling once, since
+ *                                         resources/ is the only thing that differs per vendor)
  */
 const { spawnSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 
 const resourcesDir = path.join(__dirname, '..', 'resources')
+const profilesDir = path.join(__dirname, '..', 'profiles')
 const profileMarker = path.join(resourcesDir, '.profile-name')
 
-const requestedProfile = process.argv[2]
-if (requestedProfile) {
-  const apply = spawnSync('node', [path.join(__dirname, 'apply-profile.js'), requestedProfile], {
-    stdio: 'inherit'
+function run(cmd, args, extraEnv) {
+  const result = spawnSync(cmd, args, {
+    stdio: 'inherit',
+    shell: true,
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env
   })
-  if (apply.status !== 0) process.exit(apply.status ?? 1)
+  return result.status ?? 1
 }
 
-const profileName = fs.existsSync(profileMarker) ? fs.readFileSync(profileMarker, 'utf8').trim() : 'demo'
+function stageProfile(name) {
+  const status = run('node', [path.join(__dirname, 'apply-profile.js'), name])
+  if (status !== 0) process.exit(status)
+}
 
-const build = spawnSync('npx', ['electron-vite', 'build'], {
-  stdio: 'inherit',
-  shell: true
-})
-if (build.status !== 0) process.exit(build.status ?? 1)
+function currentProfileName() {
+  return fs.existsSync(profileMarker) ? fs.readFileSync(profileMarker, 'utf8').trim() : 'demo'
+}
 
-const pack = spawnSync('npx', ['electron-builder'], {
-  stdio: 'inherit',
-  shell: true,
-  env: { ...process.env, PROFILE_NAME: profileName }
-})
-process.exit(pack.status ?? 1)
+function buildRenderer() {
+  const status = run('npx', ['electron-vite', 'build'])
+  if (status !== 0) process.exit(status)
+}
+
+function packageCurrentlyStaged() {
+  return run('npx', ['electron-builder'], { PROFILE_NAME: currentProfileName() })
+}
+
+const arg = process.argv[2]
+
+if (arg === '--all-profiles' || arg === '--all') {
+  const names = fs
+    .readdirSync(profilesDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()
+
+  if (names.length === 0) {
+    console.error(`No profiles found under ${profilesDir}`)
+    process.exit(1)
+  }
+
+  console.log(`Building installers for: ${names.join(', ')}\n`)
+  buildRenderer()
+
+  const results = names.map((name) => {
+    console.log(`\n=== ${name} ===`)
+    stageProfile(name)
+    return { name, ok: packageCurrentlyStaged() === 0 }
+  })
+
+  console.log('\n=== Summary ===')
+  for (const r of results) console.log(`${r.ok ? '✓' : '✗'} ${r.name}`)
+  process.exit(results.every((r) => r.ok) ? 0 : 1)
+}
+
+if (arg) stageProfile(arg)
+
+buildRenderer()
+process.exit(packageCurrentlyStaged())

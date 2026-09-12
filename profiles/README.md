@@ -40,8 +40,12 @@ hand-writing `config.json`.
 that profile automatically (`LumaLabs-<name>-Setup-<version>.exe`):
 
 ```
-npm run package               # uses whatever's already staged (falls back to "demo")
-npm run package -- superlab   # stages "superlab" first, then builds
+npm run package                    # uses whatever's already staged (falls back to "demo")
+npm run package -- superlab        # stages "superlab" first, then builds
+npm run package -- --all-profiles  # builds one installer per profiles/<name>/ folder in one go
 ```
 
-Build one installer per profile by running the second form once per vendor.
+`--all-profiles` compiles the renderer once (it doesn't vary per vendor — only `resources/`
+does), then loops profile-stage + package for every folder under `profiles/`, producing e.g.
+`LumaLabs-demo-Setup-2.0.0.exe` and `LumaLabs-superlab-Setup-2.0.0.exe` in one run. Handy once
+there are more than a couple of vendors.
