@@ -353,6 +353,18 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return result.ok ? { labName: result.labName, licenseId: result.licenseId, issuedAt: result.issuedAt } : null
   })
 
+  // Separate from license:get (which Settings uses for its "Licensed to X" banner and stays
+  // null for both "no license" and "expired trial") — App's top-level gate needs to tell those
+  // two apart so it can block the whole app on an expired trial instead of quietly falling back
+  // to open/demo mode the way a missing license does.
+  ipcMain.handle('license:status', () => {
+    const result = verifyLicense()
+    if (result.expired) {
+      return { expired: true, labName: result.labName, expiresAt: result.expiresAt }
+    }
+    return { expired: false }
+  })
+
   // ---- Vendor profiles (dev-only) ----
   // Lets Settings offer a "preview a profile's branding" switcher while developing/pitching —
   // reads profiles/ straight off disk rather than the staged resources/branding.json, so it can

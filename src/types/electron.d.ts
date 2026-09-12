@@ -58,6 +58,7 @@ interface LabAPI {
   }
   license: {
     get(): Promise<{ labName: string; licenseId: string; issuedAt: string } | null>
+    status(): Promise<{ expired: boolean; labName?: string; expiresAt?: string }>
   }
   window: {
     setTitleBarOverlay(options: { color: string; symbolColor: string }): Promise<void>

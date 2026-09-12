@@ -62,7 +62,8 @@ const api = {
     seed: () => ipcRenderer.invoke('demo:seed')
   },
   license: {
-    get: () => ipcRenderer.invoke('license:get')
+    get: () => ipcRenderer.invoke('license:get'),
+    status: () => ipcRenderer.invoke('license:status')
   },
   window: {
     setTitleBarOverlay: (options: { color: string; symbolColor: string }) =>

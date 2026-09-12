@@ -14,6 +14,7 @@ interface LicenseFile {
   labName: string
   licenseId: string
   issuedAt: string
+  expiresAt?: string
   signature: string
 }
 
@@ -22,6 +23,8 @@ export interface LicenseResult {
   labName?: string
   licenseId?: string
   issuedAt?: string
+  expiresAt?: string
+  expired?: boolean
   reason?: string
 }
 
@@ -44,12 +47,16 @@ export function verifyLicense(): LicenseResult {
     return { ok: false, reason: 'License file is not valid JSON' }
   }
 
-  const { labName, licenseId, issuedAt, signature } = parsed
+  const { labName, licenseId, issuedAt, expiresAt, signature } = parsed
   if (!labName || !licenseId || !issuedAt || !signature) {
     return { ok: false, reason: 'License file is missing required fields' }
   }
 
-  const payload = `${labName}|${licenseId}|${issuedAt}`
+  // Trial licenses sign expiresAt into the payload too, so it can't be pushed out by hand-editing
+  // the file — that would invalidate the signature. Permanent licenses issued before trials
+  // existed (and any license with no expiry) keep the original 3-field payload, so they keep
+  // verifying without needing to be re-issued.
+  const payload = expiresAt ? `${labName}|${licenseId}|${issuedAt}|${expiresAt}` : `${labName}|${licenseId}|${issuedAt}`
   const publicKey = createPublicKey(PUBLIC_KEY_PEM)
   let signatureValid = false
   try {
@@ -62,5 +69,9 @@ export function verifyLicense(): LicenseResult {
     return { ok: false, reason: 'License signature does not match — file may be tampered with or forged' }
   }
 
-  return { ok: true, labName, licenseId, issuedAt }
+  if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
+    return { ok: false, expired: true, labName, licenseId, issuedAt, expiresAt, reason: 'Trial period has ended' }
+  }
+
+  return { ok: true, labName, licenseId, issuedAt, expiresAt }
 }
