@@ -44,6 +44,11 @@ function stageOptional(fileName) {
 const hasLicense = stageOptional('license.json')
 const hasLogo = stageOptional('logo.png')
 
+// Remembers which profile is currently staged so `npm run package` can name the installer
+// after it (e.g. LumaLabs-superlab-Setup-2.0.0.exe) without needing a separate flag — see
+// scripts/package.js, which reads this back.
+fs.writeFileSync(path.join(resourcesDir, '.profile-name'), name)
+
 console.log(
   `Applied profile "${name}" -> resources/branding.json` +
     (hasLicense ? ' + license.json' : ' (no license: runs unlicensed)') +

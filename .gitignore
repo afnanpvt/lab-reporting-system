@@ -21,6 +21,7 @@ lab-data.db-journal
 resources/branding.json
 resources/license.json
 resources/logo.png
+resources/.profile-name
 
 # Logs
 *.log

@@ -23,12 +23,25 @@ profiles/<name>/
 node scripts/apply-profile.js <name>
 ```
 
-Stages that profile's files into `resources/`. Run it before `npm run package` to bake a profile
-into that build's installer — the license (if any) can only be applied this way, since it's
-verified once at launch. Defaults to `demo` if no name is given.
+Stages that profile's files into `resources/` and remembers the name in `resources/.profile-name`
+(gitignored) — the license (if any) can only be applied this way, since it's verified once at
+launch. Defaults to `demo` if no name is given.
 
 For everyday dev/demo use you don't need this script at all: Settings' dev-only "profile preview"
-panel applies a profile's fields *and* logo live, straight from the running app — pick a profile
-and hit Preview. It also has a "Save as new profile" box that writes whatever's currently filled
-in (plus the currently-applied logo) to a new `profiles/<name>/` folder, so a vendor's branding
-can be captured on the fly instead of hand-writing `config.json`.
+panel applies a profile's fields *and* logo live, straight from the running app, as soon as you
+pick it from the dropdown — no separate apply step. It also has a "Save as new profile" box that
+writes whatever's currently filled in (plus the currently-applied logo) to a new
+`profiles/<name>/` folder, so a vendor's branding can be captured on the fly instead of
+hand-writing `config.json`.
+
+## Packaging an installer per profile
+
+`npm run package` bakes whichever profile is currently staged into the installer, naming it after
+that profile automatically (`LumaLabs-<name>-Setup-<version>.exe`):
+
+```
+npm run package               # uses whatever's already staged (falls back to "demo")
+npm run package -- superlab   # stages "superlab" first, then builds
+```
+
+Build one installer per profile by running the second form once per vendor.
