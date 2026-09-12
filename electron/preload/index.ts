@@ -7,17 +7,24 @@ const api = {
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
   branding: {
-    getLogo: () => ipcRenderer.invoke('branding:getLogo')
+    getLogo: () => ipcRenderer.invoke('branding:getLogo'),
+    setLogo: (dataUrl: string) => ipcRenderer.invoke('branding:setLogo', dataUrl),
+    clearLogo: () => ipcRenderer.invoke('branding:clearLogo')
   },
   profiles: {
     list: () => ipcRenderer.invoke('profiles:list'),
-    get: (name: string) => ipcRenderer.invoke('profiles:get', name)
+    get: (name: string) => ipcRenderer.invoke('profiles:get', name),
+    getLogo: (name: string) => ipcRenderer.invoke('profiles:getLogo', name),
+    save: (name: string, config: unknown, logoDataUrl?: string | null) =>
+      ipcRenderer.invoke('profiles:save', name, config, logoDataUrl),
+    delete: (name: string) => ipcRenderer.invoke('profiles:delete', name)
   },
   patients: {
     list: (search?: string) => ipcRenderer.invoke('patients:list', search),
     create: (data: unknown) => ipcRenderer.invoke('patients:create', data),
     get: (id: number) => ipcRenderer.invoke('patients:get', id),
-    update: (id: number, data: unknown) => ipcRenderer.invoke('patients:update', id, data)
+    update: (id: number, data: unknown) => ipcRenderer.invoke('patients:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('patients:delete', id)
   },
   results: {
     save: (section: string, patientId: number, data: unknown) =>

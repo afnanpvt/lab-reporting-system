@@ -152,6 +152,10 @@ export async function updatePatient(id: number, form: PatientFormData): Promise<
   return updated
 }
 
+export async function deletePatient(id: number): Promise<boolean> {
+  return window.api.patients.delete(id)
+}
+
 // ---------------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------------
@@ -321,10 +325,19 @@ export async function getLabSettings(): Promise<LabSettingsForm> {
   }
 }
 
-// The active profile's logo (see profiles/README.md), if it staged one — null falls back to
-// the plain text wordmark everywhere it's used (Shell header, report letterhead).
+// A logo picked from Settings, if any — otherwise whatever the active vendor profile staged
+// (see profiles/README.md), otherwise null (falls back to the plain text wordmark everywhere
+// it's used: Shell header, report letterhead).
 export async function getLogoDataUrl(): Promise<string | null> {
   return window.api.branding.getLogo()
+}
+
+export async function setLogoDataUrl(dataUrl: string): Promise<void> {
+  await window.api.branding.setLogo(dataUrl)
+}
+
+export async function clearLogoDataUrl(): Promise<void> {
+  await window.api.branding.clearLogo()
 }
 
 // Dev-only vendor-profile listing (see profiles/README.md) — the main process itself gates
@@ -335,6 +348,23 @@ export async function listProfiles(): Promise<string[]> {
 
 export async function getProfile(name: string): Promise<LabSettingsForm | null> {
   return window.api.profiles.get(name)
+}
+
+export async function getProfileLogo(name: string): Promise<string | null> {
+  return window.api.profiles.getLogo(name)
+}
+
+// Saves whatever's currently on screen as a new (or updated) profile on disk, so a demo/pitch
+// session can capture a vendor's branding without hand-writing profiles/<name>/config.json.
+// Returns the actual slug it saved under (names are sanitized), or false if the name was empty.
+export async function saveProfile(name: string, form: LabSettingsForm, logoDataUrl: string | null): Promise<string | false> {
+  return window.api.profiles.save(name, form, logoDataUrl)
+}
+
+// "demo" refuses to delete itself (see the main-process handler) — it's the one profile
+// committed to the repo, so every clone expects it to exist.
+export async function deleteProfile(name: string): Promise<boolean> {
+  return window.api.profiles.delete(name)
 }
 
 export interface LicenseInfo {

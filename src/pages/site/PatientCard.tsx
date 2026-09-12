@@ -1,4 +1,4 @@
-import { Clock, User2, Stethoscope } from 'lucide-react'
+import { Clock, User2, Stethoscope, Trash2 } from 'lucide-react'
 import type { Patient, PatientStatus } from './api'
 import { formatTime12h } from './reportFields'
 
@@ -37,7 +37,7 @@ export function HandledByBadge({ referredBy }: { referredBy: string }) {
  * `status` is passed in rather than computed here — it depends on that patient's results, which
  * now live behind an async IPC call, so callers batch-load it once via listPatientsWithStatus().
  */
-export function PatientCard({ patient: p, status, index, onOpen }: { patient: Patient; status: PatientStatus; index: number; onOpen: (p: Patient) => void }) {
+export function PatientCard({ patient: p, status, index, onOpen, onDelete }: { patient: Patient; status: PatientStatus; index: number; onOpen: (p: Patient) => void; onDelete?: (p: Patient) => void }) {
   const s = statusCard[status]
   return (
     <div
@@ -55,6 +55,16 @@ export function PatientCard({ patient: p, status, index, onOpen }: { patient: Pa
       >
         {index + 1}
       </div>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(p) }}
+          title="Delete patient record"
+          className="absolute -top-2.5 -right-2.5 w-7 h-7 rounded-full text-[var(--danger)] bg-[var(--surface)] border border-[var(--danger-soft-border)] flex items-center justify-center shadow hover:bg-[var(--danger-soft)]"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
       <div className="flex items-start justify-between mb-3.5">
         <div className="w-10 h-10 rounded-full bg-[var(--bg-hover)] flex items-center justify-center">
           <User2 size={17} className="text-[var(--ink-3)]" />

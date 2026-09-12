@@ -1,10 +1,46 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon } from 'lucide-react'
-import { getLabSettings, saveLabSettings, getLicenseInfo, listProfiles, getProfile, type LabSettingsForm, type LicenseInfo } from './api'
+import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2 } from 'lucide-react'
+import {
+  getLabSettings,
+  saveLabSettings,
+  getLicenseInfo,
+  listProfiles,
+  getProfile,
+  getProfileLogo,
+  saveProfile,
+  deleteProfile,
+  setLogoDataUrl,
+  clearLogoDataUrl,
+  type LabSettingsForm,
+  type LicenseInfo
+} from './api'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
+import { useBranding, refreshBranding } from './brandingStore'
 
 const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '' }
+
+// Settings is a routed page — it fully unmounts when you navigate away and remounts from
+// scratch when you come back, unlike Shell's persistent header. Plain useState for
+// activeProfile would forget which profile was applied on every remount, making the dropdown
+// snap back to the list's first entry even though nothing had actually changed. Persisting to
+// localStorage survives that remount (and even a full app restart).
+const ACTIVE_PROFILE_KEY = 'labapp:activeProfile'
+function getStoredActiveProfile(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_PROFILE_KEY)
+  } catch {
+    return null
+  }
+}
+function setStoredActiveProfile(name: string | null): void {
+  try {
+    if (name) localStorage.setItem(ACTIVE_PROFILE_KEY, name)
+    else localStorage.removeItem(ACTIVE_PROFILE_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -14,6 +50,10 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [theme, setThemeState] = useState<ThemeId>(getTheme)
   const [mode, setModeState] = useState<ModeId>(getMode)
+  const { logo } = useBranding()
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoError, setLogoError] = useState('')
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const handleThemeChange = (id: ThemeId) => {
     setTheme(id)
@@ -29,8 +69,24 @@ export default function Settings() {
   // without hand-typing every field. import.meta.env.DEV is statically false in a packaged
   // build, so this whole branch (and the UI below it) is stripped out, not just hidden.
   const [profiles, setProfiles] = useState<string[]>([])
-  const [selectedProfile, setSelectedProfile] = useState('')
+  const [selectedProfile, setSelectedProfile] = useState(() => getStoredActiveProfile() || '')
   const [applyingProfile, setApplyingProfile] = useState(false)
+  const [newProfileName, setNewProfileName] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileSavedMsg, setProfileSavedMsg] = useState('')
+  // Which profile (if any) the user actually chose — as opposed to selectedProfile, which also
+  // holds the dropdown's default first-item value before anyone's touched it. Save Changes writes
+  // back into this profile's config.json (see handleSave below) so edits made while "on" a
+  // profile stick around instead of only living in the DB until the next Preview overwrites them
+  // from the stale file on disk. Null means edit the DB only, same as before profiles existed —
+  // never set just from the dropdown defaulting to the first profile in the list. Persisted to
+  // localStorage (see ACTIVE_PROFILE_KEY above) so it survives Settings remounting on navigation.
+  const [activeProfile, setActiveProfileState] = useState<string | null>(getStoredActiveProfile)
+
+  const setActiveProfile = (name: string | null) => {
+    setActiveProfileState(name)
+    setStoredActiveProfile(name)
+  }
 
   useEffect(() => {
     getLabSettings().then(setForm)
@@ -38,35 +94,126 @@ export default function Settings() {
     if (import.meta.env.DEV) {
       listProfiles().then((list) => {
         setProfiles(list)
-        setSelectedProfile((current) => current || list[0] || '')
+        // If the remembered active/selected profile no longer exists (deleted from another
+        // session, say), fall back to the list's first entry instead of a dangling selection.
+        setSelectedProfile((current) => (current && list.includes(current) ? current : list[0] || ''))
+        setActiveProfileState((current) => {
+          const next = current && list.includes(current) ? current : null
+          if (next !== current) setStoredActiveProfile(next)
+          return next
+        })
       })
     }
   }, [])
 
   const update = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
-  // Only previews the text fields — logo and license are baked in at build/launch time
-  // (see profiles/README.md), not something a running app can swap live.
-  const handleApplyProfile = async () => {
-    if (!selectedProfile) return
+  // Applies a profile's text fields AND its logo (or clears the logo if the profile has none,
+  // e.g. switching back to demo) — the license (when a profile has one) is still baked in at
+  // build/launch time (see profiles/README.md), the one piece this can't do live. Fires as soon
+  // as the dropdown selection changes, no separate "apply" click needed.
+  const handleApplyProfile = async (name: string) => {
+    if (!name) return
     setApplyingProfile(true)
     try {
-      const config = await getProfile(selectedProfile)
+      const [config, logoDataUrl] = await Promise.all([getProfile(name), getProfileLogo(name)])
       if (config) {
         setForm(config)
         await saveLabSettings(config)
       }
+      if (logoDataUrl) {
+        await setLogoDataUrl(logoDataUrl)
+      } else {
+        await clearLogoDataUrl()
+      }
+      await refreshBranding()
+      setActiveProfile(name)
     } finally {
       setApplyingProfile(false)
     }
   }
 
+  // Captures whatever's currently filled in (and the currently-applied logo) as a new profile on
+  // disk, so a vendor's branding can be set up once while demoing rather than hand-editing a
+  // profiles/<name>/config.json file.
+  const handleSaveAsProfile = async () => {
+    if (!newProfileName.trim()) return
+    setSavingProfile(true)
+    setProfileSavedMsg('')
+    try {
+      const slug = await saveProfile(newProfileName, form, logo)
+      if (slug) {
+        setProfiles(await listProfiles())
+        setSelectedProfile(slug)
+        setActiveProfile(slug)
+        setNewProfileName('')
+        setProfileSavedMsg(`Saved as "${slug}"`)
+        setTimeout(() => setProfileSavedMsg(''), 3000)
+      }
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  // "demo" can't be deleted (see the main-process handler) — everything else can, but there's no
+  // undo once the folder's gone, so this confirms first.
+  const handleDeleteProfile = async () => {
+    if (!selectedProfile || selectedProfile === 'demo') return
+    if (!window.confirm(`Delete the "${selectedProfile}" profile? This can't be undone.`)) return
+    const deleted = await deleteProfile(selectedProfile)
+    if (!deleted) return
+    const list = await listProfiles()
+    setProfiles(list)
+    if (activeProfile === selectedProfile) setActiveProfile(null)
+    setSelectedProfile(list[0] || '')
+  }
+
   const handleSave = async () => {
     setSaving(true)
     await saveLabSettings(form)
+    // Keep the active profile's config.json in sync with whatever was just saved — otherwise
+    // edits made "on" a profile only ever land in the DB, and picking that profile again later
+    // silently reverts to the stale file on disk.
+    if (activeProfile) await saveProfile(activeProfile, form, logo)
+    await refreshBranding()
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const MAX_LOGO_BYTES = 2 * 1024 * 1024
+
+  const handleLogoFile = async (file: File) => {
+    setLogoError('')
+    if (!file.type.startsWith('image/')) {
+      setLogoError('Please choose an image file (PNG, JPG, or SVG).')
+      return
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError('That image is too large — please pick one under 2 MB.')
+      return
+    }
+    setUploadingLogo(true)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      })
+      await setLogoDataUrl(dataUrl)
+      await refreshBranding()
+    } catch {
+      setLogoError('Could not read that image — please try a different file.')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const handleRemoveLogo = async () => {
+    setLogoError('')
+    await clearLogoDataUrl()
+    await refreshBranding()
   }
 
   const fields: { key: keyof typeof form; label: string; placeholder: string }[] = [
@@ -94,7 +241,13 @@ export default function Settings() {
             <div className="flex items-center justify-between mb-7">
               <div>
                 <h1 className="text-[24px] font-semibold text-[var(--ink)]">Settings</h1>
-                <p className="text-[14px] text-[var(--ink-2)] mt-0.5">Laboratory and report configuration</p>
+                <p className="text-[14px] text-[var(--ink-2)] mt-0.5">
+                  {activeProfile ? (
+                    <>Editing the <span className="font-medium text-[var(--ink)]">{activeProfile}</span> profile — Save Changes updates it too</>
+                  ) : (
+                    'Laboratory and report configuration'
+                  )}
+                </p>
               </div>
               <button
                 onClick={handleSave}
@@ -128,6 +281,72 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+
+                <div className="flex items-center gap-4 mb-5 pb-5 border-b border-[var(--border)]">
+                  <div
+                    className="flex items-center justify-center flex-shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-app)] overflow-hidden"
+                    style={{ width: 96, height: 64 }}
+                  >
+                    {logo ? (
+                      <img src={logo} alt="Lab logo" className="max-w-full max-h-full object-contain" />
+                    ) : (
+                      <span className="text-[11px] text-[var(--ink-4)] px-2 text-center">No logo</span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Logo</label>
+                    {import.meta.env.DEV ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => logoInputRef.current?.click()}
+                            disabled={uploadingLogo}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[var(--border-strong)] rounded-lg text-[var(--ink)] hover:bg-[var(--bg-hover)] disabled:opacity-60"
+                          >
+                            <ImageUp size={14} />
+                            {uploadingLogo ? 'Uploading…' : logo ? 'Change logo' : 'Upload logo'}
+                          </button>
+                          {logo && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveLogo}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-lg text-[var(--ink-3)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)]"
+                            >
+                              <ImageOff size={14} />
+                              Remove
+                            </button>
+                          )}
+                          <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleLogoFile(file)
+                              e.target.value = ''
+                            }}
+                          />
+                        </div>
+                        {logoError ? (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[12.5px] text-[var(--danger)]">
+                            <AlertTriangle size={12} />
+                            {logoError}
+                          </div>
+                        ) : (
+                          <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">
+                            Shown in the app header and on printed reports. Takes effect immediately — no restart needed.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">
+                        Shown in the app header and on printed reports. Set up by Scalyft — contact them to change it.
+                      </p>
+                    )}
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   {fields.map(({ key, label, placeholder }) => (
@@ -227,27 +446,61 @@ export default function Settings() {
                       <h2 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--warning)' }}>Dev only — profile preview</h2>
                     </div>
                     <p className="text-[13px] leading-relaxed mb-3" style={{ color: 'var(--warning-ink)' }}>
-                      Fills the fields above from a profile's config.json — logo and license need{' '}
+                      Selecting a profile applies its fields and logo immediately — only a real
+                      license (when one's installed) still needs{' '}
                       <code className="text-[12px]">npm run profile {selectedProfile || '<name>'}</code> and a restart. Never shown in a packaged build.
                     </p>
                     <div className="flex items-center gap-2">
                       <select
                         value={selectedProfile}
-                        onChange={(e) => setSelectedProfile(e.target.value)}
-                        className="flex-1 px-3 py-2 text-[14px] border border-[var(--warning-soft-border)] rounded-lg bg-[var(--surface)] text-[var(--ink)] focus:outline-none"
+                        disabled={applyingProfile}
+                        onChange={(e) => {
+                          const name = e.target.value
+                          setSelectedProfile(name)
+                          handleApplyProfile(name)
+                        }}
+                        className="flex-1 px-3 py-2 text-[14px] border border-[var(--warning-soft-border)] rounded-lg bg-[var(--surface)] text-[var(--ink)] focus:outline-none disabled:opacity-60"
                       >
                         {profiles.map((p) => (
                           <option key={p} value={p}>{p}</option>
                         ))}
                       </select>
-                      <button
-                        onClick={handleApplyProfile}
-                        disabled={applyingProfile}
-                        className="px-3.5 py-2 text-[14px] font-medium rounded-lg text-white disabled:opacity-60"
-                        style={{ background: 'var(--warning)' }}
-                      >
-                        {applyingProfile ? 'Applying…' : 'Preview'}
-                      </button>
+                      {selectedProfile !== 'demo' && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteProfile}
+                          title={`Delete "${selectedProfile}"`}
+                          className="inline-flex items-center justify-center w-9 h-9 flex-shrink-0 rounded-lg text-[var(--warning-ink)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--warning-soft-border)' }}>
+                      <p className="text-[12.5px] mb-2" style={{ color: 'var(--warning-ink)' }}>
+                        Save what's currently filled in (fields + logo above) as a new profile:
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={newProfileName}
+                          onChange={(e) => setNewProfileName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAsProfile() }}
+                          placeholder="e.g. sunrise-diagnostics"
+                          className="flex-1 px-3 py-2 text-[14px] border border-[var(--warning-soft-border)] rounded-lg bg-[var(--surface)] text-[var(--ink)] focus:outline-none"
+                        />
+                        <button
+                          onClick={handleSaveAsProfile}
+                          disabled={savingProfile || !newProfileName.trim()}
+                          className="px-3.5 py-2 text-[14px] font-medium rounded-lg border disabled:opacity-50"
+                          style={{ color: 'var(--warning-ink)', borderColor: 'var(--warning-soft-border)' }}
+                        >
+                          {savingProfile ? 'Saving…' : 'Save as new profile'}
+                        </button>
+                      </div>
+                      {profileSavedMsg && (
+                        <p className="text-[12.5px] mt-1.5" style={{ color: 'var(--success)' }}>{profileSavedMsg}</p>
+                      )}
                     </div>
                   </div>
                 )}

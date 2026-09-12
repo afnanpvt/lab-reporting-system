@@ -23,6 +23,12 @@ profiles/<name>/
 node scripts/apply-profile.js <name>
 ```
 
-Stages that profile's files into `resources/`. Run it before `npm run dev` to preview a profile
-locally, or before `npm run package` to bake it into that build's installer. Defaults to `demo`
-if no name is given.
+Stages that profile's files into `resources/`. Run it before `npm run package` to bake a profile
+into that build's installer — the license (if any) can only be applied this way, since it's
+verified once at launch. Defaults to `demo` if no name is given.
+
+For everyday dev/demo use you don't need this script at all: Settings' dev-only "profile preview"
+panel applies a profile's fields *and* logo live, straight from the running app — pick a profile
+and hit Preview. It also has a "Save as new profile" box that writes whatever's currently filled
+in (plus the currently-applied logo) to a new `profiles/<name>/` folder, so a vendor's branding
+can be captured on the fly instead of hand-writing `config.json`.

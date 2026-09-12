@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
-import { listPatientsWithStatus, type Patient, type PatientWithStatus } from './api'
+import { deletePatient, listPatientsWithStatus, type Patient, type PatientWithStatus } from './api'
 import { PatientCard, statusCard } from './PatientCard'
 
 export default function Patients() {
@@ -11,9 +11,17 @@ export default function Patients() {
   const newPatient = () => navigate('/patient/new')
   const openPatient = (p: Patient) => navigate(`/report/${p.id}`, { state: { patient: p } })
 
+  const refresh = () => listPatientsWithStatus().then(setRows)
+
   useEffect(() => {
-    listPatientsWithStatus().then(setRows)
+    refresh()
   }, [])
+
+  const removePatient = async (p: Patient) => {
+    if (!window.confirm(`Delete ${p.name} (SID ${p.sid})? This permanently removes their record and results. This cannot be undone.`)) return
+    await deletePatient(p.id)
+    refresh()
+  }
 
   const filtered = rows.filter(
     ({ patient: p }) =>
@@ -71,7 +79,7 @@ export default function Patients() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((r, i) => (
-            <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} />
+            <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} onDelete={removePatient} />
           ))}
           {filtered.length === 0 && (
             <p className="text-[14px] text-[var(--ink-3)] col-span-full py-8 text-center">No patients match "{query}".</p>

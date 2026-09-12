@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutGrid, Users, FileBarChart, Settings, Stethoscope } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { getLabSettings, getLogoDataUrl } from './api'
 import { syncTitleBarOverlay } from './theme'
+import { useBranding, refreshBranding } from './brandingStore'
 
 const NAV = [
   { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/' },
@@ -23,12 +23,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [expanded, setExpanded] = useState(false)
-  const [labName, setLabName] = useState('')
-  const [logo, setLogo] = useState<string | null>(null)
+  const { labName, logo } = useBranding()
 
   useEffect(() => {
-    getLabSettings().then((s) => setLabName(s.labName))
-    getLogoDataUrl().then(setLogo)
+    refreshBranding()
     syncTitleBarOverlay()
   }, [])
 

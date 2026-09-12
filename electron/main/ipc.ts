@@ -1,10 +1,10 @@
 import { IpcMain, BrowserWindow, app, shell, dialog } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'path'
-import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { dbRun, dbGet, dbAll } from './db'
 import { verifyLicense } from './license'
-import { getLogoDataUrl } from './branding'
+import { getLogoDataUrl, setLogo, clearLogo } from './branding'
 
 const SECTION_TABLES: Record<string, string> = {
   haematology: 'haematology',
@@ -36,6 +36,20 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // ---- Branding ----
   ipcMain.handle('branding:getLogo', () => {
     return getLogoDataUrl()
+  })
+
+  // Dev-only, same reasoning as the profiles:* handlers below — a real customer's logo is set
+  // once via a profile at build/launch time, never edited live by the customer themselves.
+  ipcMain.handle('branding:setLogo', (_e, dataUrl: string) => {
+    if (!is.dev) return false
+    setLogo(dataUrl)
+    return true
+  })
+
+  ipcMain.handle('branding:clearLogo', () => {
+    if (!is.dev) return false
+    clearLogo()
+    return true
   })
 
   // ---- Patients ----
@@ -95,6 +109,16 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     })
     const set = keys.map((k) => `${k}=?`).join(',')
     dbRun(`UPDATE patients SET ${set} WHERE id=?`, [...values, id])
+    return true
+  })
+
+  ipcMain.handle('patients:delete', (_e, id: number) => {
+    const resultTables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results']
+    for (const table of resultTables) {
+      dbRun(`DELETE FROM ${table} WHERE patient_id=?`, [id])
+    }
+    dbRun('DELETE FROM bill_items WHERE patient_id=?', [id])
+    dbRun('DELETE FROM patients WHERE id=?', [id])
     return true
   })
 
@@ -354,6 +378,58 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     } catch {
       return null
     }
+  })
+
+  // A profile's own logo.png, read straight off disk as a data URL — lets the Settings preview
+  // switcher apply it live (via branding:setLogo) instead of only the text fields, without
+  // needing apply-profile.js + a restart just to see what a vendor's branding actually looks like.
+  ipcMain.handle('profiles:getLogo', (_e, name: string) => {
+    if (!is.dev) return null
+    const logoPath = join(profilesDir, name, 'logo.png')
+    if (!existsSync(logoPath)) return null
+    try {
+      return `data:image/png;base64,${readFileSync(logoPath).toString('base64')}`
+    } catch {
+      return null
+    }
+  })
+
+  // Lets Settings save whatever's currently filled in (and the currently-applied logo) as a new
+  // profile on disk while demoing — a quicker path than hand-writing profiles/<name>/config.json.
+  // Same folder shape apply-profile.js already expects (see profiles/README.md); license.json is
+  // never written here, since a real license has to come from scripts/issue-license.js.
+  ipcMain.handle('profiles:save', (_e, name: string, config: Record<string, string>, logoDataUrl?: string | null) => {
+    if (!is.dev) return false
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (!slug) return false
+
+    const dir = join(profilesDir, slug)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'config.json'), JSON.stringify(config, null, 2), 'utf8')
+
+    const logoPath = join(dir, 'logo.png')
+    if (logoDataUrl && /^data:image\/[a-zA-Z+.-]+;base64,/.test(logoDataUrl)) {
+      const base64 = logoDataUrl.slice(logoDataUrl.indexOf(',') + 1)
+      writeFileSync(logoPath, Buffer.from(base64, 'base64'))
+    } else if (existsSync(logoPath)) {
+      // Saving without a logo after previously saving one to this same name shouldn't leave a
+      // stale image behind — the profile should reflect exactly what was on screen when saved.
+      unlinkSync(logoPath)
+    }
+
+    return slug
+  })
+
+  // "demo" is the one profile committed to the repo (see profiles/README.md) — every clone
+  // expects it to exist, so it's the only name this refuses to touch. Everything else (including
+  // a real customer's profile) is deletable; the renderer confirms with the user before calling
+  // this, since there's no undo once the folder's gone.
+  ipcMain.handle('profiles:delete', (_e, name: string) => {
+    if (!is.dev || name === 'demo') return false
+    const dir = join(profilesDir, name)
+    if (!existsSync(dir)) return false
+    rmSync(dir, { recursive: true, force: true })
+    return true
   })
 
   // ---- Shell ----

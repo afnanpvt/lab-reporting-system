@@ -7,16 +7,22 @@ interface LabAPI {
   }
   branding: {
     getLogo(): Promise<string | null>
+    setLogo(dataUrl: string): Promise<boolean>
+    clearLogo(): Promise<boolean>
   }
   profiles: {
     list(): Promise<string[]>
     get(name: string): Promise<{ labName: string; labAddress: string; labPhone: string; labEmail: string; labDoctor: string } | null>
+    getLogo(name: string): Promise<string | null>
+    save(name: string, config: Record<string, string>, logoDataUrl?: string | null): Promise<string | false>
+    delete(name: string): Promise<boolean>
   }
   patients: {
     list(search?: string): Promise<import('./lab').Patient[]>
     create(data: Omit<import('./lab').Patient, 'id' | 'created_at'>): Promise<{ id: number; sid: string }>
     get(id: number): Promise<import('./lab').Patient | null>
     update(id: number, data: Partial<import('./lab').Patient>): Promise<boolean>
+    delete(id: number): Promise<boolean>
   }
   results: {
     save(section: string, patientId: number, data: Record<string, string>): Promise<boolean>
