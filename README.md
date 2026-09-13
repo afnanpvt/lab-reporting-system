@@ -118,6 +118,9 @@ Generated PDFs save wherever the user chooses via the native print dialog's "Sav
 
 ## Licensing
 
+> **Setting up on a new computer, onboarding a lab, or shipping a release?** Follow the step-by-step
+> handbook in [docs/licensing-and-releases.md](docs/licensing-and-releases.md).
+
 Licenses are signed with an Ed25519 private key that is never committed or shipped (default location `~/scalyft-keys/scalyft-license-private.pem`, or set `LUMALABS_SIGNING_KEY`). The app only holds the public key in `electron/main/license.ts`, so it can check a license but never create one.
 
 A license is either a **trial** (has an `expiresAt`, signed into the payload so it can't be edited) or **full** (no expiry). The app looks in two places and uses the stronger valid one:

@@ -1,6 +1,6 @@
 {
   "name": "lumalabs",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "LumaLabs — offline-first desktop platform for laboratory registration, results, reporting, and billing",
   "main": "out/main/index.js",
   "scripts": {
@@ -57,7 +57,10 @@
       {
         "from": "resources/",
         "to": ".",
-        "filter": ["**/*", "!.profile-name"]
+        "filter": [
+          "**/*",
+          "!.profile-name"
+        ]
       }
     ]
   },
