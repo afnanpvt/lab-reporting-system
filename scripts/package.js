@@ -45,7 +45,13 @@ function buildRenderer() {
 }
 
 function packageCurrentlyStaged() {
-  return run('npx', ['electron-builder'], { PROFILE_NAME: currentProfileName() })
+  const name = currentProfileName()
+  // A packaged build with no license refuses to open, so never produce one for a real lab.
+  if (name !== 'demo' && !fs.existsSync(path.join(resourcesDir, 'license.json'))) {
+    console.error(`profiles/${name} has no license. Run \`npm run license -- ${name} --trial\` first.`)
+    return 1
+  }
+  return run('npx', ['electron-builder'], { PROFILE_NAME: name })
 }
 
 const arg = process.argv[2]

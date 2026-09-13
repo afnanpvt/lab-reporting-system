@@ -98,10 +98,10 @@ lab-app/
 │   │   └── ErrorBoundary.tsx  # catches render errors and shows them on screen instead of a blank page
 │   └── types/lab.ts       # shared types + the per-section field-key registry
 ├── scripts/
-│   └── issue-license.js   # signs a new license.json for a new lab (needs the private key — never in this repo)
+│   └── license.js         # issues a trial or full license for a profile (needs the private key — never in this repo)
 ├── resources/
 │   ├── icon.ico            # app icon
-│   └── license.json         # the signed license for THIS build (currently: Super Lab Service)
+│   └── license.json         # staged from the applied profile by `npm run profile` (gitignored)
 └── tailwind.config.js
 ```
 
@@ -118,17 +118,25 @@ Generated PDFs save wherever the user chooses via the native print dialog's "Sav
 
 ## Licensing
 
-This app will not start at all without a valid signed `resources/license.json` (checked in `electron/main/license.ts` before any window is created). The signature is verified with an Ed25519 public key baked into the compiled app; only the matching private key — kept outside this repo, never committed, never shipped — can produce a license that passes.
+Licenses are signed with an Ed25519 private key that is never committed or shipped (default location `~/scalyft-keys/scalyft-license-private.pem`, or set `LUMALABS_SIGNING_KEY`). The app only holds the public key in `electron/main/license.ts`, so it can check a license but never create one.
 
-Once verified, the licensed lab name is force-written into the database on **every** launch (`lockLabName` in `db.ts`), overriding anything already there. There is no Settings control to edit it, and even a direct edit to the SQLite file gets overwritten back on the next launch. Practical effect: this specific compiled app only ever functions as one specific lab's system.
+A license is either a **trial** (has an `expiresAt`, signed into the payload so it can't be edited) or **full** (no expiry). The app looks in two places and uses the stronger valid one:
 
-To issue a new license for a different lab:
+1. **Built into the installer** — `resources/license.json`, staged from the profile.
+2. **Pasted in the app** — a `LUMA-…` key entered in Settings → License or on the trial-ended screen, saved to `%APPDATA%\LumaLabs\license.json` so updates and reinstalls keep it. A pasted key must be for the same lab the installer was built for.
+
+A packaged build with no valid license won't open. An expired trial opens to a lock screen with Scalyft's WhatsApp/phone contact and a key box; the last 7 days of a trial show a banner. Whichever license wins, its lab name is force-written into the database on every launch (`lockLabName` in `db.ts`).
+
+**Day-to-day flow** (every issued license is also appended to `licenses/ledger.csv`, which is committed):
 
 ```bash
-node scripts/issue-license.js --key /path/to/private.pem --lab "New Lab Name" --id NL-0001 --out resources/license.json
+npm run profile sunlab            # first time: auto-issues a 30-day trial into profiles/sunlab/license.json
+npm run package                   # LumaLabs-sunlab-Setup-<version>.exe — hand this over
+npm run license -- sunlab         # they paid: full license, prints the LUMA-… key to send them
+npm run license -- sunlab --trial # restart a fresh 30-day trial (e.g. before handing over a stale build)
 ```
 
-Then rebuild and repackage with that `license.json` in place.
+After `npm run license`, commit `profiles/sunlab` and `licenses/ledger.csv` so every later build for that lab includes the full license.
 
 ## Packaging
 

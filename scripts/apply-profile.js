@@ -11,6 +11,7 @@
  */
 const fs = require('fs')
 const path = require('path')
+const { DEFAULT_TRIAL_DAYS, defaultLicenseId, hasSigningKey, issueForProfile, signingKeyPath } = require('./license-lib')
 
 const name = process.argv[2] || 'demo'
 const profileDir = path.join(__dirname, '..', 'profiles', name)
@@ -27,6 +28,18 @@ if (!fs.existsSync(configPath)) {
   process.exit(1)
 }
 fs.copyFileSync(configPath, path.join(resourcesDir, 'branding.json'))
+
+// Every real lab starts on a trial the first time its profile is staged; `npm run license` upgrades
+// it later. demo stays unlicensed since it's the dev/pitch profile.
+if (name !== 'demo' && !fs.existsSync(path.join(profileDir, 'license.json'))) {
+  if (hasSigningKey()) {
+    const { labName } = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    const license = issueForProfile(name, { labName, licenseId: defaultLicenseId(name, true), trialDays: DEFAULT_TRIAL_DAYS })
+    console.log(`No license yet: issued a ${DEFAULT_TRIAL_DAYS}-day trial for "${labName}" (ends ${license.expiresAt}).`)
+  } else {
+    console.warn(`Warning: profiles/${name} has no license and no signing key was found at ${signingKeyPath()}, so a packaged build won't open.`)
+  }
+}
 
 // license.json and logo.png are optional per profile — copy if present, otherwise remove
 // whatever a previously-applied profile left behind so this one doesn't inherit it by accident.

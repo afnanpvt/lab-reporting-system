@@ -57,8 +57,8 @@ interface LabAPI {
     setItemAmount(patientId: number, section: string, amount: number): Promise<boolean>
   }
   license: {
-    get(): Promise<{ labName: string; licenseId: string; issuedAt: string } | null>
-    status(): Promise<{ expired: boolean; labName?: string; expiresAt?: string }>
+    status(): Promise<import('./license').LicenseStatus>
+    activate(key: string): Promise<import('./license').ActivationResult>
   }
   window: {
     setTitleBarOverlay(options: { color: string; symbolColor: string }): Promise<void>

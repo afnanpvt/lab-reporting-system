@@ -8,7 +8,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "node scripts/package.js",
-    "profile": "node scripts/apply-profile.js"
+    "profile": "node scripts/apply-profile.js",
+    "license": "node scripts/license.js"
   },
   "dependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",

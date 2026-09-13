@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Shell from './pages/site/Shell'
 import Dashboard from './pages/site/Dashboard'
@@ -13,24 +13,18 @@ import IncentiveReport from './pages/site/IncentiveReport'
 import Reports from './pages/site/Reports'
 import Bill from './pages/site/Bill'
 import TrialExpired from './pages/site/TrialExpired'
+import { refreshLicense, useLicense } from './pages/site/licenseStore'
 
 export default function App() {
-  // Blocks the entire app — no Shell, no routes, nothing — once a trial license's expiresAt has
-  // passed. Checked once at startup rather than per-route: a trial customer isn't meant to see
-  // any part of the app, not even the shell chrome, once it's over. `null` means "still checking"
-  // so we don't flash the real app before the check resolves.
-  const [trialExpired, setTrialExpired] = useState<{ labName?: string; expiresAt?: string } | null>(null)
-  const [checked, setChecked] = useState(false)
+  const license = useLicense()
 
   useEffect(() => {
-    window.api.license.status().then((status) => {
-      setTrialExpired(status.expired ? { labName: status.labName, expiresAt: status.expiresAt } : null)
-      setChecked(true)
-    })
+    refreshLicense()
   }, [])
 
-  if (!checked) return null
-  if (trialExpired) return <TrialExpired labName={trialExpired.labName} expiresAt={trialExpired.expiresAt} />
+  // Render nothing until the license is known, so the app never flashes before an expired-trial lock.
+  if (!license) return null
+  if (license.state === 'expired') return <TrialExpired license={license} />
 
   return (
     <Shell>

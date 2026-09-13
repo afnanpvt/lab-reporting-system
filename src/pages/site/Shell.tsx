@@ -4,6 +4,7 @@ import { LayoutGrid, Users, FileBarChart, Settings, Stethoscope } from 'lucide-r
 import type { ReactNode } from 'react'
 import { syncTitleBarOverlay } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
+import TrialBanner from './TrialBanner'
 
 const NAV = [
   { icon: LayoutGrid, label: 'Dashboard', description: 'Overview & quick actions', path: '/' },
@@ -47,6 +48,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <div className="text-[26px] font-bold tracking-tight" style={{ color: 'var(--accent)' }}>{labName}</div>
         )}
       </header>
+      <TrialBanner />
 
       <div className="flex-1 flex min-h-0 print:h-auto print:overflow-visible">
         {/* Reserves a fixed 80px in the layout so nothing else shifts; the panel that actually

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDb, lockLabName } from './db'
 import { registerIpcHandlers } from './ipc'
-import { verifyLicense } from './license'
+import { getLicenseStatus } from './license'
 
 let mainWindow: BrowserWindow
 
@@ -72,16 +72,14 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   if (!gotLock) return
 
-  const license = verifyLicense()
-  // Unpackaged dev builds (this demo/pitch branch included) run unlicensed — no lab has bought
-  // this install yet, so there's nothing to lock the name to. Packaged builds still require a
-  // real signed license, same as ever.
-  if (!license.ok && !is.dev) {
+  const license = getLicenseStatus()
+  // Unpackaged dev builds run unlicensed. Packaged builds need a validly signed license, but an
+  // expired trial still opens so the renderer can show the trial-ended screen and its key box.
+  if (license.state === 'none' && !is.dev) {
     dialog.showErrorBox(
       'LumaLabs — Unlicensed',
       'This installation does not have a valid license.\n\n' +
-        (license.reason ?? '') +
-        '\n\nContact Scalyft (www.scalyft.tech) to get this lab licensed.'
+        'Contact Scalyft on WhatsApp or phone at 86108 66049 (www.scalyft.tech) to get this lab licensed.'
     )
     app.quit()
     return
@@ -96,7 +94,7 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = 'light'
 
   await initDb()
-  if (license.ok) lockLabName(license.labName!)
+  if (license.labName) lockLabName(license.labName)
   registerIpcHandlers(ipcMain)
   createWindow()
 

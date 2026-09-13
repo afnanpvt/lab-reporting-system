@@ -10,11 +10,11 @@ release/
 lab-data.db
 lab-data.db-journal
 
-# Vendor profiles — only the generic demo profile ships in the repo (see profiles/README.md);
-# every other profile (a real customer's name, logo, signed license) stays local.
-/profiles/*
-!/profiles/demo/
-!/profiles/README.md
+# Vendor profiles and licenses/ledger.csv are committed on purpose: this repo is private and both
+# founders build from it. The private signing key never is.
+
+# A license key pasted into a dev run (packaged builds keep it in %APPDATA%\LumaLabs instead)
+license-activated.json
 
 # Staged branding/license/logo — whatever profiles/apply-profile.js last staged here for the
 # local dev run or build. Regenerated from a profile, never hand-edited, never committed.

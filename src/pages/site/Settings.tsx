@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, MessageCircle } from 'lucide-react'
 import {
   getLabSettings,
   saveLabSettings,
-  getLicenseInfo,
   listProfiles,
   getProfile,
   getProfileLogo,
@@ -12,9 +11,11 @@ import {
   deleteProfile,
   setLogoDataUrl,
   clearLogoDataUrl,
-  type LabSettingsForm,
-  type LicenseInfo
+  type LabSettingsForm
 } from './api'
+import { daysLeftLabel, useLicense } from './licenseStore'
+import LicenseKeyForm from './LicenseKeyForm'
+import { SCALYFT_PHONE_DISPLAY, messageScalyftOnWhatsApp } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 
@@ -45,7 +46,8 @@ function setStoredActiveProfile(name: string | null): void {
 export default function Settings() {
   const navigate = useNavigate()
   const [form, setForm] = useState<LabSettingsForm>(EMPTY)
-  const [license, setLicense] = useState<LicenseInfo | null>(null)
+  const license = useLicense()
+  const hasLicense = license?.state === 'licensed' || license?.state === 'trial'
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [theme, setThemeState] = useState<ThemeId>(getTheme)
@@ -88,9 +90,12 @@ export default function Settings() {
     setStoredActiveProfile(name)
   }
 
+  // Keyed on the licensed lab name because activating a key re-locks lab_name in the database.
   useEffect(() => {
     getLabSettings().then(setForm)
-    getLicenseInfo().then(setLicense)
+  }, [license?.labName])
+
+  useEffect(() => {
     if (import.meta.env.DEV) {
       listProfiles().then((list) => {
         setProfiles(list)
@@ -266,11 +271,11 @@ export default function Settings() {
                   <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)]">Laboratory Information</h2>
                 </div>
 
-                {license ? (
+                {hasLicense ? (
                   <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[var(--bg-app)] border border-[var(--border)]">
                     <Lock size={13} className="text-[var(--ink-3)] flex-shrink-0" />
                     <div className="text-[13px] text-[var(--ink-2)]">
-                      Licensed to <span className="font-medium text-[var(--ink)]">{license.labName}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
+                      Licensed to <span className="font-medium text-[var(--ink)]">{license?.labName}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
                     </div>
                   </div>
                 ) : (
@@ -356,7 +361,7 @@ export default function Settings() {
                         className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)] disabled:opacity-60"
                         placeholder={placeholder}
                         value={form[key]}
-                        disabled={key === 'labName' && !!license}
+                        disabled={key === 'labName' && hasLicense}
                         onChange={(e) => update(key, e.target.value)}
                       />
                     </div>
@@ -365,6 +370,49 @@ export default function Settings() {
               </div>
 
               <div className="space-y-4">
+                <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <KeyRound size={16} className="text-[var(--accent)]" />
+                    <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)]">License</h2>
+                  </div>
+                  {license?.state === 'licensed' ? (
+                    <div className="text-[14px] text-[var(--ink-2)] leading-relaxed">
+                      <div className="flex items-center gap-1.5 font-semibold mb-1" style={{ color: 'var(--success)' }}>
+                        <CheckCircle2 size={15} />
+                        Full version
+                      </div>
+                      Licensed to <span className="font-medium text-[var(--ink)]">{license.labName}</span>
+                      <div className="text-[13px] text-[var(--ink-3)] mt-0.5">
+                        License ID <span className="font-mono text-[var(--ink)] select-text">{license.licenseId}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[14px] text-[var(--ink-2)] leading-relaxed mb-3">
+                        {license?.state === 'trial' ? (
+                          <>
+                            <span className="font-semibold text-[var(--ink)]">Trial: {daysLeftLabel(license.daysLeft)} left</span>
+                            {license.expiresAt && <> (ends {new Date(license.expiresAt).toLocaleDateString()})</>}. License ID{' '}
+                            <span className="font-mono text-[var(--ink)] select-text">{license.licenseId}</span>.
+                          </>
+                        ) : (
+                          'Demo mode, no license installed.'
+                        )}{' '}
+                        To buy the full version, WhatsApp or call Scalyft on{' '}
+                        <span className="font-medium text-[var(--ink)] select-text">{SCALYFT_PHONE_DISPLAY}</span>.
+                      </p>
+                      <button
+                        onClick={() => messageScalyftOnWhatsApp(license)}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 mb-4 text-[14px] font-medium border border-[var(--border-strong)] rounded-xl text-[var(--ink)] hover:bg-[var(--bg-hover)]"
+                      >
+                        <MessageCircle size={15} />
+                        Message on WhatsApp
+                      </button>
+                      <LicenseKeyForm />
+                    </>
+                  )}
+                </div>
+
                 <div className="rounded-2xl p-6" style={{ background: 'var(--success-soft)', border: '1px solid var(--success-soft-border)' }}>
                   <div className="flex items-start gap-3">
                     <ShieldCheck size={19} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />

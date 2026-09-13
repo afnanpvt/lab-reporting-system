@@ -2,8 +2,8 @@ import { IpcMain, BrowserWindow, app, shell, dialog } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'path'
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, rmSync } from 'fs'
-import { dbRun, dbGet, dbAll } from './db'
-import { verifyLicense } from './license'
+import { dbRun, dbGet, dbAll, lockLabName } from './db'
+import { activateLicenseKey, getLicenseStatus } from './license'
 import { getLogoDataUrl, setLogo, clearLogo } from './branding'
 
 const SECTION_TABLES: Record<string, string> = {
@@ -348,21 +348,12 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   // ---- License ----
-  ipcMain.handle('license:get', () => {
-    const result = verifyLicense()
-    return result.ok ? { labName: result.labName, licenseId: result.licenseId, issuedAt: result.issuedAt } : null
-  })
+  ipcMain.handle('license:status', () => getLicenseStatus())
 
-  // Separate from license:get (which Settings uses for its "Licensed to X" banner and stays
-  // null for both "no license" and "expired trial") — App's top-level gate needs to tell those
-  // two apart so it can block the whole app on an expired trial instead of quietly falling back
-  // to open/demo mode the way a missing license does.
-  ipcMain.handle('license:status', () => {
-    const result = verifyLicense()
-    if (result.expired) {
-      return { expired: true, labName: result.labName, expiresAt: result.expiresAt }
-    }
-    return { expired: false }
+  ipcMain.handle('license:activate', (_e, key: string) => {
+    const result = activateLicenseKey(key)
+    if (result.ok && result.status.labName) lockLabName(result.status.labName)
+    return result
   })
 
   // ---- Vendor profiles (dev-only) ----
@@ -409,7 +400,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Lets Settings save whatever's currently filled in (and the currently-applied logo) as a new
   // profile on disk while demoing — a quicker path than hand-writing profiles/<name>/config.json.
   // Same folder shape apply-profile.js already expects (see profiles/README.md); license.json is
-  // never written here, since a real license has to come from scripts/issue-license.js.
+  // never written here, since a real license has to come from scripts/license.js.
   ipcMain.handle('profiles:save', (_e, name: string, config: Record<string, string>, logoDataUrl?: string | null) => {
     if (!is.dev) return false
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')

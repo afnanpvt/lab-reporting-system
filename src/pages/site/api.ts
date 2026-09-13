@@ -367,16 +367,6 @@ export async function deleteProfile(name: string): Promise<boolean> {
   return window.api.profiles.delete(name)
 }
 
-export interface LicenseInfo {
-  labName: string
-  licenseId: string
-  issuedAt: string
-}
-
-export async function getLicenseInfo(): Promise<LicenseInfo | null> {
-  return window.api.license.get()
-}
-
 // ---------------------------------------------------------------------------
 // Reference range overrides — lab-wide, apply to every patient from then on.
 // Stored as one JSON blob under a single lab_settings key rather than a new table, since it's

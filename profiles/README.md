@@ -4,8 +4,8 @@ Each subfolder here is one customer/build target — a name, contact details, an
 logo and a signed license, staged into `resources/` before a dev run or a package build. Nothing
 about the app's code changes between profiles; only which profile is staged.
 
-Only `demo/` is committed — it has no real identity in it. Every other profile (a real, paying
-customer's actual name, logo, and signed license) stays local, never committed. See `.gitignore`.
+Every profile is committed (the repo is private), so builds come out the same on either founder's
+machine. The private signing key is the one thing that never goes in git.
 
 ## Folder shape
 
@@ -13,9 +13,21 @@ customer's actual name, logo, and signed license) stays local, never committed. 
 profiles/<name>/
   config.json   required — { labName, labAddress, labPhone, labEmail, labDoctor }
   logo.png      optional — shown in the app header and report letterhead instead of the text wordmark
-  license.json  optional — a real signed license from scripts/issue-license.js; omit for an
-                unlicensed/open build (e.g. demo)
+  license.json  written by scripts — a 30-day trial the first time the profile is staged, a full
+                license after `npm run license -- <name>`. demo has none (dev/pitch only).
 ```
+
+## Licensing a profile
+
+```
+npm run license -- <name>                    # full license + prints the LUMA-… key to send the lab
+npm run license -- <name> --trial            # fresh 30-day trial from today
+npm run license -- <name> --trial --days 14  # custom trial length
+```
+
+Each run updates `profiles/<name>/license.json` and appends a row to `licenses/ledger.csv` — the
+record of who's on trial and who has paid. Commit both afterwards. See the Licensing section of the
+main README for how the app picks between a built-in license and a pasted key.
 
 ## Using a profile
 
