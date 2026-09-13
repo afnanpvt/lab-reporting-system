@@ -157,7 +157,7 @@ it).
 | `npm run license -- <name> --trial [--days N]` | Issue a fresh trial (default 30 days) |
 | `npm run package` | Build the installer for the staged profile |
 | `npm run package -- <name>` | Stage `<name>`, then build its installer |
-| `npm run package -- --all-profiles` | Build an installer for every profile |
+| `npm run package -- --all-profiles` | Build an installer for every lab (demo is skipped) |
 
 ---
 
@@ -184,7 +184,8 @@ the `dev` branch.
    npm run package -- --all-profiles    # every lab
    ```
 
-   Skip the `demo` installer for customers. It has no license, so it won't open once installed.
+   `demo` is never packaged (it has no license, so an installed copy wouldn't open);
+   `--all-profiles` builds real labs only.
 4. Tag and publish the release with the installers attached:
 
    ```bash

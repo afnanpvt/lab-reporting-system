@@ -3,15 +3,15 @@
  * Wraps `electron-vite build && electron-builder` so the installer filename always includes
  * the currently-staged profile (see package.json's build.nsis.artifactName, which references
  * ${env.PROFILE_NAME}) — electron-builder throws a hard error if that env var is unset, so this
- * guarantees it's always defined, even for a bare `npm run package` with no profile applied yet.
+ * guarantees it's always defined.
  *
  * Usage:
- *   npm run package                 (uses whichever profile resources/.profile-name says, or
- *                                     falls back to "demo" if no profile has been applied yet)
- *   npm run package -- superlab     (applies the "superlab" profile first, then builds)
- *   npm run package -- --all-profiles   (builds one installer per profiles/<name>/ folder —
- *                                         the renderer only needs compiling once, since
- *                                         resources/ is the only thing that differs per vendor)
+ *   npm run package                     (uses whichever profile resources/.profile-name says)
+ *   npm run package -- superlab         (applies the "superlab" profile first, then builds)
+ *   npm run package -- --all-profiles   (one installer per licensed lab — the renderer only needs
+ *                                         compiling once, since resources/ is all that differs)
+ *
+ * demo is never packaged: it has no license, and an installed build without one won't open.
  */
 const { spawnSync } = require('child_process')
 const fs = require('fs')
@@ -39,6 +39,17 @@ function currentProfileName() {
   return fs.existsSync(profileMarker) ? fs.readFileSync(profileMarker, 'utf8').trim() : 'demo'
 }
 
+// Why the staged profile can't become an installer, or null if it can.
+function unpackageableReason(name) {
+  if (name === 'demo') {
+    return 'The demo profile has no license, so an installed build would refuse to open. Show it with `npm run dev`, or stage a real lab first.'
+  }
+  if (!fs.existsSync(path.join(resourcesDir, 'license.json'))) {
+    return `profiles/${name} has no license. Run \`npm run license -- ${name} --trial\` first.`
+  }
+  return null
+}
+
 function buildRenderer() {
   const status = run('npx', ['electron-vite', 'build'])
   if (status !== 0) process.exit(status)
@@ -46,9 +57,9 @@ function buildRenderer() {
 
 function packageCurrentlyStaged() {
   const name = currentProfileName()
-  // A packaged build with no license refuses to open, so never produce one for a real lab.
-  if (name !== 'demo' && !fs.existsSync(path.join(resourcesDir, 'license.json'))) {
-    console.error(`profiles/${name} has no license. Run \`npm run license -- ${name} --trial\` first.`)
+  const reason = unpackageableReason(name)
+  if (reason) {
+    console.error(reason)
     return 1
   }
   return run('npx', ['electron-builder'], { PROFILE_NAME: name })
@@ -59,12 +70,12 @@ const arg = process.argv[2]
 if (arg === '--all-profiles' || arg === '--all') {
   const names = fs
     .readdirSync(profilesDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && d.name !== 'demo')
     .map((d) => d.name)
     .sort()
 
   if (names.length === 0) {
-    console.error(`No profiles found under ${profilesDir}`)
+    console.error(`No lab profiles found under ${profilesDir}`)
     process.exit(1)
   }
 
@@ -83,6 +94,13 @@ if (arg === '--all-profiles' || arg === '--all') {
 }
 
 if (arg) stageProfile(arg)
+
+// Checked before compiling so a demo or unlicensed profile fails fast instead of after a full build.
+const reason = unpackageableReason(currentProfileName())
+if (reason) {
+  console.error(reason)
+  process.exit(1)
+}
 
 buildRenderer()
 process.exit(packageCurrentlyStaged())

@@ -191,10 +191,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   // ---- Printers ----
-  ipcMain.handle('printers:list', () => {
+  ipcMain.handle('printers:list', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!win) return []
-    return win.webContents.getPrinters()
+    return win.webContents.getPrintersAsync()
   })
 
   // ---- Print to PDF ----
