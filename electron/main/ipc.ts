@@ -423,12 +423,12 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return slug
   })
 
-  // "demo" is the one profile committed to the repo (see profiles/README.md) — every clone
-  // expects it to exist, so it's the only name this refuses to touch. Everything else (including
-  // a real customer's profile) is deletable; the renderer confirms with the user before calling
-  // this, since there's no undo once the folder's gone.
+  // "dev" is the generic profile every clone relies on (see profiles/README.md), so it's the only
+  // name this refuses to touch. Everything else (including a real customer's profile) is
+  // deletable; the renderer confirms with the user before calling this, since there's no undo
+  // once the folder's gone.
   ipcMain.handle('profiles:delete', (_e, name: string) => {
-    if (!is.dev || name === 'demo') return false
+    if (!is.dev || name === 'dev') return false
     const dir = join(profilesDir, name)
     if (!existsSync(dir)) return false
     rmSync(dir, { recursive: true, force: true })

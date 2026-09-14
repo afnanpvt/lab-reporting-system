@@ -7,13 +7,13 @@
  * or before `npm run package` to bake it into that build's installer.
  *
  * Usage:
- *   node scripts/apply-profile.js [name]     (defaults to "demo")
+ *   node scripts/apply-profile.js [name]     (defaults to "dev")
  */
 const fs = require('fs')
 const path = require('path')
 const { DEFAULT_TRIAL_DAYS, defaultLicenseId, hasSigningKey, issueForProfile, signingKeyPath } = require('./license-lib')
 
-const name = process.argv[2] || 'demo'
+const name = process.argv[2] || 'dev'
 const profileDir = path.join(__dirname, '..', 'profiles', name)
 const resourcesDir = path.join(__dirname, '..', 'resources')
 
@@ -30,8 +30,9 @@ if (!fs.existsSync(configPath)) {
 fs.copyFileSync(configPath, path.join(resourcesDir, 'branding.json'))
 
 // Every real lab starts on a trial the first time its profile is staged; `npm run license` upgrades
-// it later. demo stays unlicensed since it's the dev/pitch profile.
-if (name !== 'demo' && !fs.existsSync(path.join(profileDir, 'license.json'))) {
+// it later. dev stays unlicensed on disk so `npm run dev` keeps every field editable and never
+// expires; `npm run package -- dev` gives its installer a fresh trial instead (scripts/package.js).
+if (name !== 'dev' &&!fs.existsSync(path.join(profileDir, 'license.json'))) {
   if (hasSigningKey()) {
     const { labName } = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     const license = issueForProfile(name, { labName, licenseId: defaultLicenseId(name, true), trialDays: DEFAULT_TRIAL_DAYS })

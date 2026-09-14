@@ -86,6 +86,7 @@ module.exports = {
   hasSigningKey,
   defaultLicenseId,
   encodeLicenseKey,
+  signLicense,
   appendToLedger,
   issueForProfile
 }

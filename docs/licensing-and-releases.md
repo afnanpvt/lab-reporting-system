@@ -68,18 +68,19 @@ success, a normal terminal works.
 ### Run the app locally
 
 ```bash
-npm run profile <name>     # e.g. superlab, sunlab, demo
+npm run profile <name>     # e.g. superlab, sunlab, dev
 npm run dev
 ```
 
-`demo` is the generic pitch profile with no license. It only runs in dev mode.
+`dev` is the generic profile with no license on disk, so locally it never expires. Its installer
+(`npm run package -- dev`) gets a fresh 30-day trial at build time: build it right before a pitch.
 
 ### Onboard a new lab on a 30-day trial
 
 1. `git pull`
 2. Create their profile. The easy way: `npm run dev`, go to **Settings**, fill in the lab details and
    logo, then use **Save as new profile** in the yellow dev-only panel. Or create
-   `profiles/<name>/config.json` by hand (copy `profiles/demo/config.json`).
+   `profiles/<name>/config.json` by hand (copy `profiles/dev/config.json`).
 3. Stage it. This issues the 30-day trial automatically the first time:
 
    ```bash
@@ -157,7 +158,7 @@ it).
 | `npm run license -- <name> --trial [--days N]` | Issue a fresh trial (default 30 days) |
 | `npm run package` | Build the installer for the staged profile |
 | `npm run package -- <name>` | Stage `<name>`, then build its installer |
-| `npm run package -- --all-profiles` | Build an installer for every lab (demo is skipped) |
+| `npm run package -- --all-profiles` | Build an installer for every profile, including `dev` |
 
 ---
 
@@ -184,8 +185,7 @@ the `dev` branch.
    npm run package -- --all-profiles    # every lab
    ```
 
-   `demo` is never packaged (it has no license, so an installed copy wouldn't open);
-   `--all-profiles` builds real labs only.
+   `npm run package -- dev` builds the generic pitch installer with a fresh 30-day trial.
 4. Tag and publish the release with the installers attached:
 
    ```bash

@@ -361,8 +361,8 @@ export async function saveProfile(name: string, form: LabSettingsForm, logoDataU
   return window.api.profiles.save(name, form, logoDataUrl)
 }
 
-// "demo" refuses to delete itself (see the main-process handler) — it's the one profile
-// committed to the repo, so every clone expects it to exist.
+// "dev" refuses to delete itself (see the main-process handler) — it's the generic profile every
+// clone expects to exist.
 export async function deleteProfile(name: string): Promise<boolean> {
   return window.api.profiles.delete(name)
 }

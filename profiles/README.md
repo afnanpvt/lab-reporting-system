@@ -14,7 +14,7 @@ profiles/<name>/
   config.json   required — { labName, labAddress, labPhone, labEmail, labDoctor }
   logo.png      optional — shown in the app header and report letterhead instead of the text wordmark
   license.json  written by scripts — a 30-day trial the first time the profile is staged, a full
-                license after `npm run license -- <name>`. demo has none (dev/pitch only).
+                license after `npm run license -- <name>`. dev has none on disk (see below).
 ```
 
 ## Licensing a profile
@@ -37,7 +37,7 @@ node scripts/apply-profile.js <name>
 
 Stages that profile's files into `resources/` and remembers the name in `resources/.profile-name`
 (gitignored) — the license (if any) can only be applied this way, since it's verified once at
-launch. Defaults to `demo` if no name is given.
+launch. Defaults to `dev` if no name is given.
 
 For everyday dev/demo use you don't need this script at all: Settings' dev-only "profile preview"
 panel applies a profile's fields *and* logo live, straight from the running app, as soon as you
@@ -61,5 +61,7 @@ npm run package -- --all-profiles  # builds one installer per lab profile in one
 does), then loops profile-stage + package for every lab under `profiles/`, producing e.g.
 `LumaLabs-superlab-Setup-2.1.0.exe` and `LumaLabs-sunlab-Setup-2.1.0.exe` in one run.
 
-`demo` is never packaged: it has no license, and an installed build without one won't open. Show it
-with `npm run profile demo` and `npm run dev` instead.
+`dev` is the generic profile. It has no license on disk, so `npm run dev` keeps every field editable
+and never expires. `npm run package -- dev` (and `--all-profiles`) gives its installer a fresh
+30-day trial at build time, recorded in `licenses/ledger.csv` as `DEV-TRIAL`. Rebuild it before a
+pitch so the trial clock starts that day.

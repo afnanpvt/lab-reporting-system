@@ -114,7 +114,7 @@ export default function Settings() {
   const update = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
   // Applies a profile's text fields AND its logo (or clears the logo if the profile has none,
-  // e.g. switching back to demo) — the license (when a profile has one) is still baked in at
+  // e.g. switching back to dev) — the license (when a profile has one) is still baked in at
   // build/launch time (see profiles/README.md), the one piece this can't do live. Fires as soon
   // as the dropdown selection changes, no separate "apply" click needed.
   const handleApplyProfile = async (name: string) => {
@@ -160,10 +160,10 @@ export default function Settings() {
     }
   }
 
-  // "demo" can't be deleted (see the main-process handler) — everything else can, but there's no
+  // "dev" can't be deleted (see the main-process handler) — everything else can, but there's no
   // undo once the folder's gone, so this confirms first.
   const handleDeleteProfile = async () => {
-    if (!selectedProfile || selectedProfile === 'demo') return
+    if (!selectedProfile || selectedProfile === 'dev') return
     if (!window.confirm(`Delete the "${selectedProfile}" profile? This can't be undone.`)) return
     const deleted = await deleteProfile(selectedProfile)
     if (!deleted) return
@@ -512,7 +512,7 @@ export default function Settings() {
                           <option key={p} value={p}>{p}</option>
                         ))}
                       </select>
-                      {selectedProfile !== 'demo' && (
+                      {selectedProfile !== 'dev' && (
                         <button
                           type="button"
                           onClick={handleDeleteProfile}
