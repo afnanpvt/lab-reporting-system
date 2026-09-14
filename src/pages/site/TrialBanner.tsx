@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { daysLeftLabel, useLicense } from './licenseStore'
-import { SCALYFT_PHONE_DISPLAY, messageScalyftOnWhatsApp } from './contact'
+import { contactScalyft } from './contact'
 
 const WARN_WHEN_DAYS_LEFT = 7
 
@@ -17,11 +17,10 @@ export default function TrialBanner() {
     >
       <Clock size={14} className="flex-shrink-0" style={{ color: 'var(--warning)' }} />
       <span className="flex-1">
-        <span className="font-semibold">Trial: {daysLeftLabel(license.daysLeft)} left.</span> WhatsApp or call Scalyft on{' '}
-        {SCALYFT_PHONE_DISPLAY} to buy the full version.
+        <span className="font-semibold">Trial: {daysLeftLabel(license.daysLeft)} left.</span> Contact Scalyft to buy the full version.
       </span>
-      <button onClick={() => messageScalyftOnWhatsApp(license)} className="font-medium hover:underline">
-        Message on WhatsApp
+      <button onClick={contactScalyft} className="font-medium hover:underline">
+        Contact Scalyft
       </button>
       <button onClick={() => navigate('/settings')} className="font-medium hover:underline">
         Enter license key

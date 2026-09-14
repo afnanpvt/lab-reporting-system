@@ -128,7 +128,7 @@ A license is either a **trial** (has an `expiresAt`, signed into the payload so 
 1. **Built into the installer** — `resources/license.json`, staged from the profile.
 2. **Pasted in the app** — a `LUMA-…` key entered in Settings → License or on the trial-ended screen, saved to `%APPDATA%\LumaLabs\license.json` so updates and reinstalls keep it. A pasted key must be for the same lab the installer was built for.
 
-A packaged build with no valid license won't open. An expired trial opens to a lock screen with Scalyft's WhatsApp/phone contact and a key box; the last 7 days of a trial show a banner. Whichever license wins, its lab name is force-written into the database on every launch (`lockLabName` in `db.ts`).
+A packaged build with no valid license won't open. An expired trial opens to a lock screen with a "Contact Scalyft" button (scalyft.tech) and a key box; the last 7 days of a trial show a banner. Whichever license wins, its lab name is force-written into the database on every launch (`lockLabName` in `db.ts`).
 
 **Day-to-day flow** (every issued license is also appended to `licenses/ledger.csv`, which is committed):
 

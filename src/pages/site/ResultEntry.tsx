@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator } from 'lucide-react'
 import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, type Patient, type ResultsBySection } from './api'
 import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
+import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
+
+interface PendingIssue { sectionIndex: number; sectionLabel: string; field: string; issue: ValueIssue }
 
 // Excludes the reference-range editor's own <input> (see RangeEditor's data-range-editor
 // attribute) — without that, opening a range editor mid-entry would insert it into the Tab/Enter/
@@ -20,6 +23,12 @@ const RangeOverridesContext = createContext<{
   overrides: Record<string, string>
   setOverride: (key: string, range: string | null) => void
 }>({ overrides: {}, setOverride: () => {} })
+
+/** The active section's value-check notes (see valueChecks.ts), threaded the same way as range overrides. */
+const ValueChecksContext = createContext<{
+  issues: IssuesByField
+  dismiss: (field: string, issueId: string) => void
+}>({ issues: {}, dismiss: () => {} })
 
 export default function ResultEntry() {
   const location = useLocation()
@@ -81,6 +90,25 @@ export default function ResultEntry() {
     [patient, results.others]
   )
 
+  // Notes the technician marked "Value is correct" (or hid). Session-only, and keyed by the reading
+  // behind each note, so editing the value brings its warning back.
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set())
+  const [pendingIssues, setPendingIssues] = useState<PendingIssue[] | null>(null)
+
+  const issuesBySection = useMemo(() => {
+    const out: Record<string, IssuesByField> = {}
+    if (!patient) return out
+    for (const c of categories) {
+      const visible: IssuesByField = {}
+      for (const [field, list] of Object.entries(checksForSection(c.key, results[c.key] ?? {}))) {
+        const kept = list.filter((issue) => !dismissed.has(`${patient.id}|${c.key}|${field}|${issue.id}`))
+        if (kept.length > 0) visible[field] = kept
+      }
+      out[c.key] = visible
+    }
+    return out
+  }, [categories, results, dismissed, patient])
+
   useEffect(() => {
     if (!resultsLoaded) return
     const firstIncomplete = categories.findIndex(
@@ -123,6 +151,24 @@ export default function ResultEntry() {
     setSectionResults(patient.id, active.key, merged)
   }, [active, patient, results])
 
+  const dismissIssue = useCallback((field: string, issueId: string) => {
+    if (!patient || !active) return
+    setDismissed((prev) => new Set(prev).add(`${patient.id}|${active.key}|${field}|${issueId}`))
+  }, [patient, active])
+
+  // Review report goes straight through when nothing needs checking; otherwise it lists what's
+  // outstanding first. Suggestions (calculated values) never hold it up.
+  const openReview = useCallback(() => {
+    if (!patient) return
+    const pending = categories.flatMap((c, sectionIndex) =>
+      Object.entries(issuesBySection[c.key] ?? {}).flatMap(([field, list]) =>
+        list.filter((issue) => issue.level !== 'suggest').map((issue) => ({ sectionIndex, sectionLabel: c.label || 'Others', field, issue }))
+      )
+    )
+    if (pending.length === 0) navigate(`/preview/${patient.id}`, { state: { patient } })
+    else setPendingIssues(pending)
+  }, [patient, categories, issuesBySection, navigate])
+
   const isOthers = active?.key === 'others'
 
   // 'Others' rows are keyed by the test name itself, so renaming or removing a row
@@ -156,7 +202,7 @@ export default function ResultEntry() {
       }
       if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault()
-        if (patient) navigate(`/preview/${patient.id}`, { state: { patient } })
+        openReview()
         return
       }
       if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -171,7 +217,7 @@ export default function ResultEntry() {
     }
     window.addEventListener('keydown', onGlobalKey)
     return () => window.removeEventListener('keydown', onGlobalKey)
-  }, [patient, navigate, goTo, activeIndex, prevPatient, nextPatient])
+  }, [patient, navigate, goTo, activeIndex, prevPatient, nextPatient, openReview])
 
   // Enter, forward-Tab, and Shift+Tab all move straight between value fields — skipping over each
   // row's inline range-fill/edit-range buttons, which sit in the DOM between one row's input and
@@ -234,6 +280,7 @@ export default function ResultEntry() {
 
   return (
     <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride }}>
+    <ValueChecksContext.Provider value={{ issues: issuesBySection[active.key] ?? {}, dismiss: dismissIssue }}>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
         <div className="flex items-center gap-4 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0">
@@ -310,7 +357,7 @@ export default function ResultEntry() {
             Bill
           </button>
           <button
-            onClick={() => navigate(`/preview/${patient.id}`, { state: { patient } })}
+            onClick={openReview}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white text-[14px] font-medium rounded-xl hover:bg-[var(--accent-ink)] shadow-sm"
           >
             <Eye size={14} />
@@ -324,6 +371,8 @@ export default function ResultEntry() {
             {categories.map((c, idx) => {
               const state: CompletionState = getCompletionState(c.key, results[c.key] ?? {})
               const isActive = idx === activeIndex
+              const toCheck = Object.values(issuesBySection[c.key] ?? {}).flat().filter((i) => i.level !== 'suggest')
+              const hasCritical = toCheck.some((i) => i.level === 'critical')
               return (
                 <button
                   key={c.key}
@@ -338,6 +387,19 @@ export default function ResultEntry() {
                   {isActive && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--accent)]" />}
                   <Dot state={state} />
                   <span className="truncate">{c.label || 'Others'}</span>
+                  {toCheck.length > 0 && (
+                    <span
+                      title={`${toCheck.length} value${toCheck.length === 1 ? '' : 's'} to check`}
+                      className="ml-auto flex-shrink-0 inline-flex items-center gap-1 text-[11.5px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{
+                        background: hasCritical ? 'var(--danger-soft)' : 'var(--warning-soft)',
+                        color: hasCritical ? 'var(--danger-ink)' : 'var(--warning-ink)'
+                      }}
+                    >
+                      {hasCritical ? <AlertOctagon size={11} /> : <AlertTriangle size={11} />}
+                      {toCheck.length}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -396,7 +458,16 @@ export default function ResultEntry() {
         </div>
 
         {showShortcuts && <KeyboardShortcutsHelp onClose={() => setShowShortcuts(false)} />}
+        {pendingIssues && (
+          <ChecksBeforeReview
+            issues={pendingIssues}
+            onClose={() => setPendingIssues(null)}
+            onGoTo={(sectionIndex) => { setPendingIssues(null); goTo(sectionIndex) }}
+            onContinue={() => { setPendingIssues(null); navigate(`/preview/${patient.id}`, { state: { patient } }) }}
+          />
+        )}
       </div>
+    </ValueChecksContext.Provider>
     </RangeOverridesContext.Provider>
   )
 }
@@ -529,10 +600,110 @@ function Dot({ state }: { state: CompletionState }) {
   return <span className="w-2 h-2 rounded-full border-[1.5px] border-[var(--ink-4)] flex-shrink-0" />
 }
 
+const ISSUE_TONES = {
+  critical: { bg: 'var(--danger-soft)', border: 'var(--danger-soft-border)', fg: 'var(--danger-ink)', Icon: AlertOctagon },
+  check: { bg: 'var(--warning-soft)', border: 'var(--warning-soft-border)', fg: 'var(--warning-ink)', Icon: AlertTriangle },
+  suggest: { bg: 'var(--accent-soft)', border: 'var(--accent-soft-border)', fg: 'var(--accent-ink)', Icon: Calculator }
+} as const
+
+function IssueNote({ issue, onFix, onDismiss }: { issue: ValueIssue; onFix: (value: string) => void; onDismiss: () => void }) {
+  const tone = ISSUE_TONES[issue.level]
+  return (
+    <div
+      className="flex items-start gap-2 text-[13px] leading-snug rounded-lg px-2.5 py-1.5 mt-1.5 border"
+      style={{ background: tone.bg, borderColor: tone.border, color: tone.fg }}
+    >
+      <tone.Icon size={14} className="flex-shrink-0 mt-[2px]" />
+      <span className="flex-1 min-w-0">{issue.message}</span>
+      {issue.fix && (
+        <button type="button" onClick={() => onFix(issue.fix!.value)} className="font-semibold underline whitespace-nowrap">
+          {issue.fix.label}
+        </button>
+      )}
+      <button type="button" onClick={onDismiss} className="opacity-70 hover:opacity-100 whitespace-nowrap">
+        {issue.level === 'suggest' ? 'Hide' : 'Value is correct'}
+      </button>
+    </div>
+  )
+}
+
+function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
+  issues: PendingIssue[]; onClose: () => void; onGoTo: (sectionIndex: number) => void; onContinue: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const critical = issues.filter((i) => i.issue.level === 'critical').length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26, 36, 48, 0.35)' }} onClick={onClose}>
+      <div
+        className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-lg p-6"
+        style={{ width: '480px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <AlertTriangle size={17} className="text-[var(--warning)]" />
+          <h2 className="text-[16px] font-semibold text-[var(--ink)]">
+            {issues.length} value{issues.length === 1 ? '' : 's'} to check before the report
+          </h2>
+        </div>
+        <p className="text-[13px] text-[var(--ink-3)] mb-4">
+          {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'} — inform the referring doctor. ` : ''}
+          Click one to jump to it.
+        </p>
+
+        <div className="overflow-y-auto -mx-1 px-1 space-y-1.5 mb-5">
+          {issues.map(({ sectionIndex, sectionLabel, field, issue }) => {
+            const tone = ISSUE_TONES[issue.level]
+            return (
+              <button
+                key={`${sectionIndex}:${field}:${issue.id}`}
+                type="button"
+                onClick={() => onGoTo(sectionIndex)}
+                className="w-full text-left flex items-start gap-2 rounded-lg px-3 py-2 border hover:brightness-95"
+                style={{ background: tone.bg, borderColor: tone.border, color: tone.fg }}
+              >
+                <tone.Icon size={14} className="flex-shrink-0 mt-[3px]" />
+                <span className="text-[13px] leading-snug">
+                  <span className="font-semibold">{sectionLabel} · {humanizeKey(field)}</span> — {issue.message}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onGoTo(issues[0].sectionIndex)}
+            className="px-4 py-2 text-[14px] font-medium text-[var(--ink)] border border-[var(--border-strong)] rounded-xl hover:bg-[var(--bg-hover)]"
+          >
+            Back to results
+          </button>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
+          >
+            Review report anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   sectionKey: string; fieldKey: string; gender: string; value: string; onChange: (v: string) => void; indent?: boolean
 }) {
   const { overrides, setOverride } = useContext(RangeOverridesContext)
+  const { issues: sectionIssues, dismiss } = useContext(ValueChecksContext)
+  const issues = sectionIssues[fieldKey] ?? []
+  const checkBorder = issues.some((i) => i.level === 'critical') ? 'var(--danger)' : issues.some((i) => i.level === 'check') ? 'var(--warning)' : undefined
   const [editing, setEditing] = useState(false)
 
   const label = humanizeKey(fieldKey)
@@ -575,7 +746,8 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   }
 
   return (
-    <div className={`flex items-center gap-3 py-2.5 border-b border-[var(--border-soft)] ${indent ? 'pl-6' : ''}`}>
+    <div className={`py-2.5 border-b border-[var(--border-soft)] ${indent ? 'pl-6' : ''}`}>
+    <div className="flex items-center gap-3">
       <span className="text-[15px] text-[var(--ink)] flex-shrink-0" style={{ width: '13rem' }} title={label}>
         {indent && <span className="text-[var(--ink-4)] mr-1.5">–</span>}
         {label}
@@ -585,7 +757,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleValueKeyDown}
         className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-        style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
+        style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
       />
       <span className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0" style={{ width: '6rem' }}>{unit}</span>
 
@@ -634,6 +806,14 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
           </>
         )}
       </div>
+    </div>
+      {issues.length > 0 && (
+        <div style={{ marginLeft: 'calc(13rem + 0.75rem)' }}>
+          {issues.map((issue) => (
+            <IssueNote key={issue.id} issue={issue} onFix={onChange} onDismiss={() => dismiss(fieldKey, issue.id)} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

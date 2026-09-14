@@ -79,7 +79,7 @@ app.whenReady().then(async () => {
     dialog.showErrorBox(
       'LumaLabs — Unlicensed',
       'This installation does not have a valid license.\n\n' +
-        'Contact Scalyft on WhatsApp or phone at 86108 66049 (www.scalyft.tech) to get this lab licensed.'
+        'Contact Scalyft (www.scalyft.tech) to get this lab licensed.'
     )
     app.quit()
     return

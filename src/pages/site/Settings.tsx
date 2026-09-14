@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, ExternalLink } from 'lucide-react'
 import {
   getLabSettings,
   saveLabSettings,
@@ -15,7 +15,7 @@ import {
 } from './api'
 import { daysLeftLabel, useLicense } from './licenseStore'
 import LicenseKeyForm from './LicenseKeyForm'
-import { SCALYFT_PHONE_DISPLAY, messageScalyftOnWhatsApp } from './contact'
+import { contactScalyft } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 
@@ -398,15 +398,14 @@ export default function Settings() {
                         ) : (
                           'Demo mode, no license installed.'
                         )}{' '}
-                        To buy the full version, WhatsApp or call Scalyft on{' '}
-                        <span className="font-medium text-[var(--ink)] select-text">{SCALYFT_PHONE_DISPLAY}</span>.
+                        To buy the full version, contact Scalyft.
                       </p>
                       <button
-                        onClick={() => messageScalyftOnWhatsApp(license)}
+                        onClick={contactScalyft}
                         className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 mb-4 text-[14px] font-medium border border-[var(--border-strong)] rounded-xl text-[var(--ink)] hover:bg-[var(--bg-hover)]"
                       >
-                        <MessageCircle size={15} />
-                        Message on WhatsApp
+                        <ExternalLink size={15} />
+                        Contact Scalyft
                       </button>
                       <LicenseKeyForm />
                     </>

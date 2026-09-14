@@ -52,8 +52,8 @@ success, a normal terminal works.
   pasted key and uses the better one (full beats trial, a later trial beats an earlier one). A
   pasted key only works if it's for the same lab name the installer was built for.
 - **Trials last 30 days from the day they're issued**, not from the day the lab installs. In the
-  last 7 days a banner appears. After expiry the app opens to a lock screen with our WhatsApp/phone
-  (86108 66049) and the key box. Their data is never deleted.
+  last 7 days a banner appears. After expiry the app opens to a lock screen with a "Contact Scalyft"
+  button (opens scalyft.tech) and the key box. Their data is never deleted.
 - **No valid license means the installed app won't open.** Dev mode (`npm run dev`) ignores this.
 - **`licenses/ledger.csv` is our record** of every license issued: date, lab, license ID,
   trial/paid, expiry, and the key itself. The scripts add rows automatically.
