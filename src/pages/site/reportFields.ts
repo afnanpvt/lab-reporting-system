@@ -229,6 +229,86 @@ export function unitFor(sectionKey: string, fieldKey: string): string {
   return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
 }
 
+// Every serology field whose normal result is a plain Negative or Non-Reactive — built from
+// FIELD_META above rather than listed by hand twice, so a field added there with one of these
+// two ranges automatically gets the matching dropdown here too.
+const NEGATIVE_SEROLOGY_FIELDS = Object.entries(FIELD_META.serology)
+  .filter(([, meta]) => meta.range === 'Negative')
+  .map(([key]) => key)
+const NON_REACTIVE_SEROLOGY_FIELDS = Object.entries(FIELD_META.serology)
+  .filter(([, meta]) => meta.range === 'Non-Reactive')
+  .map(([key]) => key)
+// Widal is the one composite titre field: "Negative/Positive 1:NN dilution", not a plain word.
+const WIDAL_FIELDS = Object.entries(FIELD_META.serology)
+  .filter(([, meta]) => meta.range === 'Negative < 1:20')
+  .map(([key]) => key)
+
+/**
+ * Preset choices for fields better picked from a short list than typed free-hand, so a result
+ * always comes out as one of the same few words instead of whatever spelling whoever's typing
+ * reaches for ("Pale Yellow" vs "pale yellow", "Neg" vs "Negative", "Non Reactive" vs
+ * "Non-Reactive"). The urine option sets below aren't guessed — they're the actual distinct
+ * values Super Lab's old ISS system recorded for each field across ~2,200-2,300 real patients
+ * (see docs/value-checks.md's sibling analysis), so a technician sees the exact same vocabulary
+ * they already know, just picked instead of typed.
+ */
+const FIELD_OPTIONS: Record<string, Record<string, string[]>> = {
+  haematology: {
+    // Blood Group / Rh Typing were Super Lab's single most-recorded qualitative pair in their
+    // old system (807 real patients — busier than most Serology tests) and were free text here
+    // with no dropdown at all. ICT/DCT (Indirect/Direct Coombs) are the same Negative/Positive
+    // shape, just far less frequently ordered (99 and 6 records respectively).
+    blood_group: ['O', 'A', 'B', 'AB'],
+    rh_typing: ['Positive', 'Negative'],
+    ict: ['Negative', 'Positive'],
+    dct: ['Negative', 'Positive']
+  },
+  urine: {
+    // Ordered by how often Super Lab actually recorded each, most common first.
+    colour: ['Straw Yellow', 'Pale Yellow', 'Yellow', 'Reddish', 'Milky White'],
+    appearance: ['Clear', 'Slightly Turbid', 'Turbid'],
+    reaction: ['Acidic', 'Alkaline', 'Neutral'],
+    albumin: ['Nil', 'Faint Trace', 'Trace', '(+)', '(++)', '(+++)'],
+    sugar: ['Nil', 'Trace', '(+)', '(++)', '(+++)'],
+    ketone: ['Negative', 'Positive'],
+    bile_salt: ['Negative', 'Positive'],
+    bile_pigment: ['Negative', 'Positive'],
+    occult_blood: ['Nil', 'Trace', '(+)', '(++)', '(+++)'],
+    bilirubin: ['Nil', 'Trace', '(+)', '(++)', '(+++)'],
+    // Never actually ordered in Super Lab's own history, but standard qualitative dipstick
+    // parameters — included for completeness, worth Super Lab's doctor confirming the wording.
+    urobilinogen: ['Normal', 'Increased'],
+    nitrites: ['Negative', 'Positive']
+  },
+  serology: {
+    ...Object.fromEntries(NEGATIVE_SEROLOGY_FIELDS.map((key) => [key, ['Negative', 'Positive']])),
+    ...Object.fromEntries(NON_REACTIVE_SEROLOGY_FIELDS.map((key) => [key, ['Non-Reactive', 'Weakly Reactive', 'Reactive']])),
+    ...Object.fromEntries(
+      WIDAL_FIELDS.map((key) => [
+        key,
+        ['Negative 1:20 dilution', 'Positive 1:20 dilution', 'Positive 1:40 dilution', 'Positive 1:80 dilution', 'Positive 1:160 dilution', 'Positive 1:320 dilution']
+      ])
+    )
+  }
+}
+
+export function optionsFor(sectionKey: string, fieldKey: string): string[] | null {
+  return FIELD_OPTIONS[sectionKey]?.[fieldKey] ?? null
+}
+
+// Which fields get the collapsible "Tested by a different method?" note — in both Result Entry
+// (ResultEntry.tsx's FieldRow) and the printed report (ReportPreview.tsx). Every Serology test
+// (kit brand varies constantly there), plus the two fields elsewhere that Super Lab's old system
+// actually recorded a method for: Blood Sugar (glucometer vs analyzer) and Amylase (a named assay
+// method). Nothing else in their real history ever showed this pattern, so it isn't offered
+// anywhere else — one on every field in every section would just be noise.
+export function supportsMethodNote(sectionKey: string, fieldKey: string): boolean {
+  if (sectionKey === 'serology') return true
+  if (sectionKey === 'biochemistry') return fieldKey === 'glucose_f' || fieldKey === 'glucose_pp' || fieldKey === 'glucose_r'
+  if (sectionKey === 'gtt_lipid') return fieldKey === 's_amylase'
+  return false
+}
+
 /**
  * 'Others' rows have no fixed unit/reference — staff can type their own per row, unlike every
  * fixed section where both come from FIELD_META. Since the whole section is still stored as

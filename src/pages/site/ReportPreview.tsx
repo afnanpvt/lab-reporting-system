@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight } from 'lucide-react'
-import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getLogoDataUrl, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow } from './reportFields'
+import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
+import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
 
@@ -14,7 +14,20 @@ import { paginateReport, type ReportBlock } from './pagination'
  */
 const PAGE_W = '210mm'
 const PAGE_H = '297mm'
-const PAGE_PAD = '12mm 14mm'
+const PAGE_PAD_V = '12mm'
+const PAGE_PAD_H_MM = 14
+const PAGE_PAD_H = `${PAGE_PAD_H_MM}mm`
+const PAGE_PAD = `${PAGE_PAD_V} ${PAGE_PAD_H}`
+
+// "A. Noorul Ameen, M.Sc. (Biochem), DMLT, DMRT, DCA" -> the name printed bold on its own line
+// and the qualifications smaller underneath, matching how it always printed before labDoctor
+// became one free-typed Settings field. A doctor with no comma (or no qualifications on file)
+// just gets the one line — nothing assumes a comma has to be there.
+function splitDoctorLine(labDoctor: string): { name: string; qualifications: string } {
+  const commaIndex = labDoctor.indexOf(',')
+  if (commaIndex === -1) return { name: labDoctor, qualifications: '' }
+  return { name: labDoctor.slice(0, commaIndex).trim(), qualifications: labDoctor.slice(commaIndex + 1).trim() }
+}
 
 /** "Now", formatted to match the app's existing date/time style, with a 12-hour AM/PM clock. */
 function formatReportedAt(): string {
@@ -24,25 +37,30 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor }: {
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor, hiddenReferenceSections }: {
   block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string
+  hiddenReferenceSections: Record<string, boolean>
 }) {
   if (block.kind === 'patientInfo') {
+    // Reported uses the date/time entered on the patient form (see PatientEntry.tsx's "Dates &
+    // Times" editor) once it's been set; a patient saved before that existed still falls back to
+    // the live moment the report is opened, same as this always used to work.
+    const reported = patient.rptDate ? `${patient.rptDate} ${formatTime12h(patient.rptTime)}` : reportedAt
+
+    // Patient name, age/sex, referred-by and SID all repeat on the strip under the letterhead on
+    // every page (including this one — see renderPage), so this block only carries what that
+    // strip doesn't: the title and the collection/receipt/report timestamps. Showing the same
+    // patient/referred-by/age-sex line twice in a row right at the top of page 1 was redundant.
     return (
-      <div className="avoid-break">
-        <div className="flex items-center justify-between mb-3 pb-2.5 border-b-2" style={{ borderColor: 'var(--ink)' }}>
+      <div className="avoid-break mb-6" data-role="patient-info-block">
+        <div className="flex items-center justify-between pb-2.5 border-b-2" style={{ borderColor: 'var(--ink)' }}>
           <div className="text-[17px] font-bold uppercase tracking-widest text-[var(--ink)]">Laboratory Report</div>
           <div className="text-[11px] text-right text-[#333] leading-relaxed">
             SID (Unique Ref. No.) <b className="text-[#111]">{patient.sid}</b><br />
             Collected <b className="text-[#111]">{patient.date} {formatTime12h(patient.regTime)}</b><br />
             Received <b className="text-[#111]">{patient.date} {formatTime12h(patient.regTime)}</b><br />
-            Reported <b className="text-[#111]">{reportedAt}</b>
+            Reported <b className="text-[#111]">{reported}</b>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[13px] mb-1 text-[#333]">
-          <div>Patient <b className="text-[#111]">{patient.name}</b></div>
-          <div>Referred by <b className="text-[#111]">{patient.referredBy}</b></div>
-          <div className="col-span-2">Age / Sex <b className="text-[#111]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></div>
         </div>
       </div>
     )
@@ -50,7 +68,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
 
   if (block.kind === 'emptySection') {
     return (
-      <div className="avoid-break mb-6">
+      <div className="avoid-break mb-6" data-role="empty-section-block">
         <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2">
           {block.label}
         </div>
@@ -62,13 +80,18 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
   }
 
   if (block.kind === 'sectionChunk') {
+    // A lab can turn the reference column off for a whole section (see the "Show reference
+    // values" checkbox in ResultEntry.tsx) — when it's off the column is dropped entirely
+    // rather than left blank, on-screen and on paper alike.
+    const showReference = !hiddenReferenceSections[block.sectionKey]
+    const gridCols = showReference ? 'grid-cols-[2.4fr_1fr_1fr_1.6fr]' : 'grid-cols-[2.4fr_1fr_1fr]'
     return (
-      <div className="avoid-break mb-6">
-        <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2">
+      <div className="avoid-break mb-6" data-role="section-chunk">
+        <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2" data-role="section-header">
           {block.label}{block.continued && <span className="font-normal italic text-[var(--ink-3)]"> (continued)</span>}
         </div>
-        <div className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] text-[11.5px] font-bold uppercase tracking-wide text-[var(--ink)] border-b border-[#bbb] pb-1.5 mb-1">
-          <span>Test</span><span>Result</span><span>Unit</span><span>Reference</span>
+        <div className={`grid ${gridCols} text-[11.5px] font-bold uppercase tracking-wide text-[var(--ink)] border-b border-[#bbb] pb-1.5 mb-1`} data-role="column-header">
+          <span>Test</span><span>Result</span><span>Unit</span>{showReference && <span>Reference</span>}
         </div>
         {block.keys.map((k) => {
           const data = results[block.sectionKey] ?? {}
@@ -79,16 +102,23 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
           const unit = other ? other.unit : unitFor(block.sectionKey, k)
           const flag = flagFor(value, range, isOthers ? undefined : k)
           const arrowColor = flag ? 'var(--danger)' : undefined
+          // "Method/kit used" note (see supportsMethodNote and ResultEntry.tsx's FieldRow) —
+          // printed as a small parenthetical under the result, matching how Super Lab's old
+          // system printed e.g. "Negative (SD Diagnostics)". Blank unless staff filled it in.
+          const method = !isOthers && supportsMethodNote(block.sectionKey, k) ? data[k + '_method'] : undefined
           return (
-            <div key={k} className="grid grid-cols-[2.4fr_1fr_1fr_1.6fr] items-baseline text-[13px] py-2 border-b border-[#e8e8e8]">
+            <div key={k} className={`grid ${gridCols} items-baseline text-[13px] py-2 border-b border-[#e8e8e8]`} data-role="result-row">
               <span className="font-bold text-[#111]">{isOthers ? k : humanizeKey(k)}</span>
-              <span style={{ fontWeight: flag ? 700 : 600, fontSize: '13.5px', color: flag ? arrowColor : '#111', fontFamily: 'Consolas, monospace' }}>
-                {flag === 'high' && <span>▲ </span>}
-                {flag === 'low' && <span>▼ </span>}
-                {value}
+              <span>
+                <span style={{ fontWeight: flag ? 700 : 600, fontSize: '13.5px', color: flag ? arrowColor : '#111', fontFamily: 'Consolas, monospace' }}>
+                  {flag === 'high' && <span>▲ </span>}
+                  {flag === 'low' && <span>▼ </span>}
+                  {value}
+                </span>
+                {method && <span className="block text-[10.5px] italic text-[#666] font-normal">({method})</span>}
               </span>
               <span className="text-[#333]">{unit}</span>
-              <span className="text-[#333]">{range}</span>
+              {showReference && <span className="text-[#333]">{range}</span>}
             </div>
           )
         })}
@@ -97,19 +127,33 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
   }
 
   return (
-    <div className="avoid-break">
+    <div className="avoid-break" data-role="closing-block">
       <div className="text-center text-[11px] tracking-wide text-[var(--ink-3)] border-t border-b border-[#ddd] py-1.5 my-5">
         — End of report —
       </div>
-      <div className="flex items-end justify-between mt-8">
+      {/* items-start, not items-end: the two signature lines must sit level with each other
+          regardless of how many lines of text follow (the right side got a second line —
+          qualifications — that the left side doesn't have) — aligning to the bottom instead
+          would drag this side's line down to match the taller block's total height. */}
+      <div className="flex items-start justify-between mt-7">
         <div>
           <div className="border-t border-[var(--ink)] w-[160px] mb-1.5" />
           <div className="text-[11px] font-semibold tracking-wide text-[var(--ink-2)] uppercase">Lab Technician</div>
         </div>
         <div className="text-right">
           <div className="border-t border-[var(--ink)] w-[160px] mb-1.5 ml-auto" />
-          {labDoctor && <div className="text-[14px] font-bold text-[var(--ink)] leading-tight">{labDoctor}</div>}
-          <div className="text-[10.5px] font-semibold text-[var(--accent)] tracking-wide uppercase mt-0.5">Authorised Signatory</div>
+          {labDoctor && (() => {
+            const { name, qualifications } = splitDoctorLine(labDoctor)
+            return (
+              <>
+                <div className="text-[14px] font-bold text-[var(--ink)] leading-tight">{name}</div>
+                {qualifications && (
+                  <div className="text-[10.5px] font-medium text-[var(--ink-2)] tracking-wide mt-0.5">{qualifications}</div>
+                )}
+              </>
+            )
+          })()}
+          <div className="text-[10.5px] font-semibold text-[var(--accent)] tracking-wide uppercase mt-0.5">Lab Incharge</div>
         </div>
       </div>
     </div>
@@ -125,7 +169,10 @@ export default function ReportPreview() {
   const [results, setResults] = useState<ResultsBySection | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
   const [logo, setLogo] = useState<string | null>(null)
+  const [badge, setBadge] = useState<string | null>(null)
+  const [certifications, setCertifications] = useState<string[]>([])
   const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
+  const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
   // For a sample tested on behalf of another lab that will print it on their own letterhead —
   // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
   // with blank space left at the top for their pre-printed stationery.
@@ -154,7 +201,10 @@ export default function ReportPreview() {
   useEffect(() => {
     getLabSettings().then(setSettings)
     getRangeOverrides().then(setRangeOverrides)
+    getHiddenReferenceSections().then(setHiddenReferenceSections)
     getLogoDataUrl().then(setLogo)
+    getBadgeDataUrl().then(setBadge)
+    getCertificationDataUrls().then(setCertifications)
   }, [])
 
   const pages = useMemo(() => (patient && results ? paginateReport(patient, results) : []), [patient, results])
@@ -178,16 +228,33 @@ export default function ReportPreview() {
 
   // Renders this same window to a PDF rather than opening the print dialog, so "Save PDF"
   // actually saves a file the user picks a location for instead of routing through Windows'
-  // print picker (which is what the old window.print()-for-everything approach did).
+  // print picker (which is what the old window.print()-for-everything approach did). A
+  // successful save also marks the patient completed (see Patient.markedComplete) — downloading
+  // the report is the real-world signal that it's done, not "every field got filled in".
   const handleSavePdf = async () => {
     if (!patient || savingPdf) return
     setSavingPdf(true)
     try {
       const result = await window.api.print.pdf(`${patient.name}_${patient.sid}`)
-      if (result.saved) window.api.shell.openPath(result.filePath)
+      if (result.saved) {
+        window.api.shell.openPath(result.filePath)
+        if (!patient.markedComplete) {
+          await setPatientCompleted(patient.id, true)
+          setPatient((p) => (p ? { ...p, markedComplete: true } : p))
+        }
+      }
     } finally {
       setSavingPdf(false)
     }
+  }
+
+  // Manual override for the same flag — for a report handed over some other way (printed
+  // directly, read out over the phone), or to undo an accidental/premature completion.
+  const handleToggleCompleted = async () => {
+    if (!patient) return
+    const next = !patient.markedComplete
+    await setPatientCompleted(patient.id, next)
+    setPatient((p) => (p ? { ...p, markedComplete: next } : p))
   }
 
   if (!patient || !results || !settings) {
@@ -205,6 +272,7 @@ export default function ReportPreview() {
       key={pageIndex}
       className={`print-page relative bg-[var(--surface)] shadow-lg print:shadow-none flex-col flex-shrink-0 ${hiddenOnScreen ? 'hidden print:flex' : 'flex'}`}
       style={{ width: PAGE_W, height: PAGE_H, padding: PAGE_PAD, overflow: 'hidden' }}
+      data-role="page"
     >
       {pages.length > 1 && (
         <div className="absolute top-2 right-3 text-[8.5px] text-[var(--ink-4)] print:text-[var(--border-strong)]" style={{ zIndex: 2 }}>
@@ -219,21 +287,47 @@ export default function ReportPreview() {
       ) : (
         <>
           <LetterheadWatermark labName={settings.labName} />
-          <div className="relative" style={{ zIndex: 1 }}>
-            <LetterheadHeader labName={settings.labName} logoDataUrl={logo} />
+          <div className="relative" style={{ zIndex: 1 }} data-role="letterhead-header">
+            <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
           </div>
         </>
       )}
 
-      <div className="relative flex-1 mt-3" style={{ zIndex: 1 }}>
+      {/* Repeats on every page (not just the one with the full patient-info block) so a page that
+          gets separated from the rest of the report still identifies whose it is. Same
+          Patient/Referred by/Age-Sex layout the report used to show once on page 1 only, with
+          SID folded into the first row. Counted as a fixed per-page cost in pagination.ts's
+          PATIENT_STRIP_HEIGHT — re-measure there if this grows again. */}
+      <div className="relative pt-1.5 pb-2" style={{ zIndex: 1, borderBottom: '1px solid #e5e5e5' }} data-role="patient-strip">
+        <div className="flex items-center justify-between text-[13px] text-[#333]">
+          <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
+          <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+          <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
+        </div>
+        <div className="text-[13px] text-[#333] mt-1">
+          Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b>
+        </div>
+      </div>
+
+      <div className="relative flex-1 mt-3" style={{ zIndex: 1 }} data-role="content">
         {blocks.map((block, i) => (
-          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} />
+          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} hiddenReferenceSections={hiddenReferenceSections} />
         ))}
       </div>
 
+      {/* Absolutely positioned against the page box (not "last flex child pushed down by
+          content's flex-1") so it sits at the exact same spot on every page regardless of how
+          much content precedes it — a flex-computed position drifted a few px page to page
+          depending on the PDF engine's rounding. Bottom is 0, not PAGE_PAD_V: the footer's own
+          closing wave is a deliberate bleed-to-the-edge flourish, and insetting the whole block
+          by the page's bottom padding just left a dead strip of blank white beneath it. Left/right
+          stay inset to PAGE_PAD_H so the actual text/contact/certification content lines up with
+          everything else on the page — only the wave underneath it bleeds past that inset (see
+          bleedMm) to reach both paper edges, so it reads as a band closing off the sheet rather
+          than a bar that stops short on both sides. */}
       {!externalMode && (
-        <div className="relative mt-4" style={{ zIndex: 1 }}>
-          <LetterheadFooter settings={settings} />
+        <div className="absolute" style={{ zIndex: 1, left: PAGE_PAD_H, right: PAGE_PAD_H, bottom: 0 }} data-role="letterhead-footer">
+          <LetterheadFooter settings={settings} certificationDataUrls={certifications} bleedMm={PAGE_PAD_H_MM} />
         </div>
       )}
     </div>
@@ -256,6 +350,19 @@ export default function ReportPreview() {
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleCompleted}
+              title={patient.markedComplete ? 'Move this patient back to in-progress' : 'Mark as completed without saving a PDF (e.g. report handed over some other way)'}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-[14px] font-medium rounded-xl border ${
+                patient.markedComplete
+                  ? 'bg-[var(--success-soft)] text-[var(--success)] border-[var(--success-soft-border)]'
+                  : 'bg-[var(--surface)] text-[var(--ink-2)] border-[var(--border-strong)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              {patient.markedComplete ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+              {patient.markedComplete ? 'Completed' : 'Mark as completed'}
+            </button>
+            <div className="h-5 w-px bg-[var(--border)]" />
             <button
               onClick={() => setExternalMode((v) => !v)}
               title="Print without our branding, for a sample tested on behalf of another lab that will print it on their own letterhead"

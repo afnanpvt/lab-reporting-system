@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Download, MessageCircle } from 'lucide-react'
-import { getPatient, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, getLogoDataUrl, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import { getPatient, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, type Patient, type BillingContext, type LabSettingsForm } from './api'
 import { formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
@@ -14,6 +14,8 @@ export default function Bill() {
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
   const [logo, setLogo] = useState<string | null>(null)
+  const [badge, setBadge] = useState<string | null>(null)
+  const [certifications, setCertifications] = useState<string[]>([])
 
   useEffect(() => {
     const fromState = (location.state as { patient?: Patient })?.patient
@@ -26,6 +28,8 @@ export default function Bill() {
     loadBillingContext().then(setBilling)
     getLabSettings().then(setSettings)
     getLogoDataUrl().then(setLogo)
+    getBadgeDataUrl().then(setBadge)
+    getCertificationDataUrls().then(setCertifications)
   }, [])
 
   const refreshBilling = () => loadBillingContext().then(setBilling)
@@ -93,7 +97,7 @@ export default function Bill() {
           >
             <LetterheadWatermark labName={settings.labName} />
             <div className="relative" style={{ zIndex: 1 }}>
-              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} />
+              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
 
               <div className="avoid-break mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: 'var(--ink)' }}>
                 <div className="text-[14px] font-bold uppercase tracking-widest text-[var(--ink)] mb-1">Bill</div>
@@ -169,7 +173,7 @@ export default function Bill() {
               </div>
             </div>
 
-            <LetterheadFooter variant="billing" settings={settings} />
+            <LetterheadFooter variant="billing" settings={settings} certificationDataUrls={certifications} />
           </div>
         </div>
       </div>

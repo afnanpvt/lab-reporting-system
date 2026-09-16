@@ -9,7 +9,9 @@ const api = {
   branding: {
     getLogo: () => ipcRenderer.invoke('branding:getLogo'),
     setLogo: (dataUrl: string) => ipcRenderer.invoke('branding:setLogo', dataUrl),
-    clearLogo: () => ipcRenderer.invoke('branding:clearLogo')
+    clearLogo: () => ipcRenderer.invoke('branding:clearLogo'),
+    getBadge: () => ipcRenderer.invoke('branding:getBadge'),
+    getCertifications: () => ipcRenderer.invoke('branding:getCertifications')
   },
   profiles: {
     list: () => ipcRenderer.invoke('profiles:list'),

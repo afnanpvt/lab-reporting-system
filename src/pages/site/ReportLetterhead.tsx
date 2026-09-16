@@ -9,16 +9,19 @@ import type { LabSettingsForm } from './api'
  *
  * No logo image by default — the lab name (fully editable in Settings, unless locked to a
  * license) renders as a plain text wordmark. A profile that stages a logo.png (see
- * profiles/README.md) swaps this for that image instead.
+ * profiles/README.md) swaps this for that image instead. `badgeDataUrl` is a separate, optional
+ * profile asset (e.g. Super Lab's "25 years of service" seal) shown opposite the logo — most
+ * profiles don't have one, so it's simply absent rather than leaving a gap.
  */
-export function LetterheadHeader({ labName, logoDataUrl }: { labName: string; logoDataUrl?: string | null }) {
+export function LetterheadHeader({ labName, logoDataUrl, badgeDataUrl }: { labName: string; logoDataUrl?: string | null; badgeDataUrl?: string | null }) {
   return (
     <div className="flex items-center justify-between bg-[var(--surface)] pb-3" style={{ borderBottom: '2px solid var(--accent)' }}>
       {logoDataUrl ? (
-        <img src={logoDataUrl} alt={labName} style={{ height: 44 }} />
+        <img src={logoDataUrl} alt={labName} style={{ height: 92 }} />
       ) : (
         <div className="text-[28px] font-bold tracking-tight" style={{ color: 'var(--accent)' }}>{labName}</div>
       )}
+      {badgeDataUrl && <img src={badgeDataUrl} alt="" style={{ height: 92 }} />}
     </div>
   )
 }
@@ -37,21 +40,42 @@ export function LetterheadWatermark({ labName }: { labName: string }) {
 }
 
 /**
- * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer,
+ * `variant` controls the left-hand notice block: 'report' carries the patient-report disclaimer
+ * (plus a quality-control-check line, for a profile that names one — see `labQualityCheck`),
  * 'incentive' and 'billing' each get their own genuinely relevant note instead of a single
- * generic line borrowed from the patient report.
+ * generic line borrowed from the patient report. `certificationDataUrls` is an optional row of
+ * accreditation logos (e.g. ISO 9001) shown next to the contact details — most profiles have
+ * none, so the row is simply absent rather than leaving a gap.
  */
-export function LetterheadFooter({ variant = 'report', settings }: { variant?: 'report' | 'incentive' | 'billing'; settings: Pick<LabSettingsForm, 'labName' | 'labPhone' | 'labEmail' | 'labAddress'> }) {
+export function LetterheadFooter({ variant = 'report', settings, certificationDataUrls, bleedMm }: {
+  variant?: 'report' | 'incentive' | 'billing'
+  settings: Pick<LabSettingsForm, 'labName' | 'labPhone' | 'labEmail' | 'labAddress' | 'labQualityCheck'>
+  certificationDataUrls?: string[]
+  /**
+   * Horizontal padding (in mm) of the container this footer sits in. Only the closing wave uses
+   * it — cancelling that padding out with negative margins so it runs the full width of the
+   * sheet, while the text and logos above stay aligned with the rest of the page. Without it the
+   * wave stops short of both paper edges and reads as a truncated bar rather than a bottom band.
+   */
+  bleedMm?: number
+}) {
   return (
     <div className="bg-[var(--surface)]">
       <div className="flex items-start justify-between gap-4 pt-4" style={{ borderTop: '1px solid #dde3ea' }}>
         <div className="flex-1 min-w-0">
           {variant === 'report' && (
-            <p className="text-[10px] text-[#555] leading-snug">
-              The report is based on the specimen received / submitted to the laboratory. Laboratory results are
-              dependent on multiple factors. Results need to be correlated clinically. This result is not valid for
-              medico-legal purpose.
-            </p>
+            <>
+              <p className="text-[10px] text-[#555] leading-snug">
+                The report is based on the specimen received / submitted to the laboratory. Laboratory results are
+                dependent on multiple factors. Results need to be correlated clinically. This result is not valid for
+                medico-legal purpose.
+              </p>
+              {settings.labQualityCheck && (
+                <p className="text-[10.5px] font-semibold text-[var(--ink)] mt-1.5">
+                  Test done here have quality-control check with <span style={{ color: 'var(--accent)' }}>{settings.labQualityCheck}</span>
+                </p>
+              )}
+            </>
           )}
           {variant === 'billing' && (
             <>
@@ -86,23 +110,40 @@ export function LetterheadFooter({ variant = 'report', settings }: { variant?: '
 
       <div className="h-[3px] my-3 rounded-full" style={{ background: 'linear-gradient(to right, var(--accent), #ff4fa0)' }} />
 
-      <div className="space-y-1.5 text-[11px] text-[var(--ink)]">
-        <div className="flex items-center gap-2">
-          <Phone size={13} className="text-[var(--accent)]" />
-          <span className="tracking-wider font-medium">{settings.labPhone}</span>
+      <div className="flex items-end justify-between gap-6">
+        <div className="space-y-1.5 text-[11px] text-[var(--ink)]">
+          <div className="flex items-center gap-2">
+            <Phone size={13} className="text-[var(--accent)]" />
+            <span className="tracking-wider font-medium">{settings.labPhone}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Mail size={13} className="text-[var(--accent)]" />
+            {settings.labEmail}
+          </div>
+          <div className="flex items-start gap-2">
+            <MapPin size={13} className="text-[var(--accent)] flex-shrink-0 mt-0.5" />
+            <span className="max-w-[380px]">{settings.labAddress}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Mail size={13} className="text-[var(--accent)]" />
-          {settings.labEmail}
-        </div>
-        <div className="flex items-start gap-2">
-          <MapPin size={13} className="text-[var(--accent)] flex-shrink-0 mt-0.5" />
-          <span className="max-w-[380px]">{settings.labAddress}</span>
-        </div>
+
+        {certificationDataUrls && certificationDataUrls.length > 0 && (
+          <div className="flex items-center gap-3.5 flex-shrink-0">
+            {certificationDataUrls.map((src, i) => (
+              <img key={i} src={src} alt="" className="h-[46px] w-auto object-contain" />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Decorative closing wave — purely cosmetic brand flourish */}
-      <svg viewBox="0 0 780 22" preserveAspectRatio="none" className="w-full h-6 mt-3" aria-hidden="true">
+      {/* Decorative closing wave — purely cosmetic brand flourish, bled to both paper edges when
+          the caller says how much padding to cancel out (see bleedMm). */}
+      <svg
+        viewBox="0 0 780 22"
+        preserveAspectRatio="none"
+        className="w-full h-6 mt-3"
+        style={bleedMm ? { marginLeft: `-${bleedMm}mm`, marginRight: `-${bleedMm}mm`, width: `calc(100% + ${bleedMm * 2}mm)` } : undefined}
+        aria-hidden="true"
+      >
         <path d="M0,14 C150,0 300,22 480,8 C600,0 700,14 780,6 L780,22 L0,22 Z" fill="var(--accent)" />
         <path d="M0,18 C200,8 450,22 780,14 L780,22 L0,22 Z" fill="var(--accent-ink)" />
       </svg>

@@ -9,10 +9,12 @@ interface LabAPI {
     getLogo(): Promise<string | null>
     setLogo(dataUrl: string): Promise<boolean>
     clearLogo(): Promise<boolean>
+    getBadge(): Promise<string | null>
+    getCertifications(): Promise<string[]>
   }
   profiles: {
     list(): Promise<string[]>
-    get(name: string): Promise<{ labName: string; labAddress: string; labPhone: string; labEmail: string; labDoctor: string } | null>
+    get(name: string): Promise<{ labName: string; labAddress: string; labPhone: string; labEmail: string; labDoctor: string; labQualityCheck: string } | null>
     getLogo(name: string): Promise<string | null>
     save(name: string, config: Record<string, string>, logoDataUrl?: string | null): Promise<string | false>
     delete(name: string): Promise<boolean>

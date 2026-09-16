@@ -110,6 +110,9 @@ export interface BiochemistryResult {
   bilirubin_total?: string
   bilirubin_direct?: string
   bilirubin_indirect?: string
+  // Optional "method used" note for Blood Sugar (e.g. glucose_f_method) — see SerologyResult's
+  // matching comment above; same idea, just the two fields Super Lab's old system recorded it for.
+  [key: `${string}_method`]: string | undefined
 }
 
 export interface SerologyResult {
@@ -135,6 +138,11 @@ export interface SerologyResult {
   sero_mtb_igm?: string
   malaria?: string
   chikungunya?: string
+  // Optional "method/kit used" note per test (e.g. widal_o_method), shown under the result and
+  // printed alongside it when filled in — see ResultEntry.tsx's FieldRow and ReportPreview.tsx.
+  // Super Lab's old system recorded exactly this for rapid/kit-based tests ("(SD Diagnostics)",
+  // "(Roche Diagnostics)") as a free-text afterthought; this makes it a real field instead.
+  [key: `${string}_method`]: string | undefined
 }
 
 export interface UrineResult {

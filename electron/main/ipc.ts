@@ -4,7 +4,7 @@ import { join } from 'path'
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { dbRun, dbGet, dbAll, lockLabName } from './db'
 import { activateLicenseKey, getLicenseStatus } from './license'
-import { getLogoDataUrl, setLogo, clearLogo } from './branding'
+import { getLogoDataUrl, setLogo, clearLogo, getBadgeDataUrl, getCertificationDataUrls } from './branding'
 
 const SECTION_TABLES: Record<string, string> = {
   haematology: 'haematology',
@@ -50,6 +50,14 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     if (!is.dev) return false
     clearLogo()
     return true
+  })
+
+  ipcMain.handle('branding:getBadge', () => {
+    return getBadgeDataUrl()
+  })
+
+  ipcMain.handle('branding:getCertifications', () => {
+    return getCertificationDataUrls()
   })
 
   // ---- Patients ----

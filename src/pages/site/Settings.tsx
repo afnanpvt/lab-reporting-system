@@ -19,7 +19,7 @@ import { contactScalyft } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 
-const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '' }
+const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '', labQualityCheck: '' }
 
 // Settings is a routed page — it fully unmounts when you navigate away and remounts from
 // scratch when you come back, unlike Shell's persistent header. Plain useState for
@@ -221,13 +221,20 @@ export default function Settings() {
     await refreshBranding()
   }
 
-  const fields: { key: keyof typeof form; label: string; placeholder: string }[] = [
+  // Authorised Doctor carries the doctor's name AND qualifications baked in as one string
+  // (see splitDoctorLine in ReportPreview.tsx) — same kind of fixed, Scalyft-set branding detail
+  // as the logo, so it gets the same dev-only treatment: editable while building/testing a
+  // profile, not shown at all in a packaged build (staff would only ever break the formatting
+  // by editing it there, never legitimately need to).
+  const allFields: { key: keyof typeof form; label: string; placeholder: string }[] = [
     { key: 'labName', label: 'Lab Name', placeholder: 'Your Lab Name' },
     { key: 'labAddress', label: 'Address', placeholder: 'Full address' },
     { key: 'labPhone', label: 'Phone / Contact', placeholder: 'e.g. 99442 38110' },
     { key: 'labEmail', label: 'Email', placeholder: 'e.g. lab@example.com' },
-    { key: 'labDoctor', label: 'Authorised Doctor', placeholder: 'Dr. Name (printed on reports)' }
+    { key: 'labDoctor', label: 'Authorised Doctor', placeholder: 'Dr. Name (printed on reports)' },
+    { key: 'labQualityCheck', label: 'Quality Check Institution', placeholder: 'e.g. CMC Hospital, Vellore. (blank = no quality-check line on reports)' }
   ]
+  const fields = import.meta.env.DEV ? allFields : allFields.filter((f) => f.key !== 'labDoctor')
 
   return (
       <div className="flex flex-col h-full">
@@ -287,6 +294,11 @@ export default function Settings() {
                   </div>
                 )}
 
+                {/* Dev-only, like the Authorised Doctor field above — a real customer's logo is
+                    set once via a profile at build time (see profiles/README.md), never edited
+                    live by the customer themselves, so a packaged build has nothing to act on
+                    here and nothing worth showing either. */}
+                {import.meta.env.DEV && (
                 <div className="flex items-center gap-4 mb-5 pb-5 border-b border-[var(--border)]">
                   <div
                     className="flex items-center justify-center flex-shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-app)] overflow-hidden"
@@ -300,58 +312,51 @@ export default function Settings() {
                   </div>
                   <div className="flex-1">
                     <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Logo</label>
-                    {import.meta.env.DEV ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => logoInputRef.current?.click()}
-                            disabled={uploadingLogo}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[var(--border-strong)] rounded-lg text-[var(--ink)] hover:bg-[var(--bg-hover)] disabled:opacity-60"
-                          >
-                            <ImageUp size={14} />
-                            {uploadingLogo ? 'Uploading…' : logo ? 'Change logo' : 'Upload logo'}
-                          </button>
-                          {logo && (
-                            <button
-                              type="button"
-                              onClick={handleRemoveLogo}
-                              className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-lg text-[var(--ink-3)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)]"
-                            >
-                              <ImageOff size={14} />
-                              Remove
-                            </button>
-                          )}
-                          <input
-                            ref={logoInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0]
-                              if (file) handleLogoFile(file)
-                              e.target.value = ''
-                            }}
-                          />
-                        </div>
-                        {logoError ? (
-                          <div className="flex items-center gap-1.5 mt-1.5 text-[12.5px] text-[var(--danger)]">
-                            <AlertTriangle size={12} />
-                            {logoError}
-                          </div>
-                        ) : (
-                          <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">
-                            Shown in the app header and on printed reports. Takes effect immediately — no restart needed.
-                          </p>
-                        )}
-                      </>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={uploadingLogo}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[var(--border-strong)] rounded-lg text-[var(--ink)] hover:bg-[var(--bg-hover)] disabled:opacity-60"
+                      >
+                        <ImageUp size={14} />
+                        {uploadingLogo ? 'Uploading…' : logo ? 'Change logo' : 'Upload logo'}
+                      </button>
+                      {logo && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveLogo}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-lg text-[var(--ink-3)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)]"
+                        >
+                          <ImageOff size={14} />
+                          Remove
+                        </button>
+                      )}
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleLogoFile(file)
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
+                    {logoError ? (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-[12.5px] text-[var(--danger)]">
+                        <AlertTriangle size={12} />
+                        {logoError}
+                      </div>
                     ) : (
                       <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">
-                        Shown in the app header and on printed reports. Set up by Scalyft — contact them to change it.
+                        Shown in the app header and on printed reports. Takes effect immediately — no restart needed.
                       </p>
                     )}
                   </div>
                 </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   {fields.map(({ key, label, placeholder }) => (

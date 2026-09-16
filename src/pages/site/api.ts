@@ -15,8 +15,21 @@ export interface Patient {
   referredBy: string
   date: string
   regTime: string
+  // Report date/time — shown as "Reported" on the printed report. Defaults to registration
+  // date/time but is independently editable via the "Dates & Times" editor in PatientEntry.tsx
+  // (matching the SID Date/Reg Time/Rpt Date/Rpt Time fields of the lab's previous software).
+  rptDate: string
+  rptTime: string
   sections: string[]
   consentGiven: boolean
+  // Sticky "completed" flag — set automatically when the report PDF is saved, or by hand via
+  // the "Mark as completed" toggle on Report Preview. Once set it stays set until someone
+  // explicitly undoes it; it does not get cleared just because a field changes afterwards.
+  // Replaces the old field-count-based "completed" (see computePatientStatus below) — that
+  // required every field in every section a patient was tested for, including ones nobody
+  // actually orders together (e.g. Haematology's Blood Group/Coombs alongside a routine CBC),
+  // so real patients almost never reached it.
+  markedComplete: boolean
 }
 
 export type ResultsBySection = Record<string, Record<string, string>>
@@ -48,9 +61,18 @@ function rowToPatient(row: Record<string, unknown>): Patient {
     referredBy: (row.referred_by as string) || 'Self',
     date: String(row.reg_date ?? ''),
     regTime: String(row.reg_time ?? ''),
+    rptDate: String(row.rpt_date ?? ''),
+    rptTime: String(row.rpt_time ?? ''),
     sections: safeParseSections(row.sections),
-    consentGiven: !!row.consent_given
+    consentGiven: !!row.consent_given,
+    markedComplete: row.status === 'completed'
   }
+}
+
+/** Sets or clears the sticky "completed" flag (see Patient.markedComplete) — the only writer of
+ * the patients.status column now; nothing else touches it. */
+export async function setPatientCompleted(id: number, completed: boolean): Promise<void> {
+  await window.api.patients.update(id, { status: completed ? 'completed' : '' })
 }
 
 export async function listPatients(search?: string): Promise<Patient[]> {
@@ -72,8 +94,24 @@ export interface PatientFormData {
   referredBy: string
   mobile: string
   address: string
+  // "Dates & Times" editor in PatientEntry.tsx — SID Date/Reg Time and Rpt Date/Rpt Time, same
+  // pair the lab's previous software had. Both default to today/now and stay editable afterwards.
+  regDate: string
+  regTime: string
+  rptDate: string
+  rptTime: string
   sections: string[]
   consentGiven: boolean
+}
+
+export function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function nowHHMM(): string {
+  const d = new Date()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 export const emptyPatientForm = (): PatientFormData => ({
@@ -85,6 +123,10 @@ export const emptyPatientForm = (): PatientFormData => ({
   referredBy: 'Self',
   mobile: '',
   address: '',
+  regDate: todayIso(),
+  regTime: nowHHMM(),
+  rptDate: todayIso(),
+  rptTime: nowHHMM(),
   sections: [],
   consentGiven: false
 })
@@ -99,19 +141,13 @@ export function patientToForm(p: Patient): PatientFormData {
     referredBy: p.referredBy,
     mobile: p.mobile,
     address: p.address,
+    regDate: p.date,
+    regTime: p.regTime,
+    rptDate: p.rptDate,
+    rptTime: p.rptTime,
     sections: p.sections,
     consentGiven: p.consentGiven
   }
-}
-
-function todayIso(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function nowHHMM(): string {
-  const d = new Date()
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 export async function createPatient(form: PatientFormData): Promise<Patient> {
@@ -123,10 +159,10 @@ export async function createPatient(form: PatientFormData): Promise<Patient> {
     address: form.address,
     mobile: form.mobile,
     referred_by: form.referredBy,
-    reg_date: todayIso(),
-    reg_time: nowHHMM(),
-    rpt_date: '',
-    rpt_time: '',
+    reg_date: form.regDate || todayIso(),
+    reg_time: form.regTime || nowHHMM(),
+    rpt_date: form.rptDate || '',
+    rpt_time: form.rptTime || '',
     sections: form.sections,
     consent_given: form.consentGiven ? 1 : 0
   } as never)
@@ -144,6 +180,10 @@ export async function updatePatient(id: number, form: PatientFormData): Promise<
     address: form.address,
     mobile: form.mobile,
     referred_by: form.referredBy,
+    reg_date: form.regDate,
+    reg_time: form.regTime,
+    rpt_date: form.rptDate,
+    rpt_time: form.rptTime,
     sections: form.sections,
     consent_given: form.consentGiven ? 1 : 0
   } as never)
@@ -169,19 +209,22 @@ export async function setSectionResults(patientId: number, sectionKey: string, d
 }
 
 /**
- * The card/dashboard "status" a patient shows as — always auto-computed from what's actually
- * been entered in Result Entry, deliberately with no manual override. A patient becomes
- * 'completed' only once every selected section has every one of its fields filled, 'draft' only
- * while nothing at all has been entered, anything in between is 'partial'.
+ * The card/dashboard "status" a patient shows as. 'completed' is the sticky manual/PDF-triggered
+ * flag (see Patient.markedComplete) — it used to be auto-computed from "every field in every
+ * selected section is filled", but sections bundle multiple separately-orderable tests (e.g.
+ * Haematology also covers Blood Group and Coombs, not just a routine CBC), so real patients
+ * almost never filled literally everything and 'completed' was effectively unreachable.
+ * 'draft' vs 'partial' is still auto-computed — that distinction (nothing entered yet vs. some
+ * results in progress) was never the broken part.
  */
 export function computePatientStatus(patient: Patient, results: ResultsBySection): PatientStatus {
+  if (patient.markedComplete) return 'completed'
   if (patient.sections.length === 0) return 'draft'
   const states = patient.sections.map((label) => {
     const key = sectionKeyForLabel(label)
     if (!key) return 'empty' as const
     return getCompletionState(key, results[key] ?? {})
   })
-  if (states.every((s) => s === 'complete')) return 'completed'
   if (states.every((s) => s === 'empty')) return 'draft'
   return 'partial'
 }
@@ -312,6 +355,9 @@ export interface LabSettingsForm {
   labPhone: string
   labEmail: string
   labDoctor: string
+  // The institution named on the report's quality-control line (e.g. "CMC Hospital, Vellore."),
+  // shown only when set — see ReportLetterhead.tsx's 'report' footer.
+  labQualityCheck: string
 }
 
 export async function getLabSettings(): Promise<LabSettingsForm> {
@@ -321,8 +367,20 @@ export async function getLabSettings(): Promise<LabSettingsForm> {
     labAddress: raw.lab_address || '',
     labPhone: raw.lab_phone || '',
     labEmail: raw.lab_email || '',
-    labDoctor: raw.lab_doctor || ''
+    labDoctor: raw.lab_doctor || '',
+    labQualityCheck: raw.lab_quality_check || ''
   }
+}
+
+// A profile's extra header badge (e.g. a "25 years of service" seal) — optional, no in-app
+// picker (unlike the logo): it's fixed branding, staged once per profile (see profiles/README.md).
+export async function getBadgeDataUrl(): Promise<string | null> {
+  return window.api.branding.getBadge()
+}
+
+// A profile's certification/accreditation logos, shown together on the report footer.
+export async function getCertificationDataUrls(): Promise<string[]> {
+  return window.api.branding.getCertifications()
 }
 
 // A logo picked from Settings, if any — otherwise whatever the active vendor profile staged
@@ -398,6 +456,34 @@ export async function setRangeOverride(key: string, range: string | null): Promi
   return next
 }
 
+// ---------------------------------------------------------------------------
+// Reference column visibility — lab-wide, per section (e.g. a lab that doesn't want a reference
+// column on urine reports at all). Same one-JSON-blob approach as the range overrides above:
+// only sections someone actually hid need an entry; every other section defaults to shown.
+// ---------------------------------------------------------------------------
+
+const HIDDEN_REFERENCE_SECTIONS_KEY = 'hidden_reference_sections'
+
+export async function getHiddenReferenceSections(): Promise<Record<string, boolean>> {
+  const raw = await window.api.settings.get()
+  const stored = raw[HIDDEN_REFERENCE_SECTIONS_KEY]
+  if (!stored) return {}
+  try {
+    return JSON.parse(stored)
+  } catch {
+    return {}
+  }
+}
+
+export async function setReferenceSectionHidden(sectionKey: string, hidden: boolean): Promise<Record<string, boolean>> {
+  const current = await getHiddenReferenceSections()
+  const next = { ...current }
+  if (hidden) next[sectionKey] = true
+  else delete next[sectionKey]
+  await window.api.settings.set(HIDDEN_REFERENCE_SECTIONS_KEY, JSON.stringify(next))
+  return next
+}
+
 // Writes lab_name along with everything else. On a licensed build, main process's lockLabName()
 // re-asserts the license's name on every launch (see electron/main/index.ts), so this only
 // actually sticks when running unlicensed — this demo/pitch build included.
@@ -407,6 +493,7 @@ export async function saveLabSettings(form: LabSettingsForm): Promise<void> {
     window.api.settings.set('lab_address', form.labAddress),
     window.api.settings.set('lab_phone', form.labPhone),
     window.api.settings.set('lab_email', form.labEmail),
-    window.api.settings.set('lab_doctor', form.labDoctor)
+    window.api.settings.set('lab_doctor', form.labDoctor),
+    window.api.settings.set('lab_quality_check', form.labQualityCheck)
   ])
 }

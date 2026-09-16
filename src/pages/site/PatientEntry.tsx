@@ -1,7 +1,71 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Check, AlertCircle, User2, Plus } from 'lucide-react'
-import { ALL_SECTIONS, emptyPatientForm, patientToForm, createPatient, updatePatient, listDoctors, type Patient, type Doctor } from './api'
+import { ArrowLeft, Check, AlertCircle, User2, Plus, Clock, X } from 'lucide-react'
+import { ALL_SECTIONS, emptyPatientForm, patientToForm, createPatient, updatePatient, listDoctors, type Patient, type Doctor, type PatientFormData } from './api'
+import { formatTime12h } from './reportFields'
+
+/**
+ * Matches the lab's previous software's own "Dates & Times" screen — SID Date/Reg Time (when the
+ * sample was registered/collected) and Rpt Date/Rpt Time (when the report is dated) as two
+ * editable date+time pairs, applied to the form on Save. Both default to today/now (see
+ * emptyPatientForm in api.ts) and stay editable afterwards, including on an existing patient.
+ */
+function DatesTimesEditor({ form, onSave, onClose }: { form: PatientFormData; onSave: (next: Pick<PatientFormData, 'regDate' | 'regTime' | 'rptDate' | 'rptTime'>) => void; onClose: () => void }) {
+  const [regDate, setRegDate] = useState(form.regDate)
+  const [regTime, setRegTime] = useState(form.regTime)
+  const [rptDate, setRptDate] = useState(form.rptDate)
+  const [rptTime, setRptTime] = useState(form.rptTime)
+
+  const fieldClass = 'w-full px-3 py-2 text-[14px] border border-[var(--border-strong)] rounded-lg bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26, 36, 48, 0.35)' }} onClick={onClose}>
+      <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-lg p-6" style={{ width: '380px' }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Clock size={17} className="text-[var(--accent)]" />
+            <h2 className="text-[16px] font-semibold text-[var(--ink)]">Dates &amp; Times</h2>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)] hover:text-[var(--ink-2)]">
+            <X size={15} />
+          </button>
+        </div>
+        <p className="text-[13px] text-[var(--ink-3)] mb-5">When the sample was registered, and the date the report carries.</p>
+
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">SID Date</label>
+            <input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} className={fieldClass} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reg Time</label>
+            <input type="time" value={regTime} onChange={(e) => setRegTime(e.target.value)} className={fieldClass} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Rpt Date</label>
+            <input type="date" value={rptDate} onChange={(e) => setRptDate(e.target.value)} className={fieldClass} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Rpt Time</label>
+            <input type="time" value={rptTime} onChange={(e) => setRptTime(e.target.value)} className={fieldClass} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { onSave({ regDate, regTime, rptDate, rptTime }); onClose() }}
+            className="flex-1 px-4 py-2 bg-[var(--accent)] text-white text-[14px] font-medium rounded-xl hover:bg-[var(--accent-ink)]"
+          >
+            Save
+          </button>
+          <button onClick={onClose} className="flex-1 px-4 py-2 bg-[var(--surface)] text-[var(--ink)] text-[14px] font-medium border border-[var(--border-strong)] rounded-xl hover:bg-[var(--bg-hover)]">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function PatientEntry() {
   const navigate = useNavigate()
@@ -9,6 +73,7 @@ export default function PatientEntry() {
   const editing = (location.state as { patient?: Patient })?.patient
   const [form, setForm] = useState(editing ? patientToForm(editing) : emptyPatientForm())
   const [error, setError] = useState('')
+  const [showDatesModal, setShowDatesModal] = useState(false)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -21,7 +86,6 @@ export default function PatientEntry() {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Please enter the patient\'s name before continuing.'); return }
-    if (!form.mobile.trim()) { setError('Please enter the patient\'s mobile number before continuing.'); return }
     if (form.sections.length === 0) { setError('Select at least one test before continuing.'); return }
     if (!form.consentGiven) { setError('Patient consent is required before registering — please confirm with the patient and check the consent box below.'); return }
     setError('')
@@ -124,7 +188,7 @@ export default function PatientEntry() {
                 </select>
               </div>
               <div>
-                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Mobile</label>
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Mobile <span className="font-normal text-[var(--ink-3)]">(optional)</span></label>
                 <input
                   value={form.mobile}
                   onChange={(e) => setForm({ ...form, mobile: e.target.value })}
@@ -141,6 +205,21 @@ export default function PatientEntry() {
                   className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)] resize-none"
                   placeholder="Optional"
                 />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Dates &amp; Times</label>
+                <button
+                  type="button"
+                  onClick={() => setShowDatesModal(true)}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 text-[14px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] hover:bg-[var(--bg-hover)] text-left"
+                >
+                  <span className="text-[var(--ink-2)]">
+                    Collected <span className="font-medium text-[var(--ink)]">{form.regDate} {formatTime12h(form.regTime)}</span>
+                    <span className="text-[var(--ink-4)]"> · </span>
+                    Reported <span className="font-medium text-[var(--ink)]">{form.rptDate} {formatTime12h(form.rptTime)}</span>
+                  </span>
+                  <Clock size={15} className="text-[var(--ink-3)] flex-shrink-0" />
+                </button>
               </div>
             </div>
 
@@ -219,6 +298,14 @@ export default function PatientEntry() {
             </div>
           </div>
         </div>
+
+        {showDatesModal && (
+          <DatesTimesEditor
+            form={form}
+            onSave={(next) => setForm((f) => ({ ...f, ...next }))}
+            onClose={() => setShowDatesModal(false)}
+          />
+        )}
       </main>
   )
 }

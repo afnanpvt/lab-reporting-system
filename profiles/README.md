@@ -11,8 +11,15 @@ machine. The private signing key is the one thing that never goes in git.
 
 ```
 profiles/<name>/
-  config.json   required — { labName, labAddress, labPhone, labEmail, labDoctor }
-  logo.png      optional — shown in the app header and report letterhead instead of the text wordmark
+  config.json        required — { labName, labAddress, labPhone, labEmail, labDoctor, labQualityCheck }
+                      labQualityCheck names an institution for the report's quality-control-check
+                      line (e.g. "CMC Hospital, Vellore.") — leave it "" and the line just doesn't print.
+  logo.png            optional — shown in the app header and report letterhead instead of the text wordmark
+  badge.png           optional — a second image next to the logo in the report header (e.g. Super
+                      Lab's "25 years of service" seal). No in-app picker, unlike the logo: it's
+                      fixed branding for that vendor, not something staff swap at runtime.
+  certifications/     optional folder of PNGs (zero or more) — accreditation logos (e.g. ISO 9001)
+                      shown together on the report/bill/incentive footer, sorted by filename.
   license.json  written by scripts — a 30-day trial the first time the profile is staged, a full
                 license after `npm run license -- <name>`. dev has none on disk (see below).
 ```

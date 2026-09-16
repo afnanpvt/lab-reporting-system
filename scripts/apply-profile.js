@@ -57,6 +57,20 @@ function stageOptional(fileName) {
 
 const hasLicense = stageOptional('license.json')
 const hasLogo = stageOptional('logo.png')
+const hasBadge = stageOptional('badge.png')
+
+// certifications/ is a whole folder of PNGs (zero or more) rather than one fixed file, so it
+// gets its own copy step instead of stageOptional — same idea (mirror the profile, remove
+// whatever a previous profile left behind if this one doesn't have any).
+function stageCertifications() {
+  const source = path.join(profileDir, 'certifications')
+  const target = path.join(resourcesDir, 'certifications')
+  fs.rmSync(target, { recursive: true, force: true })
+  if (!fs.existsSync(source)) return 0
+  fs.cpSync(source, target, { recursive: true })
+  return fs.readdirSync(target).filter((f) => f.toLowerCase().endsWith('.png')).length
+}
+const certCount = stageCertifications()
 
 // Remembers which profile is currently staged so `npm run package` can name the installer
 // after it (e.g. LumaLabs-superlab-Setup-2.0.0.exe) without needing a separate flag — see
@@ -66,5 +80,7 @@ fs.writeFileSync(path.join(resourcesDir, '.profile-name'), name)
 console.log(
   `Applied profile "${name}" -> resources/branding.json` +
     (hasLicense ? ' + license.json' : ' (no license: runs unlicensed)') +
-    (hasLogo ? ' + logo.png' : '')
+    (hasLogo ? ' + logo.png' : '') +
+    (hasBadge ? ' + badge.png' : '') +
+    (certCount > 0 ? ` + ${certCount} certification logo${certCount === 1 ? '' : 's'}` : '')
 )

@@ -290,6 +290,25 @@ function createTables(): void {
     addColumnIfNotExists('culture_sensitivity', 'abx_' + key, "TEXT DEFAULT ''")
   }
 
+  // Optional "method/kit used" note per Serology test (see SerologyResult in src/types/lab.ts) —
+  // one companion column per test, blank unless staff actually fills it in.
+  const SEROLOGY_KEYS = [
+    'widal_o', 'widal_h', 'widal_ah', 'widal_bh', 'vdrl', 'tpha', 'hiv1', 'hiv2',
+    'hbs_ag', 'hcv', 'ra_factor', 'aso', 'crp', 'dengue_igg', 'dengue_igm', 'dengue_ns1',
+    'troponin', 'sero_mtb_igg', 'sero_mtb_igm', 'malaria', 'chikungunya'
+  ]
+  for (const key of SEROLOGY_KEYS) {
+    addColumnIfNotExists('serology', key + '_method', "TEXT DEFAULT ''")
+  }
+
+  // Same "method used" note, but only for the two other fields Super Lab's old system actually
+  // recorded it for — Blood Sugar via glucometer, Amylase via a named assay method. Every other
+  // field in every other section never showed this pattern in their real history.
+  for (const key of ['glucose_f', 'glucose_pp', 'glucose_r']) {
+    addColumnIfNotExists('biochemistry', key + '_method', "TEXT DEFAULT ''")
+  }
+  addColumnIfNotExists('gtt_lipid', 's_amylase_method', "TEXT DEFAULT ''")
+
   // Seed defaults for any key not already present — INSERT OR IGNORE is a no-op against an
   // existing row, so this only backfills what's missing (e.g. a dev DB seeded before
   // sid_counter/lab_email existed) and never overwrites a value staff already set. The contact
@@ -305,6 +324,7 @@ function createTables(): void {
     ['lab_phone', branding.labPhone],
     ['lab_email', branding.labEmail],
     ['lab_doctor', branding.labDoctor],
+    ['lab_quality_check', branding.labQualityCheck],
     ['default_printer', ''],
     ['sid_counter', '1']
   ]

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator } from 'lucide-react'
-import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow } from './reportFields'
+import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, type Patient, type ResultsBySection } from './api'
+import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
 
@@ -11,8 +11,9 @@ interface PendingIssue { sectionIndex: number; sectionLabel: string; field: stri
 // Excludes the reference-range editor's own <input> (see RangeEditor's data-range-editor
 // attribute) — without that, opening a range editor mid-entry would insert it into the Tab/Enter/
 // Arrow flow as if it were just another value field, and pressing Enter to save a range would
-// also double as "advance to the next field".
-const FOCUSABLE_SELECTOR = 'input:not([data-range-editor]), .abx-btn'
+// also double as "advance to the next field". Includes <select> so a preset-choice field (see
+// optionsFor in reportFields.ts) stays part of the same Tab/Ctrl+Enter flow as every other field.
+const FOCUSABLE_SELECTOR = 'input:not([data-range-editor]), select, .abx-btn'
 
 /**
  * Lab-wide reference range overrides, threaded via context rather than as a prop through
@@ -22,7 +23,10 @@ const FOCUSABLE_SELECTOR = 'input:not([data-range-editor]), .abx-btn'
 const RangeOverridesContext = createContext<{
   overrides: Record<string, string>
   setOverride: (key: string, range: string | null) => void
-}>({ overrides: {}, setOverride: () => {} })
+  // Whether the active section's reference column is hidden lab-wide (see the "Show reference
+  // values" checkbox in ResultEntry) — a section-level on/off, not per-field like overrides above.
+  hideReference: boolean
+}>({ overrides: {}, setOverride: () => {}, hideReference: false })
 
 /** The active section's value-check notes (see valueChecks.ts), threaded the same way as range overrides. */
 const ValueChecksContext = createContext<{
@@ -43,6 +47,10 @@ export default function ResultEntry() {
   // Lab-wide reference range customizations (see api.ts) — loaded once, applied to every
   // patient. Editing one here (see RangeEditor below) updates every open report immediately.
   const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
+  // Lab-wide "hide the reference column for this whole section" toggle (see api.ts) — keyed by
+  // sectionKey, e.g. a lab that never wants a reference shown on urine reports. Loaded once here
+  // and remembered for every future patient/report, same as range overrides above.
+  const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const paneRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef<false | 'first' | 'last'>(false)
@@ -50,10 +58,15 @@ export default function ResultEntry() {
   useEffect(() => {
     listPatients().then(setPatients)
     getRangeOverrides().then(setRangeOverrides)
+    getHiddenReferenceSections().then(setHiddenReferenceSections)
   }, [])
 
   const setOverride = useCallback((key: string, range: string | null) => {
     setRangeOverride(key, range).then(setRangeOverrides)
+  }, [])
+
+  const toggleReferenceVisibility = useCallback((sectionKey: string, hidden: boolean) => {
+    setReferenceSectionHidden(sectionKey, hidden).then(setHiddenReferenceSections)
   }, [])
 
   useEffect(() => {
@@ -275,11 +288,14 @@ export default function ResultEntry() {
   // to the row editor, so every other consumer of this section's data works off the rest.
   const { __label: _othersLabel, ...visibleData } = activeData
   const totalCount = isOthers ? Object.keys(visibleData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
-  const filledCount = Object.values(visibleData).filter((v) => v && v.trim() !== '').length
+  // A '_method' key (Serology's "kit/method used" note, see FieldRow) is an annotation on its
+  // own field, not a test of its own — it must not inflate this count past the section's real
+  // field total.
+  const filledCount = Object.entries(visibleData).filter(([k, v]) => !k.endsWith('_method') && v && v.trim() !== '').length
   const completion = getCompletionState(active.key, visibleData)
 
   return (
-    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride }}>
+    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride, hideReference: !!hiddenReferenceSections[active.key] }}>
     <ValueChecksContext.Provider value={{ issues: issuesBySection[active.key] ?? {}, dismiss: dismissIssue }}>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
@@ -424,12 +440,22 @@ export default function ResultEntry() {
                   {completion === 'empty' ? 'Not started' : `${filledCount} of ${totalCount} entered`}
                 </span>
               </div>
-              <div className="h-[3px] rounded-full bg-[var(--border)] mb-6 overflow-hidden">
+              <div className="h-[3px] rounded-full bg-[var(--border)] mb-3 overflow-hidden">
                 <div
                   className="h-full bg-[var(--accent)] rounded-full transition-all"
                   style={{ width: totalCount ? `${Math.round((filledCount / totalCount) * 100)}%` : '0%' }}
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-[13px] text-[var(--ink-2)] mb-6 select-none cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={!hiddenReferenceSections[active.key]}
+                  onChange={(e) => toggleReferenceVisibility(active.key, !e.target.checked)}
+                  className="w-3.5 h-3.5 accent-[var(--accent)]"
+                />
+                Show reference values for {active.label}
+              </label>
 
               {active.key === 'haematology' && (
                 <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-[13px] mb-5">
@@ -697,14 +723,21 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
   )
 }
 
-function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
+function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, methodValue, onMethodChange }: {
   sectionKey: string; fieldKey: string; gender: string; value: string; onChange: (v: string) => void; indent?: boolean
+  // Optional "method/kit used" note shown under the result (Serology only, for now) — see
+  // SerologyResult's `_method` fields and docs/value-checks.md.
+  methodValue?: string; onMethodChange?: (v: string) => void
 }) {
-  const { overrides, setOverride } = useContext(RangeOverridesContext)
+  const { overrides, setOverride, hideReference } = useContext(RangeOverridesContext)
   const { issues: sectionIssues, dismiss } = useContext(ValueChecksContext)
   const issues = sectionIssues[fieldKey] ?? []
   const checkBorder = issues.some((i) => i.level === 'critical') ? 'var(--danger)' : issues.some((i) => i.level === 'check') ? 'var(--warning)' : undefined
   const [editing, setEditing] = useState(false)
+  // Collapsed by default so a section with a method box on every row doesn't turn into a wall of
+  // empty inputs — most tests just use the lab's normal method and never need this. Starts open
+  // if a note is already saved, so nothing already filled in ever hides itself.
+  const [showMethod, setShowMethod] = useState(!!methodValue)
 
   const label = humanizeKey(fieldKey)
   const unit = unitFor(sectionKey, fieldKey)
@@ -714,6 +747,8 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
   const flag = flagFor(value, range, fieldKey)
   const flagColor = flag ? 'var(--danger)' : undefined
   const rangeInfo = numericRangeInfo(range)
+  const options = optionsFor(sectionKey, fieldKey)
+  const longestOption = options ? options.reduce((longest, opt) => (opt.length > longest.length ? opt : longest), '') : ''
 
   // ArrowUp/ArrowDown step the value by the range's own precision (0.1 for "13.0-17.0", 1 for
   // "0-15", etc.); Shift+Arrow does a coarse jump instead (see coarseStepFor). An empty field
@@ -752,17 +787,35 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
         {indent && <span className="text-[var(--ink-4)] mr-1.5">–</span>}
         {label}
       </span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleValueKeyDown}
-        className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-        style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
-      />
+      {options ? (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+          // Wide enough for the longest option's own text (e.g. Widal's "Positive 1:160 dilution")
+          // so the closed box doesn't clip it — a plain Negative/Positive field just gets 8.5rem.
+          style={{ width: `${Math.max(8.5, longestOption.length * 0.5 + 2.5)}rem`, borderColor: checkBorder ?? 'var(--border-strong)', color: 'var(--ink)' }}
+        >
+          <option value="">—</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+          {/* A value saved before this field had preset options (or typed in some other way) still shows as itself instead of silently blanking out. */}
+          {value && !options.includes(value) && <option value={value}>{value}</option>}
+        </select>
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleValueKeyDown}
+          className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+          style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
+        />
+      )}
       <span className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0" style={{ width: '6rem' }}>{unit}</span>
 
       <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
-        {editing ? (
+        {hideReference ? null : editing ? (
           <RangeEditor
             initial={range}
             defaultRange={defaultReferenceRange(sectionKey, fieldKey, gender)}
@@ -812,6 +865,28 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent }: {
           {issues.map((issue) => (
             <IssueNote key={issue.id} issue={issue} onFix={onChange} onDismiss={() => dismiss(fieldKey, issue.id)} />
           ))}
+        </div>
+      )}
+      {onMethodChange && (
+        <div style={{ marginLeft: 'calc(13rem + 0.75rem)' }} className="mt-1">
+          {showMethod ? (
+            <input
+              autoFocus={!methodValue}
+              value={methodValue ?? ''}
+              onChange={(e) => onMethodChange(e.target.value)}
+              onBlur={() => { if (!methodValue) setShowMethod(false) }}
+              placeholder="Method / kit used — prints under the result"
+              className="w-full max-w-xs text-[12.5px] px-2 py-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowMethod(true)}
+              className="text-[12px] text-[var(--ink-4)] hover:text-[var(--accent-ink)] hover:underline"
+            >
+              + Tested by a different method?
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1119,9 +1194,21 @@ function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
   const keys = SECTION_FIELD_KEYS[sectionKey] ?? []
   return (
     <div>
-      {keys.map((k) => (
-        <FieldRow key={k} sectionKey={sectionKey} fieldKey={k} gender={gender} value={v(k)} onChange={set(k)} />
-      ))}
+      {keys.map((k) => {
+        const withMethod = supportsMethodNote(sectionKey, k)
+        return (
+          <FieldRow
+            key={k}
+            sectionKey={sectionKey}
+            fieldKey={k}
+            gender={gender}
+            value={v(k)}
+            onChange={set(k)}
+            methodValue={withMethod ? v(k + '_method') : undefined}
+            onMethodChange={withMethod ? set(k + '_method') : undefined}
+          />
+        )
+      })}
     </div>
   )
 }

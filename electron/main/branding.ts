@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'path'
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
 
 // What a profile (see profiles/README.md) supplies for the lab's contact seed data — the
 // license file still separately governs the locked lab_name (see license.ts/lockLabName),
@@ -12,6 +12,9 @@ export interface BrandingConfig {
   labPhone: string
   labEmail: string
   labDoctor: string
+  // The institution named on the report footer's quality-control line (e.g. "CMC Hospital,
+  // Vellore."), shown only when set — most labs don't have one, so this stays blank for them.
+  labQualityCheck: string
 }
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -19,7 +22,8 @@ const DEFAULT_BRANDING: BrandingConfig = {
   labAddress: '',
   labPhone: '',
   labEmail: '',
-  labDoctor: ''
+  labDoctor: '',
+  labQualityCheck: ''
 }
 
 function resourcePath(file: string): string {
@@ -85,4 +89,33 @@ export function setLogo(dataUrl: string): void {
 export function clearLogo(): void {
   const path = userLogoPath()
   if (existsSync(path)) unlinkSync(path)
+}
+
+// A profile's extra header badge (e.g. Super Lab's "25 years of service" seal) — optional, staged
+// the same way as logo.png (see profiles/README.md), and unlike the logo there's no in-app picker
+// for it: it's a fixed piece of the vendor's branding, not something staff swap at runtime.
+export function getBadgeDataUrl(): string | null {
+  const path = resourcePath('badge.png')
+  if (!existsSync(path)) return null
+  try {
+    return `data:image/png;base64,${readFileSync(path).toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+// A profile's certification/accreditation logos (e.g. BMQR, ISO 9001), shown together on the
+// report footer. Zero or more PNGs staged under profiles/<name>/certifications/ — sorted by
+// filename so the order is stable and controlled by whoever names the files in the profile.
+export function getCertificationDataUrls(): string[] {
+  const dir = resourcePath('certifications')
+  if (!existsSync(dir)) return []
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.toLowerCase().endsWith('.png'))
+      .sort()
+      .map((f) => `data:image/png;base64,${readFileSync(join(dir, f)).toString('base64')}`)
+  } catch {
+    return []
+  }
 }

@@ -6,25 +6,44 @@ import type { Patient } from './api'
  * exact same page breaks the printed report will have — no more finding out a section got
  * awkwardly split in half only after printing.
  *
- * These are calibrated against the real A4 page box in ReportPreview.tsx: a 297mm sheet with
- * 12mm top/bottom padding leaves 273mm (~1032px) of box, minus the letterhead header (~118px)
- * and footer (~205px), leaving ~700px of usable content room. Keep them in sync with that
- * page's padding/header/footer and with the report's font sizes if either changes again, or
- * short reports start wasting whole pages on almost nothing — or worse, overflow the sheet and
- * silently push the footer onto an extra page.
+ * Every constant below was measured off the real rendered page (see scripts note at the bottom
+ * of this comment), not guessed — a guess that's a little off compounds over many rows into
+ * either a wasted near-blank trailing page or, worse, a footer silently pushed past the sheet
+ * and clipped. Re-measure all of them (getBoundingClientRect on each data-role element in
+ * ReportPreview.tsx) if the letterhead, footer, patient strip, or font sizes change again.
+ *
+ * Real page box: a 297mm sheet, 12mm top/bottom padding -> 1122.5px tall. Measured (single-lab,
+ * light theme, 96dpi): letterhead header 105.6px, patient strip 57.8px, content's own 12px top
+ * margin, footer 204.3px, a result row 37.85px, a section header 27.1px, a column header
+ * 24.05px, the patient-info block 83.1px, the closing block 109.9px. Every block below rounds
+ * its measurement up a few px as a safety margin for font-rendering variance across machines.
+ * The footer is absolutely positioned against the page box's true bottom edge, bleeding past the
+ * page's own bottom padding on purpose (its closing wave is a deliberate edge-to-edge flourish —
+ * see ReportPreview.tsx) rather than pushed there by flex, so content's available room is
+ * measured up to the footer's top edge directly, not derived from the page's nominal padding.
  */
-const CONTENT_HEIGHT = 700
-// Report rows are 13px text on py-2 — re-measure against the live page if either changes.
-const ROW_HEIGHT = 34
-const SECTION_HEADER_HEIGHT = 32
-const COLUMN_HEADER_HEIGHT = 26
+// Repeats a "Patient / Referred by / SID / Age-Sex" strip under the letterhead on every page (see
+// ReportPreview.tsx) so a page separated from the rest of the report still identifies whose it is.
+const PATIENT_STRIP_HEIGHT = 58
+// Measured gap between content's own top (just past the header+strip) and the footer's top edge
+// is 697.5px; a few px of that is a safety buffer for font-rendering variance across machines.
+const CONTENT_HEIGHT = 685
+// Report rows are 13px text on py-2.
+const ROW_HEIGHT = 38
+const SECTION_HEADER_HEIGHT = 28
+const COLUMN_HEADER_HEIGHT = 25
 const EMPTY_NOTICE_HEIGHT = 40
-// Title row + SID + Collected/Received/Reported timestamps + the patient/doctor/age grid.
-const PATIENT_INFO_HEIGHT = 158
-// End-of-report marker and the sign-off block always travel together as one unit — never
-// worth burning a whole extra page on two lines of signature separated from their context.
-const CLOSING_HEIGHT = 108
-const BLOCK_GAP = 20
+// Title row + SID + Collected/Received/Reported timestamps. The patient/referred-by/age-sex grid
+// that used to live here too was removed — it's now covered by the per-page patient strip
+// (PATIENT_STRIP_HEIGHT above), which repeats on every page including this one.
+const PATIENT_INFO_HEIGHT = 84
+// End-of-report marker and the sign-off block always travel together as one unit — never worth
+// burning a whole extra page on two lines of signature separated from their context. Measured at
+// 109.9 with mt-5 above the signature lines; that gap grew to mt-7 (+8px) for breathing room.
+const CLOSING_HEIGHT = 118
+// Every block below ends in Tailwind's mb-6 (1.5rem = 24px) — matching that exactly (rather than
+// a made-up round number) means this budget reflects the real gap, not an approximation of it.
+const BLOCK_GAP = 24
 // Below this many rows, a split chunk looks like an orphaned sliver — better to start the
 // whole remainder fresh on the next page than to dangle 1-2 rows before a "(continued)".
 const MIN_ROWS_TO_SPLIT = 4
@@ -60,8 +79,11 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     const data = sectionKey ? results[sectionKey] ?? {} : {}
     // 'others' has no fixed identity — staff can rename it in place (see ResultEntry.tsx);
     // the override lives under '__label' in its own results blob, which is never a real row.
+    // A '_method' key (Serology's "kit/method used" note — see ResultEntry.tsx's FieldRow) isn't
+    // a row either: it prints as a parenthetical under its own field's result (see
+    // ReportPreview.tsx's sectionChunk rendering), not as a separate test.
     const label = sectionKey === 'others' && data.__label ? data.__label : rawLabel
-    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && data[k] && data[k].trim() !== '')
+    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && !k.endsWith('_method') && data[k] && data[k].trim() !== '')
 
     if (filledKeys.length === 0) {
       placeWhole({ kind: 'emptySection', label }, SECTION_HEADER_HEIGHT + EMPTY_NOTICE_HEIGHT)

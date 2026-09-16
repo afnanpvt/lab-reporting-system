@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Download, Calendar } from 'lucide-react'
-import { getDoctor, listPatients, loadBillingContext, incentiveLineItemsFor, getLabSettings, getLogoDataUrl, type Doctor, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import { getDoctor, listPatients, loadBillingContext, incentiveLineItemsFor, getLabSettings, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, type Doctor, type Patient, type BillingContext, type LabSettingsForm } from './api'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
 type Preset = 'thisMonth' | 'lastMonth' | 'thisYear' | 'allTime' | 'custom'
@@ -64,6 +64,8 @@ export default function IncentiveReport() {
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
   const [logo, setLogo] = useState<string | null>(null)
+  const [badge, setBadge] = useState<string | null>(null)
+  const [certifications, setCertifications] = useState<string[]>([])
 
   const now = new Date()
   const [preset, setPreset] = useState<Preset>('thisMonth')
@@ -77,6 +79,8 @@ export default function IncentiveReport() {
     loadBillingContext().then(setBilling)
     getLabSettings().then(setSettings)
     getLogoDataUrl().then(setLogo)
+    getBadgeDataUrl().then(setBadge)
+    getCertificationDataUrls().then(setCertifications)
   }, [id])
 
   if (doctorLoaded && !doctor) {
@@ -183,7 +187,7 @@ export default function IncentiveReport() {
           >
             <LetterheadWatermark labName={settings.labName} />
             <div className="relative" style={{ zIndex: 1 }}>
-              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} />
+              <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
 
               <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: 'var(--ink)' }}>
                 <div>
@@ -255,7 +259,7 @@ export default function IncentiveReport() {
               </div>
             </div>
 
-            <LetterheadFooter variant="incentive" settings={settings} />
+            <LetterheadFooter variant="incentive" settings={settings} certificationDataUrls={certifications} />
           </div>
         </div>
       </div>

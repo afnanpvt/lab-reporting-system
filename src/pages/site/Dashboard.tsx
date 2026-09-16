@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ClipboardList, Clock3, CheckCircle2, ChevronRight } from 'lucide-react'
-import { listPatientsWithStatus, type Patient, type PatientWithStatus } from './api'
-import { PatientCard } from './PatientCard'
+import { Plus, ClipboardList, Clock3, CheckCircle2, ChevronRight, X } from 'lucide-react'
+import { listPatientsWithStatus, type Patient, type PatientWithStatus, type PatientStatus } from './api'
+import { PatientCard, statusCard } from './PatientCard'
 
 /** Plain, workplace-appropriate greetings — time-of-day aware, with a little variety so the
  * dashboard doesn't say the exact same line every single day. */
@@ -24,16 +24,25 @@ export default function Dashboard() {
   const openPatient = (p: Patient) => navigate(`/report/${p.id}`, { state: { patient: p } })
   const [rows, setRows] = useState<PatientWithStatus[]>([])
   const [greeting] = useState(pickGreeting)
+  // Filters the list below to one status at a time — null shows the usual "recent 6" mix.
+  // Picking one shows every matching patient instead, since that's the point of asking for
+  // just that type rather than a quick recent-activity glance.
+  const [statusFilter, setStatusFilter] = useState<PatientStatus | null>(null)
 
   useEffect(() => {
     listPatientsWithStatus().then(setRows)
   }, [])
 
-  const recent = rows.slice(0, 6)
+  const filtered = statusFilter ? rows.filter((r) => r.status === statusFilter) : rows.slice(0, 6)
   const stats = {
     today: rows.length,
     pending: rows.filter((r) => r.status !== 'completed').length,
     completed: rows.filter((r) => r.status === 'completed').length
+  }
+  const counts = {
+    completed: rows.filter((r) => r.status === 'completed').length,
+    partial: rows.filter((r) => r.status === 'partial').length,
+    draft: rows.filter((r) => r.status === 'draft').length
   }
 
   return (
@@ -68,16 +77,47 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[15px] font-semibold text-[var(--ink)]">Recent patients</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-[15px] font-semibold text-[var(--ink)]">{statusFilter ? statusCard[statusFilter].label : 'Recent patients'}</h2>
+            <div className="flex items-center gap-1.5">
+              {(['completed', 'partial', 'draft'] as const).map((key) => {
+                const s = statusCard[key]
+                const active = statusFilter === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setStatusFilter(active ? null : key)}
+                    title={active ? 'Click to clear this filter' : `Show only ${s.label.toLowerCase()} patients`}
+                    className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
+                    style={{
+                      backgroundColor: active ? s.text : s.bg,
+                      color: active ? 'white' : s.text,
+                      border: `1px solid ${active ? s.text : s.border}`
+                    }}
+                  >
+                    {counts[key]} {s.label}
+                  </button>
+                )
+              })}
+              {statusFilter && (
+                <button onClick={() => setStatusFilter(null)} title="Clear filter" className="text-[var(--ink-3)] hover:text-[var(--ink)] p-1">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
           <button onClick={() => navigate('/patients')} className="text-[13.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium inline-flex items-center gap-1">
             View all patients <ChevronRight size={14} />
           </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {recent.map((r, i) => (
+          {filtered.map((r, i) => (
             <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} />
           ))}
+          {statusFilter && filtered.length === 0 && (
+            <p className="text-[14px] text-[var(--ink-3)] col-span-full py-8 text-center">No {statusCard[statusFilter].label.toLowerCase()} patients right now.</p>
+          )}
         </div>
       </main>
   )
