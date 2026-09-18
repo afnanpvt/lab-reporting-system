@@ -35,11 +35,11 @@ async function main() {
 
   // ---- Doctors ----
   const doctors = [
-    { name: 'Dr. Arvind Nair', specialty: 'General Medicine', phone: '94422 10011' },
-    { name: 'Dr. Kavitha Rajan', specialty: 'Gynaecology', phone: '94422 10022' },
-    { name: 'Dr. Suresh Babu', specialty: 'Orthopaedics', phone: '94422 10033' },
-    { name: 'Dr. Meena Krishnan', specialty: 'Paediatrics', phone: '94422 10044' },
-    { name: 'Dr. Ilamaran Chezhiyan', specialty: 'General Physician', phone: '94422 10055' }
+    { name: 'Dr. Arvind Nair', specialty: 'General Medicine', phone: '' },
+    { name: 'Dr. Kavitha Rajan', specialty: 'Gynaecology', phone: '' },
+    { name: 'Dr. Suresh Babu', specialty: 'Orthopaedics', phone: '' },
+    { name: 'Dr. Meena Krishnan', specialty: 'Paediatrics', phone: '' },
+    { name: 'Dr. Ilamaran Chezhiyan', specialty: 'General Physician', phone: '' }
   ]
   const doctorNames = []
   for (const d of doctors) {
@@ -83,7 +83,7 @@ async function main() {
   const patients = [
     {
       name: 'Muthu Kumaran', age: 45, ageUnit: 'Y', gender: 'M',
-      address: 'Bazaar Street, Vaniyambadi', mobile: '9843211001',
+      address: 'Bazaar Street, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Arvind Nair', daysAgo: 0,
       sections: ['haematology', 'biochemistry', 'urine'],
       results: {
@@ -94,7 +94,7 @@ async function main() {
     },
     {
       name: 'Selvi Ramachandran', age: 32, ageUnit: 'Y', gender: 'F',
-      address: 'Melvisharam Road, Vaniyambadi', mobile: '9843211002',
+      address: 'Melvisharam Road, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Kavitha Rajan', daysAgo: 0,
       sections: ['haematology', 'serology'],
       results: {
@@ -104,7 +104,7 @@ async function main() {
     },
     {
       name: 'Baby Iniya', age: 4, ageUnit: 'Y', gender: 'F',
-      address: 'Ambur Road, Vaniyambadi', mobile: '9843211003',
+      address: 'Ambur Road, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Meena Krishnan', daysAgo: 1,
       sections: ['haematology', 'motion'],
       results: {
@@ -114,7 +114,7 @@ async function main() {
     },
     {
       name: 'Rajendran Pillai', age: 61, ageUnit: 'Y', gender: 'M',
-      address: 'Gandhi Nagar, Vaniyambadi', mobile: '9843211004',
+      address: 'Gandhi Nagar, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Suresh Babu', daysAgo: 1,
       sections: ['biochemistry', 'lft', 'electrolytes'],
       results: {
@@ -125,7 +125,7 @@ async function main() {
     },
     {
       name: 'Farhana Begum', age: 27, ageUnit: 'Y', gender: 'F',
-      address: 'Nellikuppam Street, Vaniyambadi', mobile: '9843211005',
+      address: 'Nellikuppam Street, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Kavitha Rajan', daysAgo: 2,
       sections: ['haematology', 'urine', 'serology'],
       results: {
@@ -136,7 +136,7 @@ async function main() {
     },
     {
       name: 'Chezhian Murugesan', age: 38, ageUnit: 'Y', gender: 'M',
-      address: 'Pernambut Road, Vaniyambadi', mobile: '9843211006',
+      address: 'Pernambut Road, Vaniyambadi', mobile: '',
       referredBy: 'Self', daysAgo: 2,
       sections: ['cs', 'urine'],
       results: {
@@ -146,7 +146,7 @@ async function main() {
     },
     {
       name: 'Lakshmi Narayanan', age: 55, ageUnit: 'Y', gender: 'F',
-      address: 'Kongarpalayam, Vaniyambadi', mobile: '9843211007',
+      address: 'Kongarpalayam, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Arvind Nair', daysAgo: 3,
       sections: ['gtt_lipid', 'biochemistry'],
       results: {
@@ -156,7 +156,7 @@ async function main() {
     },
     {
       name: 'Master Aadhavan', age: 9, ageUnit: 'Y', gender: 'M',
-      address: 'Odugathur Road, Vaniyambadi', mobile: '9843211008',
+      address: 'Odugathur Road, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Meena Krishnan', daysAgo: 3,
       sections: ['mantoux', 'haematology'],
       results: {
@@ -166,7 +166,7 @@ async function main() {
     },
     {
       name: 'Abdul Kareem', age: 68, ageUnit: 'Y', gender: 'M',
-      address: 'Melpalli Street, Vaniyambadi', mobile: '9843211009',
+      address: 'Melpalli Street, Vaniyambadi', mobile: '',
       referredBy: 'Dr. Ilamaran Chezhiyan', daysAgo: 4,
       sections: ['abg_sputum', 'electrolytes'],
       results: {
@@ -176,7 +176,7 @@ async function main() {
     },
     {
       name: 'Deepa Saravanan', age: 24, ageUnit: 'Y', gender: 'F',
-      address: 'Chinnakannampalayam, Vaniyambadi', mobile: '9843211010',
+      address: 'Chinnakannampalayam, Vaniyambadi', mobile: '',
       referredBy: 'Self', daysAgo: 5,
       sections: ['blood', 'haematology'],
       results: {

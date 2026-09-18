@@ -355,6 +355,11 @@ export interface LabSettingsForm {
   labPhone: string
   labEmail: string
   labDoctor: string
+  // Degrees/certifications printed smaller, under the name, on the sign-off line (e.g. "M.Sc.
+  // (Biochem), DMLT, DMRT, DCA") — a separate field from labDoctor so editing one can't mangle
+  // the other (see ReportPreview.tsx's sign-off block, which used to guess this apart from a
+  // single free-typed field by finding the first comma).
+  labDoctorQualifications: string
   // The institution named on the report's quality-control line (e.g. "CMC Hospital, Vellore."),
   // shown only when set — see ReportLetterhead.tsx's 'report' footer.
   labQualityCheck: string
@@ -368,6 +373,7 @@ export async function getLabSettings(): Promise<LabSettingsForm> {
     labPhone: raw.lab_phone || '',
     labEmail: raw.lab_email || '',
     labDoctor: raw.lab_doctor || '',
+    labDoctorQualifications: raw.lab_doctor_qualifications || '',
     labQualityCheck: raw.lab_quality_check || ''
   }
 }
@@ -494,6 +500,7 @@ export async function saveLabSettings(form: LabSettingsForm): Promise<void> {
     window.api.settings.set('lab_phone', form.labPhone),
     window.api.settings.set('lab_email', form.labEmail),
     window.api.settings.set('lab_doctor', form.labDoctor),
+    window.api.settings.set('lab_doctor_qualifications', form.labDoctorQualifications),
     window.api.settings.set('lab_quality_check', form.labQualityCheck)
   ])
 }

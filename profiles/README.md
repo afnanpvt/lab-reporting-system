@@ -11,7 +11,12 @@ machine. The private signing key is the one thing that never goes in git.
 
 ```
 profiles/<name>/
-  config.json        required — { labName, labAddress, labPhone, labEmail, labDoctor, labQualityCheck }
+  config.json        required — { labName, labAddress, labPhone, labEmail, labDoctor,
+                      labDoctorQualifications, labQualityCheck }
+                      labDoctor is the signing doctor's name alone; labDoctorQualifications is
+                      their degrees/certifications (e.g. "M.Sc. (Biochem), DMLT, DMRT, DCA"),
+                      printed smaller underneath on the report sign-off — kept as two fields so
+                      editing one never risks mangling the other.
                       labQualityCheck names an institution for the report's quality-control-check
                       line (e.g. "CMC Hospital, Vellore.") — leave it "" and the line just doesn't print.
   logo.png            optional — shown in the app header and report letterhead instead of the text wordmark

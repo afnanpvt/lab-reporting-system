@@ -264,7 +264,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     dbRun(
       `INSERT INTO patients (sid, name, age, age_unit, gender, address, mobile, referred_by, reg_date, reg_time, rpt_date, rpt_time, sections)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [sid, 'Mr. Mohan Gupta', 29, 'Y', 'M', 'Juni Line, New Delhi', '7070982408',
+      [sid, 'Mr. Mohan Gupta', 29, 'Y', 'M', 'Juni Line, New Delhi', '',
        'Dr. Ankit Agarwal', dateStr, timeStr, dateStr, timeStr,
        JSON.stringify(['haematology', 'biochemistry', 'serology'])]
     )

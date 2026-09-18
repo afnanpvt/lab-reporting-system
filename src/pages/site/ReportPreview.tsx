@@ -19,16 +19,6 @@ const PAGE_PAD_H_MM = 14
 const PAGE_PAD_H = `${PAGE_PAD_H_MM}mm`
 const PAGE_PAD = `${PAGE_PAD_V} ${PAGE_PAD_H}`
 
-// "A. Noorul Ameen, M.Sc. (Biochem), DMLT, DMRT, DCA" -> the name printed bold on its own line
-// and the qualifications smaller underneath, matching how it always printed before labDoctor
-// became one free-typed Settings field. A doctor with no comma (or no qualifications on file)
-// just gets the one line — nothing assumes a comma has to be there.
-function splitDoctorLine(labDoctor: string): { name: string; qualifications: string } {
-  const commaIndex = labDoctor.indexOf(',')
-  if (commaIndex === -1) return { name: labDoctor, qualifications: '' }
-  return { name: labDoctor.slice(0, commaIndex).trim(), qualifications: labDoctor.slice(commaIndex + 1).trim() }
-}
-
 /** "Now", formatted to match the app's existing date/time style, with a 12-hour AM/PM clock. */
 function formatReportedAt(): string {
   const d = new Date()
@@ -37,8 +27,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor, hiddenReferenceSections }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor, labDoctorQualifications, hiddenReferenceSections }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
   hiddenReferenceSections: Record<string, boolean>
 }) {
   if (block.kind === 'patientInfo') {
@@ -142,17 +132,14 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
         </div>
         <div className="text-right">
           <div className="border-t border-[var(--ink)] w-[160px] mb-1.5 ml-auto" />
-          {labDoctor && (() => {
-            const { name, qualifications } = splitDoctorLine(labDoctor)
-            return (
-              <>
-                <div className="text-[14px] font-bold text-[var(--ink)] leading-tight">{name}</div>
-                {qualifications && (
-                  <div className="text-[10.5px] font-medium text-[var(--ink-2)] tracking-wide mt-0.5">{qualifications}</div>
-                )}
-              </>
-            )
-          })()}
+          {labDoctor && (
+            <>
+              <div className="text-[14px] font-bold text-[var(--ink)] leading-tight">{labDoctor}</div>
+              {labDoctorQualifications && (
+                <div className="text-[10.5px] font-medium text-[var(--ink-2)] tracking-wide mt-0.5">{labDoctorQualifications}</div>
+              )}
+            </>
+          )}
           <div className="text-[10.5px] font-semibold text-[var(--accent)] tracking-wide uppercase mt-0.5">Lab Incharge</div>
         </div>
       </div>
@@ -219,7 +206,8 @@ export default function ReportPreview() {
 
   const handleWhatsApp = () => {
     if (!patient || !settings) return
-    const digits = patient.mobile.replace(/\D/g, '') || '9876543210'
+    const digits = patient.mobile.replace(/\D/g, '')
+    if (!digits) return
     const message = `Hi, your lab report from ${settings.labName} is ready. Please find it attached.`
     window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, '_blank')
   }
@@ -311,7 +299,7 @@ export default function ReportPreview() {
 
       <div className="relative flex-1 mt-3" style={{ zIndex: 1 }} data-role="content">
         {blocks.map((block, i) => (
-          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} hiddenReferenceSections={hiddenReferenceSections} />
+          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
         ))}
       </div>
 
@@ -386,7 +374,12 @@ export default function ReportPreview() {
               <Printer size={14} />
               Print
             </button>
-            <button onClick={handleWhatsApp} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
+            <button
+              onClick={handleWhatsApp}
+              disabled={!patient.mobile.trim()}
+              title={patient.mobile.trim() ? undefined : 'No mobile number on file for this patient'}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[var(--accent-soft)]"
+            >
               <MessageCircle size={14} />
               Share
             </button>

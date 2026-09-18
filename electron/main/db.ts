@@ -318,18 +318,54 @@ function createTables(): void {
   // build separately force-locks lab_name on every launch (see lockLabName/index.ts); this only
   // governs the one-time starting values, which stay editable in Settings after that.
   const branding = getBranding()
+
+  // One-time split: lab_doctor used to hold "Name, Qualifications" as one free-typed string,
+  // pulled apart only at print time by guessing at the first comma (see the now-removed
+  // splitDoctorLine in ReportPreview.tsx). Any database that already has a combined value here,
+  // but has never seen lab_doctor_qualifications exist as its own key, gets it carved out once —
+  // everything before the first comma stays the name, the rest becomes the qualifications row.
+  // A fresh database has no lab_doctor row yet, so this is a no-op and both fields are seeded
+  // straight from the profile below instead.
+  const preSplitDoctor = dbGet("SELECT value FROM lab_settings WHERE key='lab_doctor'")
+  const alreadySplit = dbGet("SELECT value FROM lab_settings WHERE key='lab_doctor_qualifications'")
+  if (!alreadySplit && preSplitDoctor?.value && String(preSplitDoctor.value).includes(',')) {
+    const raw = String(preSplitDoctor.value)
+    const commaIndex = raw.indexOf(',')
+    dbRun("UPDATE lab_settings SET value=? WHERE key='lab_doctor'", [raw.slice(0, commaIndex).trim()])
+    dbRun('INSERT INTO lab_settings (key, value) VALUES (?, ?)', ['lab_doctor_qualifications', raw.slice(commaIndex + 1).trim()])
+  }
+
   const defaults = [
     ['lab_name', branding.labName],
     ['lab_address', branding.labAddress],
     ['lab_phone', branding.labPhone],
     ['lab_email', branding.labEmail],
     ['lab_doctor', branding.labDoctor],
+    ['lab_doctor_qualifications', branding.labDoctorQualifications],
     ['lab_quality_check', branding.labQualityCheck],
     ['default_printer', ''],
     ['sid_counter', '1']
   ]
   for (const [k, v] of defaults) {
     dbRun('INSERT OR IGNORE INTO lab_settings (key, value) VALUES (?, ?)', [k, v])
+  }
+
+  // One-time cleanup: early builds (and the old pre-profiles app) seeded every lab's doctor
+  // field with the literal placeholder "Dr. Arvind Nair" copied from the dev profile template.
+  // Any machine that ran one of those builds even once has it permanently stuck — the seed
+  // above is INSERT OR IGNORE, so a later, corrected profile never overwrites it. Authorised
+  // Doctor is a normal editable Settings field, so this only needs to run once per machine: if
+  // it's still exactly that stale placeholder and the current profile has moved on, catch it up.
+  // Any real edit since (by staff or Scalyft) no longer matches the placeholder, so it's left
+  // alone for good.
+  const STALE_DOCTOR_PLACEHOLDER = 'Dr. Arvind Nair'
+  const currentDoctor = dbGet("SELECT value FROM lab_settings WHERE key='lab_doctor'")
+  if (
+    currentDoctor?.value === STALE_DOCTOR_PLACEHOLDER &&
+    branding.labDoctor &&
+    branding.labDoctor !== STALE_DOCTOR_PLACEHOLDER
+  ) {
+    dbRun("UPDATE lab_settings SET value=? WHERE key='lab_doctor'", [branding.labDoctor])
   }
 
   // Rate card defaults — a placeholder starting price list; staff can edit it like any

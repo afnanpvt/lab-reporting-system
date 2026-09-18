@@ -12,6 +12,11 @@ export interface BrandingConfig {
   labPhone: string
   labEmail: string
   labDoctor: string
+  // Degrees/certifications printed smaller, under the name, on the sign-off line (e.g. "M.Sc.
+  // (Biochem), DMLT, DMRT, DCA") — kept separate from labDoctor so editing one never risks
+  // mangling the other (see the removed splitDoctorLine in ReportPreview.tsx, which used to
+  // guess this apart from a single free-typed field by finding the first comma).
+  labDoctorQualifications: string
   // The institution named on the report footer's quality-control line (e.g. "CMC Hospital,
   // Vellore."), shown only when set — most labs don't have one, so this stays blank for them.
   labQualityCheck: string
@@ -23,6 +28,7 @@ const DEFAULT_BRANDING: BrandingConfig = {
   labPhone: '',
   labEmail: '',
   labDoctor: '',
+  labDoctorQualifications: '',
   labQualityCheck: ''
 }
 

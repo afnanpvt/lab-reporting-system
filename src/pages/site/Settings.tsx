@@ -19,7 +19,7 @@ import { contactScalyft } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 
-const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '', labQualityCheck: '' }
+const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '', labDoctorQualifications: '', labQualityCheck: '' }
 
 // Settings is a routed page — it fully unmounts when you navigate away and remounts from
 // scratch when you come back, unlike Shell's persistent header. Plain useState for
@@ -221,20 +221,21 @@ export default function Settings() {
     await refreshBranding()
   }
 
-  // Authorised Doctor carries the doctor's name AND qualifications baked in as one string
-  // (see splitDoctorLine in ReportPreview.tsx) — same kind of fixed, Scalyft-set branding detail
-  // as the logo, so it gets the same dev-only treatment: editable while building/testing a
-  // profile, not shown at all in a packaged build (staff would only ever break the formatting
-  // by editing it there, never legitimately need to).
-  const allFields: { key: keyof typeof form; label: string; placeholder: string }[] = [
+  // Doctor name and qualifications are separate fields, not one free-typed string split apart
+  // by guessing at a comma (see the one-time lab_doctor_qualifications migration in db.ts for
+  // machines that already had them combined). Unlike the logo, both are left editable in a
+  // packaged build too — a lab's signing doctor or qualifications can legitimately change, and
+  // there'd otherwise be no way to correct it short of a new release (see the one-time
+  // lab_doctor placeholder cleanup in db.ts for machines already stuck on an old default).
+  const fields: { key: keyof typeof form; label: string; placeholder: string }[] = [
     { key: 'labName', label: 'Lab Name', placeholder: 'Your Lab Name' },
     { key: 'labAddress', label: 'Address', placeholder: 'Full address' },
-    { key: 'labPhone', label: 'Phone / Contact', placeholder: 'e.g. 99442 38110' },
+    { key: 'labPhone', label: 'Phone / Contact', placeholder: 'e.g. 98765 43210' },
     { key: 'labEmail', label: 'Email', placeholder: 'e.g. lab@example.com' },
     { key: 'labDoctor', label: 'Authorised Doctor', placeholder: 'Dr. Name (printed on reports)' },
+    { key: 'labDoctorQualifications', label: 'Qualifications', placeholder: 'e.g. M.Sc. (Biochem), DMLT, DMRT, DCA' },
     { key: 'labQualityCheck', label: 'Quality Check Institution', placeholder: 'e.g. CMC Hospital, Vellore. (blank = no quality-check line on reports)' }
   ]
-  const fields = import.meta.env.DEV ? allFields : allFields.filter((f) => f.key !== 'labDoctor')
 
   return (
       <div className="flex flex-col h-full">

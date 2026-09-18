@@ -41,8 +41,9 @@ export default function Bill() {
 
   const handleWhatsApp = () => {
     if (!patient || !billing || !settings) return
+    const digits = patient.mobile.replace(/\D/g, '')
+    if (!digits) return
     const total = billTotalFor(billing, patient)
-    const digits = patient.mobile.replace(/\D/g, '') || '9876543210'
     const message = `Hi, your bill from ${settings.labName} for ${patient.sid} is ₹${total.toLocaleString('en-IN')}.`
     window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, '_blank')
   }
@@ -83,7 +84,12 @@ export default function Bill() {
               <Printer size={14} />
               Print
             </button>
-            <button onClick={handleWhatsApp} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
+            <button
+              onClick={handleWhatsApp}
+              disabled={!patient.mobile.trim()}
+              title={patient.mobile.trim() ? undefined : 'No mobile number on file for this patient'}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[var(--accent-soft)]"
+            >
               <MessageCircle size={14} />
               Share
             </button>
