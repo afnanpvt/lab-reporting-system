@@ -826,7 +826,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           />
         ) : (
           <>
-            {range ? (
+            {range && (
               !value ? (
                 <button
                   type="button"
@@ -843,10 +843,6 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
                   {range}
                 </span>
               )
-            ) : (
-              <span className="text-[12.5px] text-[var(--ink-4)] italic whitespace-nowrap px-1.5">
-                {isOverridden ? 'Reference hidden' : 'No range set'}
-              </span>
             )}
             <button
               type="button"
