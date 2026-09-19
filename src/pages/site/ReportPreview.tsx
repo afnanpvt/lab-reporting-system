@@ -170,7 +170,7 @@ export default function ReportPreview() {
   // on each page below, which keeps every page in the DOM for print even when only one is shown
   // on screen).
   const [zoom, setZoom] = useState(1)
-  const [viewMode, setViewMode] = useState<'single' | 'two' | 'continuous'>('single')
+  const [viewMode, setViewMode] = useState<'single' | 'two' | 'continuous'>('continuous')
   const [currentPage, setCurrentPage] = useState(0)
 
   useEffect(() => {
@@ -389,6 +389,13 @@ export default function ReportPreview() {
         <div className="flex items-center gap-3 px-8 py-2 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-app)] p-0.5">
             <button
+              onClick={() => setViewMode('continuous')}
+              title="Continuous scroll"
+              className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${viewMode === 'continuous' ? 'bg-[var(--surface)] shadow-sm text-[var(--accent-ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}
+            >
+              <Rows3 size={14} />
+            </button>
+            <button
               onClick={() => setViewMode('single')}
               title="Single page"
               className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${viewMode === 'single' ? 'bg-[var(--surface)] shadow-sm text-[var(--accent-ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}
@@ -401,13 +408,6 @@ export default function ReportPreview() {
               className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${viewMode === 'two' ? 'bg-[var(--surface)] shadow-sm text-[var(--accent-ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}
             >
               <Columns2 size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode('continuous')}
-              title="Continuous scroll"
-              className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${viewMode === 'continuous' ? 'bg-[var(--surface)] shadow-sm text-[var(--accent-ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}
-            >
-              <Rows3 size={14} />
             </button>
           </div>
 
