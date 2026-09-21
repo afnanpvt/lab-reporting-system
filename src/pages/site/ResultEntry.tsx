@@ -843,6 +843,8 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
                   {range}
                 </span>
               )
+            ) : isOverridden ? (
+              <span className="text-[12.5px] text-[var(--ink-4)] px-1.5 select-none" title="Reference hidden — click ✏ to restore">—</span>
             ) : (
               <span className="text-[12.5px] text-[var(--ink-4)] italic whitespace-nowrap px-1.5">No range set</span>
             )}
@@ -946,6 +948,11 @@ function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, on
             Reset
           </button>
         )}
+        {defaultRange && (
+          <button type="button" onClick={() => onSave('')} title="Hide this reference from the report" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
+            Remove
+          </button>
+        )}
         <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
           <X size={14} />
         </button>
@@ -1002,6 +1009,11 @@ function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, on
       {isOverridden && (
         <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
           Reset
+        </button>
+      )}
+      {defaultRange && (
+        <button type="button" onClick={() => onSave('')} title="Hide this reference from the report" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
+          Remove
         </button>
       )}
       <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">

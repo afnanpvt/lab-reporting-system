@@ -289,11 +289,17 @@ export default function ReportPreview() {
       <div className="relative pt-1.5 pb-2" style={{ zIndex: 1, borderBottom: '1px solid #e5e5e5' }} data-role="patient-strip">
         <div className="flex items-center justify-between text-[13px] text-[#333]">
           <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
-          <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+          {patient.referredBy && patient.referredBy !== 'Self' && (
+            <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+          )}
           <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
         </div>
-        <div className="text-[13px] text-[#333] mt-1">
-          Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b>
+        <div className="flex items-center flex-wrap gap-x-0 text-[#333] mt-1">
+          <span className="text-[13px]">Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></span>
+          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
+          <span className="text-[12px]">Collected <b className="text-[var(--ink)]">{patient.date}{patient.regTime ? ' ' + formatTime12h(patient.regTime) : ''}</b></span>
+          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
+          <span className="text-[12px]">Reported <b className="text-[var(--ink)]">{patient.rptDate ? `${patient.rptDate} ${formatTime12h(patient.rptTime)}` : reportedAt}</b></span>
         </div>
       </div>
 
