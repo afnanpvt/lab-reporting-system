@@ -29,7 +29,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "cross-env": "^10.1.0",
-    "electron": "^32.1.0",
+    "electron": "22.3.27",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "postcss": "^8.4.47",
@@ -47,7 +47,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}-${env.PROFILE_NAME}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-${env.PROFILE_NAME}-win7-Setup-${version}.${ext}"
     },
     "files": [
       "out/**/*",
@@ -65,7 +65,7 @@
     ]
   },
   "allowScripts": {
-    "electron@32.3.3": true,
+    "electron@22.3.27": true,
     "esbuild@0.21.5": true
   }
 }
