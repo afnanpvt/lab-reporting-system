@@ -453,10 +453,10 @@ export async function getRangeOverrides(): Promise<Record<string, string>> {
 export async function setRangeOverride(key: string, range: string | null): Promise<Record<string, string>> {
   const current = await getRangeOverrides()
   const next = { ...current }
-  if (range === null || range.trim() === '') {
+  if (range === null) {
     delete next[key]
   } else {
-    next[key] = range
+    next[key] = range  // '' means "explicitly no reference" — distinct from key absent (use default)
   }
   await window.api.settings.set(RANGE_OVERRIDES_KEY, JSON.stringify(next))
   return next
