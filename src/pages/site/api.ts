@@ -450,6 +450,11 @@ export async function getRangeOverrides(): Promise<Record<string, string>> {
   }
 }
 
+// null (the "Reset to default" button) clears the override entirely, falling back to the
+// clinical default in FIELD_META. An explicit '' is a real, distinct override, not a reset — it's
+// how a field's reference gets hidden without hiding the whole section (see the "Show reference
+// values" checkbox for that): clear the box in RangeEditor and save, and getReferenceRange
+// returns '' for that field from then on instead of falling through to the default.
 export async function setRangeOverride(key: string, range: string | null): Promise<Record<string, string>> {
   const current = await getRangeOverrides()
   const next = { ...current }
