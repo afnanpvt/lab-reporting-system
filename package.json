@@ -1,6 +1,6 @@
 {
   "name": "lumalabs",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "description": "LumaLabs — offline-first desktop platform for laboratory registration, results, reporting, and billing",
   "main": "out/main/index.js",
   "scripts": {
