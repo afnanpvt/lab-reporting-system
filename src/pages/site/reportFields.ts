@@ -135,7 +135,7 @@ const FIELD_META: Record<string, Record<string, FieldMeta>> = {
     bilirubin: { unit: '', range: 'Nil' },
     pus_cells: { unit: '/HPF', range: '0–4/HPF' },
     rbc: { unit: '/HPF', range: '0–2/HPF' },
-    epithelial_cells: { unit: '', range: 'Few' },
+    epithelial_cells: { unit: '/HPF', range: 'Few/HPF' },
     casts: { unit: '', range: 'Nil' },
     crystals: { unit: '', range: 'Nil' },
     flagellates: { unit: '', range: 'Nil' },

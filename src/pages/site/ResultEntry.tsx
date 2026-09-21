@@ -826,7 +826,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           />
         ) : (
           <>
-            {range ? (
+            {range && (
               !value ? (
                 <button
                   type="button"
@@ -843,15 +843,11 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
                   {range}
                 </span>
               )
-            ) : isOverridden ? (
-              <span className="text-[12.5px] text-[var(--ink-4)] px-1.5 select-none" title="Reference hidden — click ✏ to restore">—</span>
-            ) : (
-              <span className="text-[12.5px] text-[var(--ink-4)] italic whitespace-nowrap px-1.5">No range set</span>
             )}
             <button
               type="button"
               onClick={() => setEditing(true)}
-              title={isOverridden ? 'Custom range — click to edit or reset to default' : 'Edit reference range for every patient'}
+              title={isOverridden ? (range ? 'Custom range — click to edit or reset to default' : 'Reference hidden for this test — click to add one back') : 'Edit reference range for every patient'}
               className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors ${
                 isOverridden ? 'text-[var(--accent)] hover:bg-[var(--accent-soft)]' : 'text-[var(--border-strong)] hover:text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'
               }`}
@@ -927,7 +923,11 @@ function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, on
   }
 
   if (!parsed) {
-    const commitRaw = () => { if (rawDraft.trim() !== '') onSave(rawDraft.trim()) }
+    // Saving with the box cleared is deliberate, not blocked: an explicit blank override hides
+    // just this field's reference (see setRangeOverride in api.ts) without touching the
+    // section-wide "Show reference values" checkbox — clear it, hit save, the pencil stays put
+    // to bring a reference back later.
+    const commitRaw = () => onSave(rawDraft.trim())
     return (
       <div className="flex items-center gap-1.5">
         <input
@@ -936,11 +936,11 @@ function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, on
           value={rawDraft}
           onChange={(e) => setRawDraft(e.target.value)}
           onKeyDown={stopAndHandle(commitRaw)}
-          placeholder="e.g. Upto 140.0 mg/dl"
+          placeholder="e.g. Upto 140.0 mg/dl — leave blank to hide"
           className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
-          style={{ width: '10rem' }}
+          style={{ width: '13rem' }}
         />
-        <button type="button" onClick={commitRaw} title="Save — applies to every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
+        <button type="button" onClick={commitRaw} title="Save — applies to every patient (leave blank to hide this reference)" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
           <CheckCircle2 size={14} />
         </button>
         {isOverridden && (
@@ -1011,11 +1011,12 @@ function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, on
           Reset
         </button>
       )}
-      {defaultRange && (
-        <button type="button" onClick={() => onSave('')} title="Hide this reference from the report" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
-          Remove
-        </button>
-      )}
+      {/* Two required number boxes can't themselves go blank the way the free-text editor's one
+          box can, so hiding this field's reference gets its own explicit action instead — same
+          effect as clearing and saving there (see setRangeOverride in api.ts). */}
+      <button type="button" onClick={() => onSave('')} title="Hide the reference for just this test" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
+        Remove
+      </button>
       <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
         <X size={14} />
       </button>
