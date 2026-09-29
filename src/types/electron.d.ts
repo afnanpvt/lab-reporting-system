@@ -51,6 +51,7 @@ interface LabAPI {
     get(id: number): Promise<import('./lab').Doctor | null>
     create(data: { name: string; specialty?: string; phone?: string }): Promise<{ id: number }>
     update(id: number, data: Partial<import('./lab').Doctor>): Promise<boolean>
+    delete(id: number): Promise<boolean>
   }
   billing: {
     rateCard(): Promise<import('./lab').RateCardEntry[]>

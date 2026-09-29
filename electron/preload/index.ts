@@ -51,7 +51,8 @@ const api = {
     list: () => ipcRenderer.invoke('doctors:list'),
     get: (id: number) => ipcRenderer.invoke('doctors:get', id),
     create: (data: unknown) => ipcRenderer.invoke('doctors:create', data),
-    update: (id: number, data: unknown) => ipcRenderer.invoke('doctors:update', id, data)
+    update: (id: number, data: unknown) => ipcRenderer.invoke('doctors:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('doctors:delete', id)
   },
   billing: {
     rateCard: () => ipcRenderer.invoke('billing:rateCard'),

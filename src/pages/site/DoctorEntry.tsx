@@ -1,11 +1,17 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, AlertCircle, Stethoscope, Phone } from 'lucide-react'
-import { createDoctor } from './api'
+import { createDoctor, updateDoctor, type Doctor } from './api'
 
 export default function DoctorEntry() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', specialty: '', phone: '' })
+  const location = useLocation()
+  const editing = (location.state as { doctor?: Doctor })?.doctor
+  const [form, setForm] = useState({
+    name: editing?.name ?? '',
+    specialty: editing?.specialty ?? '',
+    phone: editing?.phone ?? ''
+  })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -15,7 +21,9 @@ export default function DoctorEntry() {
     if (!form.name.trim()) { setError("Please enter the doctor's name before continuing."); return }
     setError('')
     setSaving(true)
-    await createDoctor({ name: form.name.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() })
+    const data = { name: form.name.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() }
+    if (editing) await updateDoctor(editing.id, data)
+    else await createDoctor(data)
     navigate('/doctors')
   }
 
@@ -29,8 +37,10 @@ export default function DoctorEntry() {
           Back to doctors
         </button>
 
-        <h1 className="text-[24px] font-semibold text-[var(--ink)] mb-1">New Doctor</h1>
-        <p className="text-[15px] text-[var(--ink-2)] mb-5">Add a referring doctor so their patients and incentive report can be tracked.</p>
+        <h1 className="text-[24px] font-semibold text-[var(--ink)] mb-1">{editing ? 'Edit Doctor' : 'New Doctor'}</h1>
+        <p className="text-[15px] text-[var(--ink-2)] mb-5">
+          {editing ? "Update this referring doctor's details." : 'Add a referring doctor so their patients and incentive report can be tracked.'}
+        </p>
 
         {error && (
           <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-[14px] mb-5 max-w-2xl" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger-soft-border)' }}>
@@ -75,7 +85,7 @@ export default function DoctorEntry() {
                 disabled={saving}
                 className="px-5 py-2.5 bg-[var(--accent)] text-white text-[15px] font-medium rounded-2xl hover:bg-[var(--accent-ink)] shadow-sm disabled:opacity-60"
               >
-                {saving ? 'Saving…' : 'Add Doctor'}
+                {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Doctor'}
               </button>
               <button
                 onClick={() => navigate('/doctors')}

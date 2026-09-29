@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator } from 'lucide-react'
-import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
+import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, getUnitOverrides, setUnitOverride, type Patient, type ResultsBySection } from './api'
+import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
 
@@ -26,7 +26,12 @@ const RangeOverridesContext = createContext<{
   // Whether the active section's reference column is hidden lab-wide (see the "Show reference
   // values" checkbox in ResultEntry) — a section-level on/off, not per-field like overrides above.
   hideReference: boolean
-}>({ overrides: {}, setOverride: () => {}, hideReference: false })
+  // Lab-wide unit customizations, threaded the same way as range overrides above — a lab that
+  // reports Haemoglobin in g/L instead of the default gm/dl edits it once here and every report
+  // follows (see setUnitOverride in api.ts).
+  unitOverrides: Record<string, string>
+  setUnit: (key: string, unit: string | null) => void
+}>({ overrides: {}, setOverride: () => {}, hideReference: false, unitOverrides: {}, setUnit: () => {} })
 
 /** The active section's value-check notes (see valueChecks.ts), threaded the same way as range overrides. */
 const ValueChecksContext = createContext<{
@@ -51,6 +56,9 @@ export default function ResultEntry() {
   // sectionKey, e.g. a lab that never wants a reference shown on urine reports. Loaded once here
   // and remembered for every future patient/report, same as range overrides above.
   const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
+  // Lab-wide unit customizations (see api.ts) — loaded once, applied to every patient/report, same
+  // lifecycle as the range overrides above.
+  const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const paneRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef<false | 'first' | 'last'>(false)
@@ -59,10 +67,15 @@ export default function ResultEntry() {
     listPatients().then(setPatients)
     getRangeOverrides().then(setRangeOverrides)
     getHiddenReferenceSections().then(setHiddenReferenceSections)
+    getUnitOverrides().then(setUnitOverrides)
   }, [])
 
   const setOverride = useCallback((key: string, range: string | null) => {
     setRangeOverride(key, range).then(setRangeOverrides)
+  }, [])
+
+  const setUnit = useCallback((key: string, unit: string | null) => {
+    setUnitOverride(key, unit).then(setUnitOverrides)
   }, [])
 
   const toggleReferenceVisibility = useCallback((sectionKey: string, hidden: boolean) => {
@@ -288,14 +301,17 @@ export default function ResultEntry() {
   // to the row editor, so every other consumer of this section's data works off the rest.
   const { __label: _othersLabel, ...visibleData } = activeData
   const totalCount = isOthers ? Object.keys(visibleData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
-  // A '_method' key (Serology's "kit/method used" note, see FieldRow) is an annotation on its
-  // own field, not a test of its own — it must not inflate this count past the section's real
-  // field total.
-  const filledCount = Object.entries(visibleData).filter(([k, v]) => !k.endsWith('_method') && v && v.trim() !== '').length
+  // For a fixed section, "X of Y entered" only counts the section's real schema fields — never the
+  // annotation/metadata keys that also live in the same data object (Serology's "_method" kit
+  // notes, Mantoux's injection/reading date-time), which would otherwise push the count past Y.
+  // 'others' has no fixed schema, so it counts every typed row instead.
+  const filledCount = isOthers
+    ? Object.entries(visibleData).filter(([k, v]) => !k.endsWith('_method') && v && v.trim() !== '').length
+    : (SECTION_FIELD_KEYS[active.key] ?? []).filter((k) => visibleData[k] && visibleData[k].trim() !== '').length
   const completion = getCompletionState(active.key, visibleData)
 
   return (
-    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride, hideReference: !!hiddenReferenceSections[active.key] }}>
+    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride, hideReference: !!hiddenReferenceSections[active.key], unitOverrides, setUnit }}>
     <ValueChecksContext.Provider value={{ issues: issuesBySection[active.key] ?? {}, dismiss: dismissIssue }}>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
@@ -729,18 +745,21 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
   // SerologyResult's `_method` fields and docs/value-checks.md.
   methodValue?: string; onMethodChange?: (v: string) => void
 }) {
-  const { overrides, setOverride, hideReference } = useContext(RangeOverridesContext)
+  const { overrides, setOverride, hideReference, unitOverrides, setUnit } = useContext(RangeOverridesContext)
   const { issues: sectionIssues, dismiss } = useContext(ValueChecksContext)
   const issues = sectionIssues[fieldKey] ?? []
   const checkBorder = issues.some((i) => i.level === 'critical') ? 'var(--danger)' : issues.some((i) => i.level === 'check') ? 'var(--warning)' : undefined
   const [editing, setEditing] = useState(false)
+  const [editingUnit, setEditingUnit] = useState(false)
   // Collapsed by default so a section with a method box on every row doesn't turn into a wall of
   // empty inputs — most tests just use the lab's normal method and never need this. Starts open
   // if a note is already saved, so nothing already filled in ever hides itself.
   const [showMethod, setShowMethod] = useState(!!methodValue)
 
   const label = humanizeKey(fieldKey)
-  const unit = unitFor(sectionKey, fieldKey)
+  const unit = unitFor(sectionKey, fieldKey, unitOverrides)
+  const unitKey = unitOverrideKey(sectionKey, fieldKey)
+  const unitIsOverridden = unitOverrides[unitKey] !== undefined
   const range = getReferenceRange(sectionKey, fieldKey, gender, overrides)
   const key = rangeOverrideKey(sectionKey, fieldKey, gender)
   const isOverridden = overrides[key] !== undefined
@@ -812,7 +831,26 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
         />
       )}
-      <span className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0" style={{ width: '6rem' }}>{unit}</span>
+      {editingUnit ? (
+        <UnitEditor
+          initial={unit}
+          defaultUnit={defaultUnitFor(sectionKey, fieldKey)}
+          isOverridden={unitIsOverridden}
+          onCancel={() => setEditingUnit(false)}
+          onSave={(next) => { setUnit(unitKey, next); setEditingUnit(false) }}
+          onReset={() => { setUnit(unitKey, null); setEditingUnit(false) }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditingUnit(true)}
+          title="Edit the unit for this test (applies to every patient)"
+          className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0 text-left rounded-md px-1.5 py-0.5 hover:bg-[var(--bg-hover)] hover:text-[var(--ink)] transition-colors truncate"
+          style={{ width: '6rem' }}
+        >
+          {unit || <span className="text-[var(--ink-4)] italic">unit</span>}
+        </button>
+      )}
 
       <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
         {hideReference ? null : editing ? (
@@ -887,6 +925,55 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Inline editor for a field's unit — one free-text box, since a unit ("gm/dl", "cells/cumm",
+ * "/HPF") is always just a short string with no low/high structure. Clearing it and saving is a
+ * real, deliberate choice (some fields legitimately have no unit), so a blank save is allowed;
+ * "Reset" restores the built-in default (see setUnitOverride / defaultUnitFor).
+ */
+function UnitEditor({ initial, defaultUnit, isOverridden, onCancel, onSave, onReset }: {
+  initial: string; defaultUnit: string; isOverridden: boolean
+  onCancel: () => void; onSave: (unit: string) => void; onReset: () => void
+}) {
+  const [draft, setDraft] = useState(initial)
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
+
+  const commit = () => onSave(draft.trim())
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit() }
+    if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+    e.stopPropagation()
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      <input
+        ref={ref}
+        data-range-editor="true"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="e.g. gm/dl"
+        className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
+        style={{ width: '7rem' }}
+      />
+      <button type="button" onClick={commit} title="Save — applies to every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
+        <CheckCircle2 size={14} />
+      </button>
+      {isOverridden && (
+        <button type="button" onClick={onReset} title={`Reset to default: ${defaultUnit || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
+          Reset
+        </button>
+      )}
+      <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
+        <X size={14} />
+      </button>
     </div>
   )
 }
@@ -1200,6 +1287,40 @@ function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
             className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--surface)] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           />
         </div>
+      </div>
+    )
+  }
+
+  if (sectionKey === 'mantoux') {
+    // Two-visit test: PPD injected on day 0, induration read 48-72h later. The two date/time
+    // pairs are metadata, not test-value rows (no unit/reference/flag), so they get their own
+    // date+time pickers up top rather than going through FieldRow. They're stored as extra
+    // columns on the mantoux table (see db.ts) and kept out of SECTION_FIELD_KEYS so they don't
+    // count toward the section's "X of Y entered" total. Left blank by default, fully editable.
+    const dtField = 'w-full px-3 py-2 text-[14px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]'
+    return (
+      <div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 max-w-lg">
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection date</label>
+            <input type="date" value={v('injection_date')} onChange={(e) => set('injection_date')(e.target.value)} className={dtField} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection time</label>
+            <input type="time" value={v('injection_time')} onChange={(e) => set('injection_time')(e.target.value)} className={dtField} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading date</label>
+            <input type="date" value={v('reading_date')} onChange={(e) => set('reading_date')(e.target.value)} className={dtField} />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading time</label>
+            <input type="time" value={v('reading_time')} onChange={(e) => set('reading_time')(e.target.value)} className={dtField} />
+          </div>
+        </div>
+        {(SECTION_FIELD_KEYS.mantoux ?? []).map((k) => (
+          <FieldRow key={k} sectionKey={sectionKey} fieldKey={k} gender={gender} value={v(k)} onChange={set(k)} />
+        ))}
       </div>
     )
   }

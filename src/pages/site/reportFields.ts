@@ -13,7 +13,10 @@ const LABEL_OVERRIDES: Record<string, string> = {
   widal_ah: 'Widal AH', widal_bh: 'Widal BH', dengue_igg: 'Dengue IgG', dengue_igm: 'Dengue IgM',
   dengue_ns1: 'Dengue NS1', sero_mtb_igg: 'MTB IgG', sero_mtb_igm: 'MTB IgM',
   ph: 'pH', po2: 'pO2', pco2: 'pCO2', hco3: 'HCO3', o2_sat: 'O2 Saturation', fio2: 'FiO2',
-  afb_smear: 'AFB Smear', pt: 'PT', inr: 'INR', ggt: 'GGT', ag_ratio: 'A/G Ratio'
+  afb_smear: 'AFB Smear', pt: 'PT', inr: 'INR', ggt: 'GGT', ag_ratio: 'A/G Ratio',
+  // Client asked for "Plasma glucose" naming (fasting sample is reported as plasma glucose in
+  // standard lab terminology, e.g. ADA diagnostic criteria) — PP and R stay as-is per request.
+  glucose_f: 'Plasma Glucose F'
 }
 
 /** "09:14" -> "09:14 AM", "14:30" -> "02:30 PM" — every stored time is 24-hour; this is the one place that renders it for display. */
@@ -225,7 +228,24 @@ export function defaultReferenceRange(sectionKey: string, fieldKey: string, gend
   return gender === 'F' ? meta.range.F : meta.range.M
 }
 
-export function unitFor(sectionKey: string, fieldKey: string): string {
+/** The key a lab-wide unit override is stored under — never gender-specific, unlike range overrides. */
+export function unitOverrideKey(sectionKey: string, fieldKey: string): string {
+  return `${sectionKey}.${fieldKey}`
+}
+
+/**
+ * Unit for a field — e.g. "gm/dl", "cells/cumm". `overrides` is the lab-wide customization map
+ * from Settings (see api.ts, setUnitOverride) — same pattern as getReferenceRange's overrides,
+ * just without a gender component.
+ */
+export function unitFor(sectionKey: string, fieldKey: string, overrides?: Record<string, string>): string {
+  const override = overrides?.[unitOverrideKey(sectionKey, fieldKey)]
+  if (override !== undefined) return override
+  return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
+}
+
+/** The unedited clinical default unit for a field — what "Reset to default" restores, ignoring any override. */
+export function defaultUnitFor(sectionKey: string, fieldKey: string): string {
   return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
 }
 

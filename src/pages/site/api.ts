@@ -260,6 +260,20 @@ export async function createDoctor(data: { name: string; specialty: string; phon
   return doctor
 }
 
+export async function updateDoctor(id: number, data: { name: string; specialty: string; phone: string }): Promise<Doctor> {
+  await window.api.doctors.update(id, data)
+  const doctor = await getDoctor(id)
+  if (!doctor) throw new Error('Doctor not found after update')
+  return doctor
+}
+
+// Patients keep whatever doctor name they were already referred by (see doctors:delete in
+// ipc.ts) — deleting a doctor here only removes them from this list and from "New Patient"'s
+// referring-doctor picker, it doesn't touch any patient's existing records or incentive history.
+export async function deleteDoctor(id: number): Promise<boolean> {
+  return window.api.doctors.delete(id)
+}
+
 // ---------------------------------------------------------------------------
 // Billing — bills are derived per-patient from patient.sections x a rate card,
 // with per-patient-per-section overrides. Both the bill and the doctor's
@@ -464,6 +478,34 @@ export async function setRangeOverride(key: string, range: string | null): Promi
     next[key] = range  // '' means "explicitly no reference" — distinct from key absent (use default)
   }
   await window.api.settings.set(RANGE_OVERRIDES_KEY, JSON.stringify(next))
+  return next
+}
+
+// ---------------------------------------------------------------------------
+// Unit overrides — lab-wide, same one-JSON-blob approach as range overrides above. Keyed
+// "sectionKey.fieldKey" (see unitOverrideKey in reportFields.ts) — units aren't gender-specific
+// the way some reference ranges are, so there's no gender component to the key.
+// ---------------------------------------------------------------------------
+
+const UNIT_OVERRIDES_KEY = 'unit_overrides'
+
+export async function getUnitOverrides(): Promise<Record<string, string>> {
+  const raw = await window.api.settings.get()
+  const stored = raw[UNIT_OVERRIDES_KEY]
+  if (!stored) return {}
+  try {
+    return JSON.parse(stored)
+  } catch {
+    return {}
+  }
+}
+
+export async function setUnitOverride(key: string, unit: string | null): Promise<Record<string, string>> {
+  const current = await getUnitOverrides()
+  const next = { ...current }
+  if (unit === null) delete next[key]
+  else next[key] = unit
+  await window.api.settings.set(UNIT_OVERRIDES_KEY, JSON.stringify(next))
   return next
 }
 

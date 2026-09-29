@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Stethoscope, ChevronRight, Phone, Plus } from 'lucide-react'
-import { listDoctors, listPatients, loadBillingContext, incentiveTotalFor, type Doctor, type Patient, type BillingContext } from './api'
+import { Stethoscope, ChevronRight, Phone, Plus, Pencil, Trash2 } from 'lucide-react'
+import { listDoctors, listPatients, loadBillingContext, incentiveTotalFor, deleteDoctor, type Doctor, type Patient, type BillingContext } from './api'
 
 export default function Doctors() {
   const navigate = useNavigate()
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [patients, setPatients] = useState<Patient[]>([])
   const [billing, setBilling] = useState<BillingContext>({ rateCard: [], items: [] })
+
+  const refresh = () => listDoctors().then(setDoctors)
 
   useEffect(() => {
     Promise.all([listDoctors(), listPatients(), loadBillingContext()]).then(([d, p, b]) => {
@@ -16,6 +18,18 @@ export default function Doctors() {
       setBilling(b)
     })
   }, [])
+
+  const editDoctor = (e: React.MouseEvent, d: Doctor) => {
+    e.stopPropagation()
+    navigate('/doctors/new', { state: { doctor: d } })
+  }
+
+  const removeDoctor = async (e: React.MouseEvent, d: Doctor) => {
+    e.stopPropagation()
+    if (!window.confirm(`Delete ${d.name}? This only removes them from this list — any patients already referred by them keep their existing records.`)) return
+    await deleteDoctor(d.id)
+    refresh()
+  }
 
   return (
       <main className="px-10 py-9">
@@ -38,9 +52,12 @@ export default function Doctors() {
             const handled = patients.filter((p) => p.referredBy === d.name)
             const total = incentiveTotalFor(billing, patients, d.name)
             return (
-              <button
+              <div
                 key={d.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/doctors/${d.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/doctors/${d.id}`) } }}
                 className="text-left rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-40)]"
                 style={{ borderColor: 'var(--border)' }}
               >
@@ -48,7 +65,25 @@ export default function Doctors() {
                   <div className="w-10 h-10 rounded-full bg-[var(--bg-hover)] flex items-center justify-center">
                     <Stethoscope size={17} className="text-[var(--ink-3)]" />
                   </div>
-                  <ChevronRight size={16} className="text-[var(--ink-4)]" />
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => editDoctor(e, d)}
+                      title="Edit doctor"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-4)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-soft)]"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => removeDoctor(e, d)}
+                      title="Delete doctor"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-4)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                    <ChevronRight size={16} className="text-[var(--ink-4)] ml-1" />
+                  </div>
                 </div>
                 <div className="text-[16.5px] font-semibold text-[var(--ink)] mb-0.5">{d.name}</div>
                 <div className="text-[13.5px] text-[var(--ink-2)] mb-3.5">{d.specialty}</div>
@@ -80,7 +115,7 @@ export default function Doctors() {
                   <span className="text-[13px] text-[var(--ink-3)]">{handled.length} patient{handled.length === 1 ? '' : 's'} referred</span>
                   <span className="text-[14px] font-semibold text-[var(--ink)]">₹{total.toLocaleString('en-IN')}</span>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
