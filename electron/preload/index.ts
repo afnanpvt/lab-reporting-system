@@ -23,6 +23,7 @@ const api = {
   },
   patients: {
     list: (search?: string) => ipcRenderer.invoke('patients:list', search),
+    listAll: () => ipcRenderer.invoke('patients:listAll'),
     create: (data: unknown) => ipcRenderer.invoke('patients:create', data),
     get: (id: number) => ipcRenderer.invoke('patients:get', id),
     update: (id: number, data: unknown) => ipcRenderer.invoke('patients:update', id, data),

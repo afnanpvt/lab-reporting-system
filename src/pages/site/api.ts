@@ -241,6 +241,21 @@ export async function listPatientsWithStatus(search?: string): Promise<PatientWi
   return patients.map((patient, i) => ({ patient, status: computePatientStatus(patient, resultsList[i]) }))
 }
 
+/**
+ * Every patient with a cheap status, for aggregate views (Analytics). Unlike listPatientsWithStatus
+ * this isn't capped at 100 rows and doesn't fetch each patient's results — 'in progress' just means
+ * some result has been saved, rather than the per-field completion check.
+ */
+export async function listAllPatientsForAnalytics(): Promise<PatientWithStatus[]> {
+  const { patients, withResults } = await window.api.patients.listAll()
+  const started = new Set(withResults)
+  return patients.map((row) => {
+    const patient = rowToPatient(row)
+    const status: PatientStatus = patient.markedComplete ? 'completed' : started.has(patient.id) ? 'partial' : 'draft'
+    return { patient, status }
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Doctors
 // ---------------------------------------------------------------------------

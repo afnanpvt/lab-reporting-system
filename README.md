@@ -8,7 +8,8 @@ This build is licensed exclusively to **Super Lab Service** (Vaniyambadi) — se
 
 Every screen lives under `src/pages/site/`, backed by a single data-access module (`src/pages/site/api.ts`) that talks to the Electron main process over IPC (`window.api.*`). Nothing touches the database directly from the UI.
 
-- **Dashboard** — today's registered/needs-attention/completed counts, recent patients.
+- **Dashboard** — registered/needs-attention/completed counts, recent patients.
+- **Analytics** — charts and insights on how the lab is doing; see [Analytics](#analytics). Can be switched off per lab.
 - **Patients** — search, status pills (draft / in progress / completed — always computed live from actual saved results, never manually overridden), referring doctor shown per patient.
 - **Patient Entry** — register or edit a patient: name, age, gender, mobile, address, referring doctor, which of the 12 test sections apply, and a consent checkbox.
 - **Result Entry** — one test section at a time, a local checklist rail showing completion state per section, prev/next patient navigation, live abnormal-value flagging against reference ranges, click-to-prefill from the printed reference range.
@@ -16,15 +17,45 @@ Every screen lives under `src/pages/site/`, backed by a single data-access modul
 - **Bill** — per-patient line items derived from a rate card, with per-patient-per-section amount overrides (rates aren't fixed).
 - **Doctors / Incentive Report** — referring doctors, who they've referred, and a printable incentive statement per doctor.
 - **Reports** — every completed report and bill in one place.
-- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), plus a note confirming everything is stored locally.
+- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), the Analytics on/off switch, [keyboard shortcuts](#keyboard-shortcuts), appearance, and a note confirming everything is stored locally.
 
 12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S. (with a 20-antibiotic antibiogram grid), Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
+
+## Analytics
+
+The **Analytics** page (sidebar, bar-chart icon) turns the lab's own records into something readable, with a period switcher (7 days, 30 days, 90 days, 12 months, all time):
+
+- **Highlights** — plain-language findings (revenue up/down on the previous period, busiest weekday, top test, top referring doctor).
+- **KPI cards** — revenue, patients, tests, average bill and completion rate, each compared with the previous period.
+- **Trend chart** — revenue / patients / tests by day, week or month. The still-running current week or month is drawn dashed so it isn't read as a drop.
+- **Breakdowns** — report completion, top investigations, top referring doctors, gender, new vs returning patients (matched by mobile number, else name), doctor-referred vs walk-in, age groups, busiest weekdays and a peak-hours heatmap.
+
+Everything is computed on the fly from the existing patient, billing and rate-card data — nothing extra is stored, and there are no charting dependencies (the charts are hand-drawn SVG in `src/pages/site/Analytics.tsx`; the maths is in `analyticsData.ts`). Revenue uses the same `priceFor()` as the Bill and the doctors' incentive reports, so the numbers always agree with them.
+
+Because it shows money, a lab can hide it completely: **Settings → Features → Analytics**. Off removes it from the menu and redirects the URL. The choice is stored per lab in the database (`lab_settings.feature_analytics`; on unless set to `0`). The sidebar's "Today" card deliberately shows no money (patients, tests, open reports).
+
+## Keyboard shortcuts
+
+Shortcuts are customisable per lab in **Settings → Keyboard shortcuts**: click a shortcut, press the new keys. Esc cancels, Backspace removes it, each row can be reset, and "Reset all" restores the defaults. A key already in use is moved to the new action (the old one becomes unassigned, and the row says so).
+
+| Action | Default |
+|---|---|
+| New patient (anywhere) | Ctrl + N |
+| Next field / alternate / previous field (Result Entry) | Tab / Enter / Shift + Tab |
+| Previous / next section | Ctrl + ↑ / Ctrl + ↓ |
+| Previous / next patient | Page Up / Page Down |
+| Review report | Ctrl + Enter |
+| Open the shortcut guide | ? |
+
+Fixed and not editable: ↑/↓ value stepping (Shift for bigger steps) and Esc to clear a field. Only changes from the defaults are stored (`lab_settings.shortcut_bindings`, JSON), so a future change to a default reaches every lab that never touched that action.
+
+Rules the recorder enforces: a plain letter, digit, arrow, Enter or Esc on its own is refused (it would get in the way of typing) — except Tab/Enter for the field-navigation rows — and Alt+F4 is refused because Windows takes it first. Ctrl+A/C/V/X/Z/Y can be assigned but only fire when focus is *not* in a text field, so select-all and copy/paste keep working. Everything lives in `src/pages/site/shortcutsStore.ts` (actions, defaults, matching) and `ShortcutSettings.tsx` (the editor).
 
 ## Tech stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Shell | Electron 32 | Native Windows printing, no browser sandbox limitations |
+| Shell | Electron 32 (22.3.27 on the `win7-compat` branch — see [Windows 7](#windows-7-builds)) | Native Windows printing, no browser sandbox limitations |
 | UI | React 18 + TypeScript + Vite | Fast dev loop, typed IPC contract |
 | Styling | Tailwind CSS | Utility classes, no separate design-token build step |
 | Local database | sql.js (SQLite compiled to WASM) | Zero native build tooling required — no Visual Studio Build Tools, no Python |
@@ -143,18 +174,19 @@ After `npm run license`, commit `profiles/sunlab` and `licenses/ledger.csv` so e
 
 ## Packaging
 
-`npm run package` runs `electron-vite build` then `electron-builder`. On this development machine, the final NSIS-installer step fails because it needs to download and extract a signing-tool archive containing macOS symlinks, which Windows blocks without Developer Mode (or an elevated terminal) enabled. This is an environment limitation, not a code issue.
+```bash
+npm run package -- superlab           # one lab's installer  -> dist/LumaLabs-superlab-Setup-<version>.exe
+npm run package -- --all-profiles     # every profile, including the dev pitch installer
+```
 
-Working alternative used for the current release: `npx electron-builder --dir --win` produces a plain folder build (`dist/win-unpacked/`) without hitting that step. That folder is then:
+`npm run package` runs `electron-vite build` then `electron-builder` (NSIS). The very first build on a machine must be run once from an Administrator terminal (or with Developer Mode on), because electron-builder extracts a tool archive containing symlinks; after that a normal terminal works. Step-by-step, including licensing and releasing, is in [docs/licensing-and-releases.md](docs/licensing-and-releases.md).
 
-1. Signed with a self-signed Authenticode certificate (`Set-AuthenticodeSignature` — no Windows SDK / `signtool.exe` needed), so Windows' Smart App Control doesn't block it on a machine that has imported the matching `.cer` once.
-2. Given its icon via `rcedit` directly (bypassing the same blocked step electron-builder would otherwise use).
-3. Zipped up as the distributable.
+### Windows 7 builds
 
-Once Developer Mode (or an elevated terminal) is available, `npm run package` alone should produce a proper `Setup.exe` installer instead of the manual dir-build/sign/icon sequence above.
+Electron 23+ dropped Windows 7, so Windows 7 machines get a separate build from the long-lived **`win7-compat`** branch, which is `dev` plus one change: Electron pinned to 22.3.27. The app code is identical; merge `dev` into `win7-compat` for each release. These installers are named `LumaLabs-<profile>-win7-<arch>-Setup-<version>.exe` and are tagged `vX.Y.Z-win7`. Use the 32-bit (`ia32`) one for 32-bit Windows 7 — it also runs on 64-bit Windows. See the handbook for the exact commands and the SP1 / KB2999226 prerequisites older machines may need.
 
 ## Status
 
-Working end to end: patient registration/editing, result entry across all 12 categories with live abnormal-value flagging, paginated report preview, printing/PDF, billing with per-patient overrides, doctors and incentive reports, and the licensing/branding lock described above.
+Working end to end: patient registration/editing, result entry across all 12 categories with live abnormal-value flagging, paginated report preview, printing/PDF, billing with per-patient overrides, doctors and incentive reports, analytics, customisable keyboard shortcuts, NSIS installers (64-bit, plus 32-bit/Windows 7 builds), and the licensing/branding lock described above.
 
-Not yet built: the real NSIS installer (blocked on the Developer Mode issue above, not on missing code), multi-computer/shared-data support (each install is a single local database on one machine), and a proper paid code-signing certificate (the current self-signed one requires a one-time trust step per machine — fine for hand-delivered installs, not for broad public distribution).
+Not yet built: multi-computer/shared-data support (each install is a single local database on one machine) and a paid code-signing certificate (installers are unsigned, so Windows SmartScreen may warn on first run — fine for hand-delivered installs, not for broad public distribution).
