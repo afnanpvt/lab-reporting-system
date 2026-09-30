@@ -183,7 +183,7 @@ npm run package -- --all-profiles     # every profile, including the dev pitch i
 
 ### Windows 7 builds
 
-Electron 23+ dropped Windows 7, so Windows 7 machines get a separate build from the long-lived **`win7-compat`** branch, which is `dev` plus one change: Electron pinned to 22.3.27. The app code is identical; merge `dev` into `win7-compat` for each release. These installers are named `LumaLabs-<profile>-win7-<arch>-Setup-<version>.exe` and are tagged `vX.Y.Z-win7`. Use the 32-bit (`ia32`) one for 32-bit Windows 7 — it also runs on 64-bit Windows. See the handbook for the exact commands and the SP1 / KB2999226 prerequisites older machines may need.
+Electron 23+ dropped Windows 7, so Windows 7 machines get a separate build from the long-lived **`win7-compat`** branch, which is `dev` plus one change: Electron pinned to 22.3.27. The app code is identical; merge `dev` into `win7-compat` for each release. These installers are named `LumaLabs-<profile>-win7-<arch>-Setup-<version>.exe` and are tagged `vX.Y.Z-win7`. Code in this repo must stay within what Chromium 108 (Electron 22) supports — e.g. no CSS `color-mix()` in light-mode styling. Use the 32-bit (`ia32`) one for 32-bit Windows 7 — it also runs on 64-bit Windows. See the handbook for the exact commands and the SP1 / KB2999226 prerequisites older machines may need.
 
 ## Status
 
