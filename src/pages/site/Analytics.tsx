@@ -66,7 +66,11 @@ function Kpi({ icon, label, value, color, now, before, spark }: { icon: ReactNod
   return (
     <div className="rounded-2xl p-5 bg-[var(--surface)] border border-[var(--border)] shadow-sm">
       <div className="flex items-center gap-2 mb-3" style={{ color }}>
-        <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)` }}>{icon}</span>
+        {/* Tint is a separate faded layer rather than color-mix(): that CSS function needs Chromium 111, and the Windows 7 build runs Electron 22 (Chromium 108). */}
+        <span className="relative w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden">
+          <span className="absolute inset-0" style={{ background: color, opacity: 0.13 }} />
+          <span className="relative flex">{icon}</span>
+        </span>
         <span className="text-[12px] font-semibold uppercase tracking-wide">{label}</span>
       </div>
       <div className="flex items-end justify-between gap-2">
@@ -242,7 +246,7 @@ function Columns({ items, color = 'var(--accent)' }: { items: { label: string; c
       {items.map((i) => (
         <div key={i.label} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
           <span className="text-[12px] font-semibold text-[var(--ink)] mb-1">{i.count}</span>
-          <div className="w-full rounded-t-lg transition-[height] duration-500" style={{ height: `${Math.max((i.count / max) * 100, i.count ? 4 : 1)}%`, background: i.label === top.label && top.count > 0 ? color : `color-mix(in srgb, ${color} 38%, transparent)` }} />
+          <div className="w-full rounded-t-lg transition-[height] duration-500" style={{ height: `${Math.max((i.count / max) * 100, i.count ? 4 : 1)}%`, background: color, opacity: i.label === top.label && top.count > 0 ? 1 : 0.38 }} />
           <span className="text-[11.5px] text-[var(--ink-3)] mt-2 truncate max-w-full">{i.label}</span>
         </div>
       ))}
@@ -269,7 +273,7 @@ function Heatmap({ heat, max }: { heat: number[][]; max: number }) {
                     key={h}
                     title={`${d} ${hourLabel(h)} — ${v} registration${v === 1 ? '' : 's'}`}
                     className="h-[22px] rounded-[5px]"
-                    style={{ background: v === 0 ? 'var(--border-soft)' : `color-mix(in srgb, var(--accent) ${20 + (v / Math.max(max, 1)) * 80}%, transparent)` }}
+                    style={v === 0 ? { background: 'var(--border-soft)' } : { background: 'var(--accent)', opacity: 0.2 + (v / Math.max(max, 1)) * 0.8 }}
                   />
                 )
               })}

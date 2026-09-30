@@ -221,9 +221,8 @@ npm install                                     # first time, or whenever depend
 node scripts/apply-profile.js superlab          # stage the lab's profile
 ```
 
-Two things are gitignored and so missing from a fresh worktree: copy `resources/badge.png` and
-`resources/certifications/` from your main checkout into the worktree's `resources/` *after*
-staging the profile. Then:
+`apply-profile` stages the lab's logo, badge and certification logos from `profiles/<name>/`, so
+nothing else needs copying. Then:
 
 ```bash
 npx electron-vite build

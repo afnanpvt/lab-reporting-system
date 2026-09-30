@@ -29,4 +29,5 @@ same version with a `-win7` tag.
 
 ### Notes
 - The Dashboard's counts are still based on the 100 most recent patients (unchanged from before).
+- Chart tints use plain opacity instead of CSS `color-mix()`, which the older Chromium inside the Windows 7 build (Electron 22) doesn't support. Looks the same everywhere. This landed on `dev` just after the `v2.5.0` tag and is included in `v2.5.0-win7`.
 - Windows 7 builds: `v2.5.0-win7` (Electron 22, 32-bit installer, also runs on 64-bit Windows).
