@@ -71,6 +71,20 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return dbAll('SELECT * FROM patients ORDER BY rowid DESC LIMIT 100')
   })
 
+  // Every patient, uncapped, for the Analytics page — patients:list stops at 100 rows, which is
+  // right for list screens but would silently truncate any aggregate. withResults lists the ids
+  // that have a saved row in any result table, so the page can tell "in progress" from "not
+  // started" without one results:getAll round trip per patient.
+  ipcMain.handle('patients:listAll', () => {
+    const patients = dbAll('SELECT * FROM patients ORDER BY rowid DESC')
+    const tables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results']
+    const withResults = new Set<number>()
+    for (const table of tables) {
+      for (const row of dbAll(`SELECT patient_id FROM ${table}`)) withResults.add(Number(row.patient_id))
+    }
+    return { patients, withResults: [...withResults] }
+  })
+
   ipcMain.handle('patients:create', (_e, data: Record<string, unknown>) => {
     const sidRow = dbGet("SELECT value FROM lab_settings WHERE key='sid_counter'")
     const counter = parseInt(String(sidRow?.value ?? '1'))

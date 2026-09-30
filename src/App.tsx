@@ -11,12 +11,15 @@ import Doctors from './pages/site/Doctors'
 import DoctorEntry from './pages/site/DoctorEntry'
 import IncentiveReport from './pages/site/IncentiveReport'
 import Reports from './pages/site/Reports'
+import Analytics from './pages/site/Analytics'
 import Bill from './pages/site/Bill'
 import TrialExpired from './pages/site/TrialExpired'
+import { useFeatures } from './pages/site/featuresStore'
 import { refreshLicense, useLicense } from './pages/site/licenseStore'
 
 export default function App() {
   const license = useLicense()
+  const { analytics } = useFeatures()
 
   useEffect(() => {
     refreshLicense()
@@ -38,6 +41,7 @@ export default function App() {
         <Route path="/doctors" element={<Doctors />} />
         <Route path="/doctors/new" element={<DoctorEntry />} />
         <Route path="/doctors/:id" element={<IncentiveReport />} />
+        <Route path="/analytics" element={analytics === false ? <Navigate to="/" replace /> : analytics === null ? null : <Analytics />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

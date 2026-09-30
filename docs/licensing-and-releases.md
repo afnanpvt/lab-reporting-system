@@ -178,27 +178,82 @@ the `dev` branch.
    git push
    ```
 
-3. Build the installers you're shipping:
+3. Update `CHANGELOG.md`, then build the installers you're shipping:
 
    ```bash
    npm run package -- superlab          # one lab
-   npm run package -- --all-profiles    # every lab
+   npm run package -- --all-profiles    # every lab (dev, sunlab, superlab)
    ```
 
-   `npm run package -- dev` builds the generic pitch installer with a fresh 30-day trial.
+   `npm run package -- dev` builds the generic pitch installer with a fresh 30-day trial (this
+   adds a row to `licenses/ledger.csv` — commit it).
 4. Tag and publish the release with the installers attached:
 
    ```bash
    git tag v2.2.0
    git push origin v2.2.0
-   gh release create v2.2.0 dist/LumaLabs-superlab-Setup-2.2.0.exe --target dev --title "v2.2.0" --notes "What changed..."
+   gh release create v2.2.0 dist/LumaLabs-dev-Setup-2.2.0.exe dist/LumaLabs-sunlab-Setup-2.2.0.exe dist/LumaLabs-superlab-Setup-2.2.0.exe --target dev --title "v2.2.0" --notes "What changed..."
    ```
+
+   Labs still on Windows 7 need the matching Windows 7 build — see
+   [5a. Windows 7 (32-bit) builds](#5a-windows-7-32-bit-builds) below. Its tag is `v2.2.0-win7`.
 
 5. Send each lab its new installer. Installing over the old version keeps their patients, reports
    and activated key (all in `%APPDATA%\LumaLabs\`).
 
 Customer downloads for Super Lab Service are also published separately in the public
 `afnanpvt/superlab-service` repo.
+
+### 5a. Windows 7 (32-bit) builds
+
+Electron 23 and later don't run on Windows 7, so those labs get a separate build from the
+`win7-compat` branch, which is `dev` plus Electron pinned to `22.3.27`. **The app code is the same**,
+so the release is tagged `vX.Y.Z-win7` (same version number, not a new one).
+
+Do this after the normal release is tagged. A separate *worktree* keeps your `dev` checkout and its
+Electron 32 `node_modules` untouched:
+
+```bash
+git worktree add ../lab-win7 win7-compat        # first time only; afterwards: cd ../lab-win7
+cd ../lab-win7
+git merge dev                                   # brings in the release; keep package.json's Electron 22.3.27
+npm install                                     # first time, or whenever dependencies changed
+node scripts/apply-profile.js superlab          # stage the lab's profile
+```
+
+Two things are gitignored and so missing from a fresh worktree: copy `resources/badge.png` and
+`resources/certifications/` from your main checkout into the worktree's `resources/` *after*
+staging the profile. Then:
+
+```bash
+npx electron-vite build
+PROFILE_NAME=superlab npx electron-builder --win nsis --ia32    # 32-bit; use --x64 for 64-bit
+git push origin win7-compat
+git tag v2.2.0-win7 && git push origin v2.2.0-win7
+gh release create v2.2.0-win7 dist/LumaLabs-superlab-win7-ia32-Setup-2.2.0.exe --target win7-compat --title "v2.2.0 — Windows 7 build (32-bit)" --notes "..."
+```
+
+- The installer name includes the architecture, e.g. `LumaLabs-superlab-win7-ia32-Setup-2.2.0.exe`.
+- A 32-bit installer also runs on 64-bit Windows, so one `ia32` build covers every Windows 7 machine.
+- Check the machine really is 32-bit if unsure: Computer → Properties → System type.
+- **If it won't start on a Windows 7 PC**, the machine is probably missing **Service Pack 1** and/or
+  the **Universal C Runtime update (KB2999226)**; both are Microsoft downloads (SP1 x86 is
+  `windows6.1-KB976932-X86.exe`, the update is `Windows6.1-KB2999226-x86.msu`). Install SP1 first,
+  restart, then KB2999226, then LumaLabs. Carry both on a USB stick when installing at a lab.
+- Before visiting a lab, copy their `%APPDATA%\LumaLabs\` folder (patients, reports, activated
+  key) as a backup, and keep the previous installer handy for rolling back.
+
+### 5b. Features a lab can switch off or customise
+
+Both are per-lab settings stored in the database (`lab_settings`), so they survive updates and
+reinstalls, and neither needs a rebuild:
+
+- **Analytics** — *Settings → Features → Analytics*. Off hides the page and redirects its URL
+  (`feature_analytics = '0'`; absent or anything else means on). Offer this to labs that don't want
+  revenue figures visible on the front-desk PC.
+- **Keyboard shortcuts** — *Settings → Keyboard shortcuts*. Only changes from the defaults are
+  stored (`shortcut_bindings`, JSON), so default changes in a future release still reach labs that
+  never customised. *Reset all* in that card restores the defaults.
 
 ---
 

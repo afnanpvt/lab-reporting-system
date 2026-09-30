@@ -18,6 +18,8 @@ import LicenseKeyForm from './LicenseKeyForm'
 import { contactScalyft } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
+import { useFeatures, setAnalyticsEnabled } from './featuresStore'
+import ShortcutSettings from './ShortcutSettings'
 
 const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '', labDoctorQualifications: '', labQualityCheck: '' }
 
@@ -47,6 +49,7 @@ export default function Settings() {
   const navigate = useNavigate()
   const [form, setForm] = useState<LabSettingsForm>(EMPTY)
   const license = useLicense()
+  const analyticsOn = useFeatures().analytics !== false
   const hasLicense = license?.state === 'licensed' || license?.state === 'trial'
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -439,6 +442,29 @@ export default function Settings() {
                     <p>WhatsApp sharing opens a chat with a message ready — attaching the PDF is one drag once it's saved.</p>
                   </div>
                 </div>
+
+                <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-6">
+                  <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)] mb-4">Features</h2>
+                  <div className="flex items-center justify-between gap-6">
+                    <div>
+                      <div className="text-[14.5px] font-medium text-[var(--ink)]">Analytics</div>
+                      <p className="text-[13px] text-[var(--ink-3)] mt-0.5 leading-relaxed">Charts and insights on patients, tests and revenue. Turn off to hide the Analytics page from the menu completely.</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={analyticsOn}
+                      aria-label="Analytics"
+                      onClick={() => setAnalyticsEnabled(!analyticsOn)}
+                      className="relative flex-shrink-0 w-[46px] h-[26px] rounded-full transition-colors duration-200"
+                      style={{ background: analyticsOn ? 'var(--accent)' : 'var(--border-strong)' }}
+                    >
+                      <span className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all duration-200" style={{ left: analyticsOn ? 23 : 3 }} />
+                    </button>
+                  </div>
+                </div>
+
+                <ShortcutSettings />
 
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-6">
                   <div className="flex items-center gap-2 mb-4">

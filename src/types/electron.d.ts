@@ -21,6 +21,7 @@ interface LabAPI {
   }
   patients: {
     list(search?: string): Promise<import('./lab').Patient[]>
+    listAll(): Promise<{ patients: Record<string, unknown>[]; withResults: number[] }>
     create(data: Omit<import('./lab').Patient, 'id' | 'created_at'>): Promise<{ id: number; sid: string }>
     get(id: number): Promise<import('./lab').Patient | null>
     update(id: number, data: Partial<import('./lab').Patient>): Promise<boolean>

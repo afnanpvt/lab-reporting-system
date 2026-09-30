@@ -5,6 +5,7 @@ import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOve
 import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
+import { useShortcutHandlers, useBindings, eventToCombo, comboLabel, FIXED_SHORTCUTS } from './shortcutsStore'
 
 interface PendingIssue { sectionIndex: number; sectionLabel: string; field: string; issue: ValueIssue }
 
@@ -212,38 +213,18 @@ export default function ResultEntry() {
   }, [categories.length])
 
   // These are page-level actions, not "field navigation," so they work no matter what has focus
-  // (or nothing at all) — a plain window listener rather than the pane's onKeyDown, which only
-  // ever sees keydowns whose target is actually inside the results pane (i.e. only fires while a
-  // field there is focused). '?' is skipped while actually typing in a text field so it can still
-  // be typed as a literal character (e.g. in the Others test-name column or CS remarks).
-  useEffect(() => {
-    const onGlobalKey = (e: KeyboardEvent) => {
-      if (e.key === '?') {
-        const target = e.target as HTMLElement
-        const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-        if (isTyping) return
-        e.preventDefault()
-        setShowShortcuts(true)
-        return
-      }
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault()
-        openReview()
-        return
-      }
-      if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        e.preventDefault()
-        goTo(activeIndex + (e.key === 'ArrowUp' ? -1 : 1))
-        return
-      }
-      if (e.key === 'PageUp' || e.key === 'PageDown') {
-        e.preventDefault()
-        goToPatient(e.key === 'PageUp' ? prevPatient : nextPatient)
-      }
-    }
-    window.addEventListener('keydown', onGlobalKey)
-    return () => window.removeEventListener('keydown', onGlobalKey)
-  }, [patient, navigate, goTo, activeIndex, prevPatient, nextPatient, openReview])
+  // (or nothing at all). Which key triggers each is the lab's choice — see shortcutsStore.ts and
+  // Settings → Keyboard shortcuts. A bare character key such as '?' is skipped while typing in a
+  // text field so it can still be typed literally (e.g. in the Others test-name column).
+  const bindingFor = useBindings()
+  useShortcutHandlers({
+    'results.help': () => setShowShortcuts(true),
+    'results.review': openReview,
+    'results.prevSection': () => goTo(activeIndex - 1),
+    'results.nextSection': () => goTo(activeIndex + 1),
+    'results.prevPatient': () => goToPatient(prevPatient),
+    'results.nextPatient': () => goToPatient(nextPatient)
+  })
 
   // Enter, forward-Tab, and Shift+Tab all move straight between value fields — skipping over each
   // row's inline range-fill/edit-range buttons, which sit in the DOM between one row's input and
@@ -253,10 +234,11 @@ export default function ResultEntry() {
   // steps back into the previous section's LAST field, not its first, so backward navigation
   // feels continuous rather than jumping to the top.
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const isEnter = e.key === 'Enter'
-    const isForwardTab = e.key === 'Tab' && !e.shiftKey
-    const isBackwardTab = e.key === 'Tab' && e.shiftKey
-    if (!isEnter && !isForwardTab && !isBackwardTab) return
+    const combo = eventToCombo(e.nativeEvent)
+    if (!combo) return
+    const isBackwardTab = combo === bindingFor('fields.prev')
+    const isForward = combo === bindingFor('fields.next') || combo === bindingFor('fields.nextAlt')
+    if (!isForward && !isBackwardTab) return
     const pane = paneRef.current
     if (!pane) return
     const fields = Array.from(pane.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
@@ -521,31 +503,27 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const bindingFor = useBindings()
+  const live = (id: Parameters<typeof bindingFor>[0], description: string) => ({ keys: comboLabel(bindingFor(id)), description })
+
+  // The navigate/action keys are whatever the lab has set in Settings; the field keys are fixed.
   const groups: { label: string; shortcuts: { keys: string; description: string }[] }[] = [
     {
       label: 'Fields',
-      shortcuts: [
-        { keys: 'Tab', description: 'Next field' },
-        { keys: 'Shift Tab', description: 'Previous field' },
-        { keys: 'Enter', description: 'Same as Tab' },
-        { keys: '↑ / ↓', description: 'Step by the range’s precision' },
-        { keys: 'Shift ↑ / ↓', description: 'Bigger, rounder step' },
-        { keys: 'Esc', description: 'Clear field, or exit if empty' }
-      ]
+      shortcuts: [live('fields.next', 'Next field'), live('fields.nextAlt', 'Next field (alternate)'), live('fields.prev', 'Previous field'), ...FIXED_SHORTCUTS]
     },
     {
       label: 'Navigate',
       shortcuts: [
-        { keys: 'Ctrl ↑ / ↓', description: 'Previous / next section' },
-        { keys: 'Page Up/Dn', description: 'Previous / next patient' }
+        live('results.prevSection', 'Previous section'),
+        live('results.nextSection', 'Next section'),
+        live('results.prevPatient', 'Previous patient'),
+        live('results.nextPatient', 'Next patient')
       ]
     },
     {
       label: 'Actions',
-      shortcuts: [
-        { keys: 'Ctrl Enter', description: 'Review report' },
-        { keys: '?', description: 'Open this guide' }
-      ]
+      shortcuts: [live('results.review', 'Review report'), live('results.help', 'Open this guide')]
     }
   ]
 
@@ -572,7 +550,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
             <X size={15} />
           </button>
         </div>
-        <p className="text-[13px] text-[var(--ink-3)] mb-5">Enter results faster without touching the mouse.</p>
+        <p className="text-[13px] text-[var(--ink-3)] mb-5">Enter results faster without touching the mouse. Change these in Settings → Keyboard shortcuts.</p>
 
         <div className="space-y-4">
           {groups.map(({ label, shortcuts }) => (
@@ -580,7 +558,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
               <div className="text-[10.5px] font-bold uppercase tracking-widest text-[var(--ink-4)] mb-2">{label}</div>
               <div className="grid gap-x-3 gap-y-1.5" style={{ gridTemplateColumns: 'auto 1fr' }}>
                 {shortcuts.map(({ keys, description }) => (
-                  <div key={keys} className="contents">
+                  <div key={description} className="contents">
                     <span
                       className="justify-self-start text-[12px] font-semibold text-[var(--ink)] bg-[var(--bg-app)] border border-[var(--border)] rounded-md px-2 py-1 whitespace-nowrap"
                       style={{ fontFamily: 'Consolas, monospace' }}
