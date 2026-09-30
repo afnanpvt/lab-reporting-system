@@ -47,7 +47,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}-${env.PROFILE_NAME}-win7-Setup-${version}.${ext}"
+      "artifactName": "${productName}-${env.PROFILE_NAME}-win7-${arch}-Setup-${version}.${ext}"
     },
     "files": [
       "out/**/*",
