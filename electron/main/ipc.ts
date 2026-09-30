@@ -323,6 +323,14 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return true
   })
 
+  // Patients reference a doctor by name (referred_by is free text, not a foreign key), so unlike
+  // patients:delete this needs no cascading cleanup — deleting the doctor row doesn't touch any
+  // patient's existing referral, incentive history, or results.
+  ipcMain.handle('doctors:delete', (_e, id: number) => {
+    dbRun('DELETE FROM doctors WHERE id=?', [id])
+    return true
+  })
+
   // ---- Billing ----
   // Line-item pricing is computed in the renderer from these two tables: rate_card
   // (default price per investigation) and bill_items (per-patient overrides, which

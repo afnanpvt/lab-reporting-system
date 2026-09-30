@@ -1,5 +1,10 @@
-import { sectionKeyForLabel } from './reportFields'
+import { sectionKeyForLabel, supportsMethodNote } from './reportFields'
 import type { Patient } from './api'
+
+// Mantoux's injection/reading date-time columns are printed inline under the section heading, not
+// as test rows (see ReportPreview.tsx) — kept in one place so the row filter below and the report
+// renderer agree on what counts as metadata.
+const MANTOUX_TIME_KEYS = new Set(['injection_date', 'injection_time', 'reading_date', 'reading_time'])
 
 /**
  * Turns a patient's sections into discrete printed pages, so the on-screen preview shows the
@@ -48,6 +53,33 @@ const BLOCK_GAP = 24
 // whole remainder fresh on the next page than to dangle 1-2 rows before a "(continued)".
 const MIN_ROWS_TO_SPLIT = 4
 
+// A row whose field carries a filled-in "method/kit used" note (see supportsMethodNote and
+// ReportPreview.tsx's `method` span) prints a second line under the result — a fixed ROW_HEIGHT
+// didn't know that and let those rows run past the page's real boundary, invisible under/behind
+// the footer once the page box clips overflow. Measured live: a row without a note is 37.85px
+// (matches ROW_HEIGHT above), one with a note is 53.6px — call the difference 16px.
+const METHOD_NOTE_HEIGHT = 16
+// Mantoux's injection/reading line (ReportPreview.tsx's data-role="mantoux-times") sits between
+// the section header and column header on the section's first chunk only, and was likewise never
+// added to the header budget. Measured live: the gap from the section header's top to the column
+// header's top grows from 35.1px to 60.35px when the line is present — call it 26px.
+const MANTOUX_TIMES_HEIGHT = 26
+
+function hasMethodNote(sectionKey: string, key: string, data: Record<string, string>): boolean {
+  return supportsMethodNote(sectionKey, key) && !!data[key + '_method']?.trim()
+}
+
+/** A row's real printed height, including the extra line a filled-in method note adds. */
+function rowHeightFor(sectionKey: string, key: string, data: Record<string, string>): number {
+  return ROW_HEIGHT + (hasMethodNote(sectionKey, key, data) ? METHOD_NOTE_HEIGHT : 0)
+}
+
+/** A chunk's header budget, including Mantoux's injection/reading line on its first chunk only. */
+function chunkHeaderHeightFor(sectionKey: string, isFirstChunk: boolean, data: Record<string, string>): number {
+  const mantouxHasTimes = sectionKey === 'mantoux' && isFirstChunk && !!(data.injection_date || data.reading_date)
+  return SECTION_HEADER_HEIGHT + COLUMN_HEADER_HEIGHT + (mantouxHasTimes ? MANTOUX_TIMES_HEIGHT : 0)
+}
+
 export interface PatientInfoBlock { kind: 'patientInfo' }
 export interface EmptySectionBlock { kind: 'emptySection'; label: string }
 export interface SectionChunkBlock { kind: 'sectionChunk'; label: string; sectionKey: string; keys: string[]; continued: boolean }
@@ -81,25 +113,29 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     // the override lives under '__label' in its own results blob, which is never a real row.
     // A '_method' key (Serology's "kit/method used" note — see ResultEntry.tsx's FieldRow) isn't
     // a row either: it prints as a parenthetical under its own field's result (see
-    // ReportPreview.tsx's sectionChunk rendering), not as a separate test.
+    // ReportPreview.tsx's sectionChunk rendering), not as a separate test. Mantoux's
+    // injection/reading date-time are metadata too — they print inline under the section heading
+    // (see ReportPreview.tsx's data-role="mantoux-times"), never as their own rows.
     const label = sectionKey === 'others' && data.__label ? data.__label : rawLabel
-    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && !k.endsWith('_method') && data[k] && data[k].trim() !== '')
+    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && !k.endsWith('_method') && !MANTOUX_TIME_KEYS.has(k) && data[k] && data[k].trim() !== '')
 
     if (filledKeys.length === 0) {
       placeWhole({ kind: 'emptySection', label }, SECTION_HEADER_HEIGHT + EMPTY_NOTICE_HEIGHT)
       continue
     }
 
+    const keyHeights = filledKeys.map((k) => rowHeightFor(sectionKey!, k, data))
+
     // Fill whatever's left on the current page first; only move to a fresh page when the
     // remainder wouldn't be worth splitting into (too few rows to bother with a "(continued)").
     // This is what keeps a section from being bumped wholesale onto the next page while the
     // current one sits mostly blank underneath it.
-    const chunkHeaderHeight = SECTION_HEADER_HEIGHT + COLUMN_HEADER_HEIGHT
     let idx = 0
     let firstChunk = true
     while (idx < filledKeys.length) {
-      const rowsLeft = filledKeys.length - idx
-      const restHeight = chunkHeaderHeight + rowsLeft * ROW_HEIGHT
+      const chunkHeaderHeight = chunkHeaderHeightFor(sectionKey!, firstChunk, data)
+      const remainingRowsHeight = keyHeights.slice(idx).reduce((a, b) => a + b, 0)
+      const restHeight = chunkHeaderHeight + remainingRowsHeight
 
       if (restHeight <= remaining) {
         // Everything that's left of this section fits right here — place it whole and move on.
@@ -108,11 +144,21 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
         break
       }
 
-      const availableRows = Math.floor((remaining - chunkHeaderHeight) / ROW_HEIGHT)
-      if (availableRows >= MIN_ROWS_TO_SPLIT || currentPage().length === 0) {
-        const rows = Math.max(1, availableRows)
+      // Greedily take as many rows as actually fit in what's left of the page — rows vary in
+      // height now (a method note makes one taller), so this can't be a flat division anymore.
+      const budget = remaining - chunkHeaderHeight
+      let rows = 0
+      let usedHeight = 0
+      while (rows < keyHeights.length - idx && usedHeight + keyHeights[idx + rows] <= budget) {
+        usedHeight += keyHeights[idx + rows]
+        rows++
+      }
+
+      if (rows >= MIN_ROWS_TO_SPLIT || currentPage().length === 0) {
+        rows = Math.max(1, rows)
         const chunkKeys = filledKeys.slice(idx, idx + rows)
-        push({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: chunkKeys, continued: !firstChunk }, chunkHeaderHeight + chunkKeys.length * ROW_HEIGHT)
+        const chunkHeight = keyHeights.slice(idx, idx + rows).reduce((a, b) => a + b, 0)
+        push({ kind: 'sectionChunk', label, sectionKey: sectionKey!, keys: chunkKeys, continued: !firstChunk }, chunkHeaderHeight + chunkHeight)
         idx += chunkKeys.length
         firstChunk = false
         if (idx < filledKeys.length) startNewPage()
@@ -123,7 +169,34 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     }
   }
 
-  placeWhole({ kind: 'closing' }, CLOSING_HEIGHT)
+  // Closing block ("End of report" + the sign-off lines). If it fits under the last section, it
+  // just goes there. If it doesn't, it would start a fresh page — but a page holding nothing but
+  // the signature looks broken. So when the current page ends with a single self-contained section
+  // (one whole chunk that started on this page, not a "(continued)" split), pull that section down
+  // onto the new page too, so the last test and its sign-off sit together — as long as the pair
+  // fits on one page. Otherwise fall back to the closing on its own page.
+  if (CLOSING_HEIGHT <= remaining || currentPage().length === 0) {
+    push({ kind: 'closing' }, CLOSING_HEIGHT)
+  } else {
+    const page = currentPage()
+    const last = page[page.length - 1]
+    const movable = (last.kind === 'sectionChunk' && !last.continued) || last.kind === 'emptySection'
+    const lastHeight =
+      last.kind === 'sectionChunk'
+        ? chunkHeaderHeightFor(last.sectionKey, !last.continued, results[last.sectionKey] ?? {}) +
+          last.keys.reduce((sum, k) => sum + rowHeightFor(last.sectionKey, k, results[last.sectionKey] ?? {}), 0)
+        : SECTION_HEADER_HEIGHT + EMPTY_NOTICE_HEIGHT
+    if (movable && lastHeight + BLOCK_GAP + CLOSING_HEIGHT <= CONTENT_HEIGHT) {
+      page.pop()
+      if (page.length === 0) pages.pop() // the section was alone on its page — drop the now-empty page
+      startNewPage()
+      push(last, lastHeight)
+      push({ kind: 'closing' }, CLOSING_HEIGHT)
+    } else {
+      startNewPage()
+      push({ kind: 'closing' }, CLOSING_HEIGHT)
+    }
+  }
 
   return pages
 }

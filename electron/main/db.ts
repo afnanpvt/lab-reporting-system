@@ -203,7 +203,8 @@ function createTables(): void {
 
     CREATE TABLE IF NOT EXISTS mantoux (
       patient_id INTEGER PRIMARY KEY,
-      reading TEXT, interpretation TEXT, remarks TEXT
+      reading TEXT, interpretation TEXT, remarks TEXT,
+      injection_date TEXT, injection_time TEXT, reading_date TEXT, reading_time TEXT
     );
 
     CREATE TABLE IF NOT EXISTS gtt_lipid (
@@ -308,6 +309,13 @@ function createTables(): void {
     addColumnIfNotExists('biochemistry', key + '_method', "TEXT DEFAULT ''")
   }
   addColumnIfNotExists('gtt_lipid', 's_amylase_method', "TEXT DEFAULT ''")
+
+  // Mantoux is a two-visit test — PPD injected on day 0, induration read 48-72h later — so it
+  // records when it was administered and when it was read, unlike every other section that's done
+  // in one sitting. Additive on any existing DB; a fresh one already has these from CREATE TABLE.
+  for (const col of ['injection_date', 'injection_time', 'reading_date', 'reading_time']) {
+    addColumnIfNotExists('mantoux', col, "TEXT DEFAULT ''")
+  }
 
   // Seed defaults for any key not already present — INSERT OR IGNORE is a no-op against an
   // existing row, so this only backfills what's missing (e.g. a dev DB seeded before

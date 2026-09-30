@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
+import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
 import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
@@ -27,8 +27,8 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor, labDoctorQualifications, hiddenReferenceSections }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, unitOverrides, labDoctor, labDoctorQualifications, hiddenReferenceSections }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; unitOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
   hiddenReferenceSections: Record<string, boolean>
 }) {
   if (block.kind === 'patientInfo') {
@@ -75,11 +75,27 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
     // rather than left blank, on-screen and on paper alike.
     const showReference = !hiddenReferenceSections[block.sectionKey]
     const gridCols = showReference ? 'grid-cols-[2.4fr_1fr_1fr_1.6fr]' : 'grid-cols-[2.4fr_1fr_1fr]'
+    // Mantoux is the one two-visit test — print when the PPD was injected and when the induration
+    // was read, on a small line under the heading (only on the first chunk, not a "(continued)"
+    // one), and only for whichever of the two the technician actually filled in.
+    const mantouxData = block.sectionKey === 'mantoux' ? (results.mantoux ?? {}) : null
+    const injectionAt = mantouxData?.injection_date
+      ? `${mantouxData.injection_date}${mantouxData.injection_time ? ' ' + formatTime12h(mantouxData.injection_time) : ''}`
+      : ''
+    const readingAt = mantouxData?.reading_date
+      ? `${mantouxData.reading_date}${mantouxData.reading_time ? ' ' + formatTime12h(mantouxData.reading_time) : ''}`
+      : ''
     return (
       <div className="avoid-break mb-6" data-role="section-chunk">
         <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2" data-role="section-header">
           {block.label}{block.continued && <span className="font-normal italic text-[var(--ink-3)]"> (continued)</span>}
         </div>
+        {!block.continued && (injectionAt || readingAt) && (
+          <div className="flex flex-wrap gap-x-6 text-[11.5px] text-[#333] mb-2" data-role="mantoux-times">
+            {injectionAt && <span>Injected <b className="text-[#111]">{injectionAt}</b></span>}
+            {readingAt && <span>Read <b className="text-[#111]">{readingAt}</b></span>}
+          </div>
+        )}
         <div className={`grid ${gridCols} text-[11.5px] font-bold uppercase tracking-wide text-[var(--ink)] border-b border-[#bbb] pb-1.5 mb-1`} data-role="column-header">
           <span>Test</span><span>Result</span><span>Unit</span>{showReference && <span>Reference</span>}
         </div>
@@ -89,7 +105,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
           const other = isOthers ? decodeOtherRow(data[k]) : null
           const value = other ? other.value : data[k]
           const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
-          const unit = other ? other.unit : unitFor(block.sectionKey, k)
+          const unit = other ? other.unit : unitFor(block.sectionKey, k, unitOverrides)
           const flag = flagFor(value, range, isOthers ? undefined : k)
           const arrowColor = flag ? 'var(--danger)' : undefined
           // "Method/kit used" note (see supportsMethodNote and ResultEntry.tsx's FieldRow) —
@@ -159,6 +175,7 @@ export default function ReportPreview() {
   const [badge, setBadge] = useState<string | null>(null)
   const [certifications, setCertifications] = useState<string[]>([])
   const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
+  const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>({})
   const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
   // For a sample tested on behalf of another lab that will print it on their own letterhead —
   // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
@@ -188,6 +205,7 @@ export default function ReportPreview() {
   useEffect(() => {
     getLabSettings().then(setSettings)
     getRangeOverrides().then(setRangeOverrides)
+    getUnitOverrides().then(setUnitOverrides)
     getHiddenReferenceSections().then(setHiddenReferenceSections)
     getLogoDataUrl().then(setLogo)
     getBadgeDataUrl().then(setBadge)
@@ -285,27 +303,40 @@ export default function ReportPreview() {
           gets separated from the rest of the report still identifies whose it is. Same
           Patient/Referred by/Age-Sex layout the report used to show once on page 1 only, with
           SID folded into the first row. Counted as a fixed per-page cost in pagination.ts's
-          PATIENT_STRIP_HEIGHT — re-measure there if this grows again. */}
-      <div className="relative pt-1.5 pb-2" style={{ zIndex: 1, borderBottom: '1px solid #e5e5e5' }} data-role="patient-strip">
-        <div className="flex items-center justify-between text-[13px] text-[#333]">
-          <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
-          {patient.referredBy && patient.referredBy !== 'Self' && (
-            <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
-          )}
-          <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
-        </div>
-        <div className="flex items-center flex-wrap gap-x-0 text-[#333] mt-1">
-          <span className="text-[13px]">Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></span>
-          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
-          <span className="text-[12px]">Collected <b className="text-[var(--ink)]">{patient.date}{patient.regTime ? ' ' + formatTime12h(patient.regTime) : ''}</b></span>
-          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
-          <span className="text-[12px]">Reported <b className="text-[var(--ink)]">{patient.rptDate ? `${patient.rptDate} ${formatTime12h(patient.rptTime)}` : reportedAt}</b></span>
-        </div>
-      </div>
+          PATIENT_STRIP_HEIGHT — re-measure there if this grows again.
+          The page that carries the "LABORATORY REPORT" patient-info block already prints the full
+          Collected/Received/Reported box there, so the strip drops its own Collected/Reported line
+          on that page to avoid showing the timestamps twice — every other page keeps them, since
+          the strip is the only place they'd otherwise appear. */}
+      {(() => {
+        const hasInfoBlock = blocks.some((b) => b.kind === 'patientInfo')
+        return (
+          <div className="relative pt-1.5 pb-2" style={{ zIndex: 1, borderBottom: '1px solid #e5e5e5' }} data-role="patient-strip">
+            <div className="flex items-center justify-between text-[13px] text-[#333]">
+              <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
+              {patient.referredBy && patient.referredBy !== 'Self' && (
+                <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+              )}
+              <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
+            </div>
+            <div className="flex items-center flex-wrap gap-x-0 text-[#333] mt-1">
+              <span className="text-[13px]">Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></span>
+              {!hasInfoBlock && (
+                <>
+                  <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
+                  <span className="text-[12px]">Collected <b className="text-[var(--ink)]">{patient.date}{patient.regTime ? ' ' + formatTime12h(patient.regTime) : ''}</b></span>
+                  <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
+                  <span className="text-[12px]">Reported <b className="text-[var(--ink)]">{patient.rptDate ? `${patient.rptDate} ${formatTime12h(patient.rptTime)}` : reportedAt}</b></span>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="relative flex-1 mt-3" style={{ zIndex: 1 }} data-role="content">
         {blocks.map((block, i) => (
-          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
+          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} unitOverrides={unitOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
         ))}
       </div>
 
