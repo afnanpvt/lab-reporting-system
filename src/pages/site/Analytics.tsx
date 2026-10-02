@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { IndianRupee, Users, FlaskConical, Receipt, BadgeCheck, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react'
+import { IndianRupee, Users, FlaskConical, Receipt, BadgeCheck, TrendingUp, TrendingDown, Minus, Sparkles, ChevronDown } from 'lucide-react'
+import SlideFilter from './SlideFilter'
 import { listAllPatientsForAnalytics, loadBillingContext, type PatientWithStatus, type BillingContext } from './api'
 import { computeAnalytics, PERIODS, HEAT_HOURS, type PeriodKey, type Analytics as AnalyticsData, type Bucket, type Totals } from './analyticsData'
 
@@ -271,7 +272,7 @@ function Heatmap({ heat, max }: { heat: number[][]; max: number }) {
                 return (
                   <div
                     key={h}
-                    title={`${d} ${hourLabel(h)} — ${v} registration${v === 1 ? '' : 's'}`}
+                    title={`${d} ${hourLabel(h)}: ${v} registration${v === 1 ? '' : 's'}`}
                     className="h-[22px] rounded-[5px]"
                     style={v === 0 ? { background: 'var(--border-soft)' } : { background: 'var(--accent)', opacity: 0.2 + (v / Math.max(max, 1)) * 0.8 }}
                   />
@@ -317,6 +318,8 @@ export default function Analytics() {
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [metric, setMetric] = useState<Metric>('revenue')
+  // The highlights stay tucked away until asked for.
+  const [showHighlights, setShowHighlights] = useState(false)
 
   useEffect(() => {
     Promise.all([listAllPatientsForAnalytics(), loadBillingContext()]).then(([r, b]) => {
@@ -335,22 +338,32 @@ export default function Analytics() {
 
   return (
     <main className="px-10 py-9 pb-14">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-7">
-        <div>
-          <h1 className="text-[26px] font-semibold text-[var(--ink)]">Analytics</h1>
-          <p className="text-[15px] text-[var(--ink-2)]">How the lab is performing · {periodText(a)}</p>
-        </div>
-        <div className="inline-flex p-1 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-sm">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`px-4 py-2 rounded-xl text-[13.5px] font-medium transition-colors ${period === p.key ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+      <div className="mb-3">
+        <h1 className="text-[26px] font-semibold text-[var(--ink)]">Analytics</h1>
+        <p className="text-[15px] text-[var(--ink-2)]">How the lab is performing · {periodText(a)}</p>
+      </div>
+
+      {/* A slim row of its own: the period at the left, its options sliding out to the right, then Highlights. */}
+      <div className="flex items-center gap-3 mb-5">
+        <SlideFilter
+          options={PERIODS.map((p) => ({ key: p.key, label: p.label }))}
+          value={period}
+          onChange={setPeriod}
+          title="Choose the period"
+          compact
+        />
+        {a.hasData && a.insights.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowHighlights((o) => !o)}
+            aria-expanded={showHighlights}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-[13.5px] font-medium rounded-xl border ${showHighlights ? 'border-[var(--accent-soft-border)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'}`}
+          >
+            <Sparkles size={15} />
+            Highlights
+            <ChevronDown size={14} className="transition-transform duration-300" style={{ transform: showHighlights ? 'rotate(180deg)' : undefined }} />
+          </button>
+        )}
       </div>
 
       {!a.hasData ? (
@@ -360,13 +373,18 @@ export default function Analytics() {
       ) : (
         <>
           {a.insights.length > 0 && (
-            <div className="rounded-2xl border border-[var(--accent-soft-border)] bg-[var(--accent-soft)] p-5 mb-6">
-              <div className="flex items-center gap-2 text-[var(--accent)] text-[12px] font-bold uppercase tracking-wide mb-2.5"><Sparkles size={14} /> Highlights</div>
-              <ul className="grid md:grid-cols-2 gap-x-8 gap-y-1.5">
-                {a.insights.map((s) => (
-                  <li key={s} className="text-[13.5px] text-[var(--ink)] flex gap-2"><span className="text-[var(--accent)]">•</span>{s}</li>
-                ))}
-              </ul>
+            // Slides open and shut: a one-row grid whose height animates between 0 and its content.
+            <div className="grid transition-all duration-300 ease-out" style={{ gridTemplateRows: showHighlights ? '1fr' : '0fr', opacity: showHighlights ? 1 : 0, marginBottom: showHighlights ? '1.5rem' : 0 }} aria-hidden={!showHighlights}>
+              <div className="overflow-hidden">
+                <div className="rounded-2xl border border-[var(--accent-soft-border)] bg-[var(--accent-soft)] p-5">
+                  <div className="flex items-center gap-2 text-[var(--accent)] text-[12px] font-bold uppercase tracking-wide mb-2.5"><Sparkles size={14} /> Highlights</div>
+                  <ul className="grid md:grid-cols-2 gap-x-8 gap-y-1.5">
+                    {a.insights.map((s) => (
+                      <li key={s} className="text-[13.5px] text-[var(--ink)] flex gap-2"><span className="text-[var(--accent)]">•</span>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           )}
 
@@ -432,7 +450,7 @@ export default function Analytics() {
             <Card title="Busiest days" subtitle="Registrations by weekday">
               <Columns items={a.weekday} />
             </Card>
-            <Card title="Peak hours" subtitle="When registrations happen — darker is busier">
+            <Card title="Peak hours" subtitle="When registrations happen. Darker is busier">
               <Heatmap heat={a.heat} max={a.heatMax} />
             </Card>
           </div>

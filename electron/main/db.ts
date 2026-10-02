@@ -242,7 +242,7 @@ function createTables(): void {
       sputum_appearance TEXT, afb_smear TEXT, culture TEXT
     );
 
-    -- "Others" section has no fixed test list — staff type the test name and result
+    -- "Others" section has no fixed test list; staff type the test name and result
     -- themselves, so it's stored as one JSON object ({ "Test Name": "result", ... })
     -- per patient rather than as fixed columns like the sections above.
     CREATE TABLE IF NOT EXISTS custom_results (
@@ -259,7 +259,7 @@ function createTables(): void {
     );
 
     -- Default price per investigation (keyed by the section label, matching
-    -- patients.sections). A starting point, not fixed — bill_items below holds
+    -- patients.sections). A starting point, not fixed. bill_items below holds
     -- per-patient overrides.
     CREATE TABLE IF NOT EXISTS rate_card (
       section TEXT PRIMARY KEY,
@@ -286,6 +286,8 @@ function createTables(): void {
   `)
 
   // Safe migrations for existing databases
+  // A referring doctor's degrees/qualifications (e.g. "MBBS, MD"), shown beside their name.
+  addColumnIfNotExists('doctors', 'qualifications', "TEXT DEFAULT ''")
   addColumnIfNotExists('patients', 'address', "TEXT DEFAULT ''")
   addColumnIfNotExists('patients', 'mobile', "TEXT DEFAULT ''")
   addColumnIfNotExists('patients', 'status', "TEXT DEFAULT 'draft'")

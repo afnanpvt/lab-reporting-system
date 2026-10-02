@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
+import DatePicker from './DatePicker'
+import TimePicker from './TimePicker'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator, BookmarkCheck, ChevronDown } from 'lucide-react'
 import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, getUnitOverrides, setUnitOverride, type Patient, type ResultsBySection } from './api'
@@ -657,7 +659,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
           </h2>
         </div>
         <p className="text-[13px] text-[var(--ink-3)] mb-4">
-          {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'} — inform the referring doctor. ` : ''}
+          {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'}. Inform the referring doctor. ` : ''}
           Click one to jump to it.
         </p>
 
@@ -674,7 +676,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
               >
                 <tone.Icon size={14} className="flex-shrink-0 mt-[3px]" />
                 <span className="text-[13px] leading-snug">
-                  <span className="font-semibold">{sectionLabel} · {labelFor(sectionKey, field)}</span> — {issue.message}
+                  <span className="font-semibold">{sectionLabel} · {labelFor(sectionKey, field)}</span>: {issue.message}
                 </span>
               </button>
             )
@@ -724,7 +726,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
   const unit = unitFor(sectionKey, fieldKey, unitOverrides)
   const unitKey = unitOverrideKey(sectionKey, fieldKey)
   const unitIsOverridden = unitOverrides[unitKey] !== undefined
-  const range = getReferenceRange(sectionKey, fieldKey, gender, overrides)
+  const range = getReferenceRange(sectionKey, fieldKey, gender, overrides, unitOverrides)
   const key = rangeOverrideKey(sectionKey, fieldKey, gender)
   const isOverridden = overrides[key] !== undefined
   useFeatures() // re-render if highlighting is switched on/off
@@ -789,9 +791,9 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           // Wide enough for the longest option's own text (e.g. Widal's "Positive 1:160 dilution")
           // so the closed box doesn't clip it — a plain Negative/Positive field just gets 8.5rem.
-          style={{ width: `${Math.max(8.5, longestOption.length * 0.5 + 2.5)}rem`, borderColor: checkBorder ?? 'var(--border-strong)', color: 'var(--ink)' }}
+          style={{ width: `${Math.max(8.5, longestOption.length * 0.5 + 2.5)}rem`, borderColor: checkBorder ?? 'var(--border-strong)', color: value ? 'var(--ink)' : 'var(--ink-4)' }}
         >
-          <option value="">—</option>
+          <option value="">Select</option>
           {options.map((opt) => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
@@ -874,7 +876,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
             <button
               type="button"
               onClick={() => setEditing(true)}
-              title={isOverridden ? (range ? 'Custom range — click to edit or reset to default' : 'Reference hidden for this test — click to add one back') : 'Edit reference range for every patient'}
+              title={isOverridden ? (range ? 'Custom range. Click to edit or reset to default' : 'Reference hidden for this test. Click to add one back') : 'Edit reference range for every patient'}
               className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors ${
                 isOverridden ? 'text-[var(--accent)] hover:bg-[var(--accent-soft)]' : 'text-[var(--border-strong)] hover:text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'
               }`}
@@ -900,7 +902,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
               value={methodValue ?? ''}
               onChange={(e) => onMethodChange(e.target.value)}
               onBlur={() => { if (!methodValue) setShowMethod(false) }}
-              placeholder="Method / kit used — prints under the result"
+              placeholder="Method / kit used (prints under the result)"
               className="w-full max-w-xs text-[12.5px] px-2 py-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
             />
           ) : (
@@ -952,7 +954,7 @@ function UnitEditor({ initial, defaultUnit, isOverridden, onCancel, onSave, onRe
         className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
         style={{ width: '7rem' }}
       />
-      <button type="button" onClick={commit} title="Save — applies to every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
+      <button type="button" onClick={commit} title="Save for every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
         <CheckCircle2 size={14} />
       </button>
       {isOverridden && (
@@ -1276,19 +1278,19 @@ function BuiltInSectionBody({ sectionKey, gender, data, onChange, onReplace }: {
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 max-w-lg">
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection date</label>
-            <input type="date" value={v('injection_date')} onChange={(e) => set('injection_date')(e.target.value)} className={dtField} />
+            <DatePicker value={v('injection_date')} onChange={set('injection_date')} className={dtField} ariaLabel="Injection date" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection time</label>
-            <input type="time" value={v('injection_time')} onChange={(e) => set('injection_time')(e.target.value)} className={dtField} />
+            <TimePicker value={v('injection_time')} onChange={set('injection_time')} className={dtField} ariaLabel="Injection time" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading date</label>
-            <input type="date" value={v('reading_date')} onChange={(e) => set('reading_date')(e.target.value)} className={dtField} />
+            <DatePicker value={v('reading_date')} onChange={set('reading_date')} className={dtField} ariaLabel="Reading date" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading time</label>
-            <input type="time" value={v('reading_time')} onChange={(e) => set('reading_time')(e.target.value)} className={dtField} />
+            <TimePicker value={v('reading_time')} onChange={set('reading_time')} className={dtField} ariaLabel="Reading time" />
           </div>
         </div>
         {(SECTION_FIELD_KEYS.mantoux ?? []).map((k) => (

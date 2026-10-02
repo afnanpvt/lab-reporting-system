@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { confirmDialog } from './confirmStore'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { ArrowLeft, Save, SlidersHorizontal, Keyboard, CheckCircle2, ShieldCheck, Building2, Tags, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, ExternalLink } from 'lucide-react'
 import {
   getLabSettings,
@@ -22,6 +22,8 @@ import { useBranding, refreshBranding } from './brandingStore'
 import { useFeatures, setAnalyticsEnabled, setFlaggingEnabled, setValueChecksEnabled } from './featuresStore'
 import ShortcutSettings from './ShortcutSettings'
 import SavedTestsSettings from './SavedTestsSettings'
+import { useGuardedNavigate, useLeaveGuard } from './leaveGuard'
+import Tabs from './Tabs'
 import { customLabelCount, useLabels } from './labelsStore'
 import { customTestCount, useCustomTests } from './customTestsStore'
 
@@ -71,7 +73,6 @@ function setStoredActiveProfile(name: string | null): void {
 }
 
 export default function Settings() {
-  const navigate = useNavigate()
   const location = useLocation()
   useLabels() // re-render when tests are saved, so the counts below stay current
   useCustomTests()
@@ -79,6 +80,9 @@ export default function Settings() {
   const addedCount = customTestCount()
   const justSaved = (location.state as { testNamesSaved?: { renamed: number; added: number } } | null)?.testNamesSaved
   const [form, setForm] = useState<LabSettingsForm>(EMPTY)
+  // What is stored: the lab details count as unsaved when the form no longer matches it.
+  const [savedForm, setSavedForm] = useState<LabSettingsForm>(EMPTY)
+  const guardedNavigate = useGuardedNavigate()
   // Coming back from the test editor lands on Tests; otherwise the tab you were last on.
   const [tab, setTab] = useState<SettingsTab>(() => ((location.state as { testNamesSaved?: unknown } | null)?.testNamesSaved !== undefined ? 'tests' : storedTab()))
   const changeTab = (next: SettingsTab) => {
@@ -133,7 +137,7 @@ export default function Settings() {
 
   // Keyed on the licensed lab name because activating a key re-locks lab_name in the database.
   useEffect(() => {
-    getLabSettings().then(setForm)
+    getLabSettings().then((s) => { setForm(s); setSavedForm(s) })
   }, [license?.labName])
 
   useEffect(() => {
@@ -229,10 +233,14 @@ export default function Settings() {
     // silently reverts to the stale file on disk.
     if (activeProfile) await saveProfile(activeProfile, form, logo)
     await refreshBranding()
+    setSavedForm(form)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
+
+  // Leaving with edited lab details (Back, Edit tests, the sidebar) offers Save / Discard / Keep editing.
+  useLeaveGuard(JSON.stringify(form) !== JSON.stringify(savedForm), async () => { await handleSave(); return true }, { what: 'the Laboratory tab' })
 
   const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
@@ -243,7 +251,7 @@ export default function Settings() {
       return
     }
     if (file.size > MAX_LOGO_BYTES) {
-      setLogoError('That image is too large — please pick one under 2 MB.')
+      setLogoError('That image is too large. Please pick one under 2 MB.')
       return
     }
     setUploadingLogo(true)
@@ -257,7 +265,7 @@ export default function Settings() {
       await setLogoDataUrl(dataUrl)
       await refreshBranding()
     } catch {
-      setLogoError('Could not read that image — please try a different file.')
+      setLogoError('Could not read that image. Please try a different file.')
     } finally {
       setUploadingLogo(false)
     }
@@ -289,7 +297,7 @@ export default function Settings() {
       <div className="flex flex-col h-full">
         <div className="flex items-center px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => guardedNavigate('/')}
             className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
           >
             <ArrowLeft size={15} />
@@ -304,7 +312,7 @@ export default function Settings() {
                 <h1 className="text-[24px] font-semibold text-[var(--ink)]">Settings</h1>
                 <p className="text-[14px] text-[var(--ink-2)] mt-0.5">
                   {activeProfile ? (
-                    <>Editing the <span className="font-medium text-[var(--ink)]">{activeProfile}</span> profile — Save Changes updates it too</>
+                    <>Editing the <span className="font-medium text-[var(--ink)]">{activeProfile}</span> profile. Save Changes updates it too</>
                   ) : (
                     'Laboratory and report configuration'
                   )}
@@ -324,23 +332,7 @@ export default function Settings() {
 
             {/* Settings are grouped into tabs so each screen holds one kind of thing. Only the Laboratory tab
                 has a Save button; everything else applies the moment it is changed. */}
-            <div className="flex gap-1 border-b border-[var(--border)] mb-6 overflow-x-auto" role="tablist">
-              {TABS.map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === key}
-                  onClick={() => changeTab(key)}
-                  className={`inline-flex items-center gap-2 px-4 py-3 text-[14px] font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                    tab === key ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--ink-3)] hover:text-[var(--ink)] hover:border-[var(--border-strong)]'
-                  }`}
-                >
-                  <Icon size={16} />
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs tabs={TABS} active={tab} onChange={changeTab} />
 
             {tab === 'lab' && (
               <div className="max-w-3xl [&>*]:mb-5">
@@ -354,14 +346,14 @@ export default function Settings() {
                     <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[var(--bg-app)] border border-[var(--border)]">
                       <Lock size={13} className="text-[var(--ink-3)] flex-shrink-0" />
                       <div className="text-[13px] text-[var(--ink-2)]">
-                        Licensed to <span className="font-medium text-[var(--ink)]">{license?.labName}</span> — this name is fixed to the license and can't be changed here. Contact Scalyft to update it.
+                        Licensed to <span className="font-medium text-[var(--ink)]">{license?.labName}</span>. This name is fixed to the license and can't be changed here. Contact Scalyft to update it.
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2.5 mb-5 px-3.5 py-2.5 rounded-xl bg-[var(--bg-app)] border border-[var(--border)]">
                       <Building2 size={13} className="text-[var(--ink-3)] flex-shrink-0" />
                       <div className="text-[13px] text-[var(--ink-2)]">
-                        Demo mode — no license installed. Every field below, including the lab name, is fully editable.
+                        Demo mode: no license installed. Every field below, including the lab name, is fully editable.
                       </div>
                     </div>
                   )}
@@ -423,7 +415,7 @@ export default function Settings() {
                         </div>
                       ) : (
                         <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">
-                          Shown in the app header and on printed reports. Takes effect immediately — no restart needed.
+                          Shown in the app header and on printed reports. Takes effect immediately, no restart needed.
                         </p>
                       )}
                     </div>
@@ -450,10 +442,10 @@ export default function Settings() {
                   <div className="rounded-2xl p-6" style={{ background: 'var(--warning-soft)', border: '1px solid var(--warning-soft-border)' }}>
                     <div className="flex items-center gap-2 mb-2.5">
                       <FlaskConical size={16} style={{ color: 'var(--warning)' }} />
-                      <h2 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--warning)' }}>Dev only — profile preview</h2>
+                      <h2 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--warning)' }}>Dev only: profile preview</h2>
                     </div>
                     <p className="text-[13px] leading-relaxed mb-3" style={{ color: 'var(--warning-ink)' }}>
-                      Selecting a profile applies its fields and logo immediately — only a real
+                      Selecting a profile applies its fields and logo immediately. Only a real
                       license (when one's installed) still needs{' '}
                       <code className="text-[12px]">npm run profile {selectedProfile || '<name>'}</code> and a restart. Never shown in a packaged build.
                     </p>
@@ -526,7 +518,7 @@ export default function Settings() {
                   </p>
                   {justSaved !== undefined && (
                     <div className="flex items-center gap-2 text-[13px] rounded-lg px-3 py-2 mb-4" style={{ background: 'var(--success-soft)', color: 'var(--success)' }}>
-                      <CheckCircle2 size={14} /> Tests saved{justSaved.renamed === 0 && justSaved.added === 0 ? ' — everything uses the default tests.' : '.'}
+                      <CheckCircle2 size={14} /> Tests saved{justSaved.renamed === 0 && justSaved.added === 0 ? '. Everything uses the default tests.' : '.'}
                     </div>
                   )}
                   <div className="flex items-center justify-between gap-4">
@@ -537,7 +529,7 @@ export default function Settings() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => navigate('/settings/test-names')}
+                      onClick={() => guardedNavigate('/settings/test-names')}
                       className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-medium border border-[var(--border-strong)] rounded-xl text-[var(--ink)] hover:bg-[var(--bg-hover)] flex-shrink-0"
                     >
                       Edit tests…
@@ -636,7 +628,7 @@ export default function Settings() {
                   <div className="space-y-2 text-[14px] text-[var(--ink-2)] leading-relaxed">
                     <p>PDFs save to <span className="font-medium text-[var(--ink)]">Documents\LabReports\</span>.</p>
                     <p>Printing uses any installed Windows printer, selected from the report preview.</p>
-                    <p>WhatsApp sharing opens a chat with a message ready — attaching the PDF is one drag once it's saved.</p>
+                    <p>WhatsApp sharing opens a chat with a message ready. Attaching the PDF is one drag once it's saved.</p>
                   </div>
                 </div>
 
@@ -698,8 +690,8 @@ export default function Settings() {
                     <div>
                       <h2 className="text-[15px] font-semibold mb-1" style={{ color: 'var(--success)' }}>Data stays on this computer</h2>
                       <p className="text-[14px] leading-relaxed" style={{ color: 'var(--success)' }}>
-                        Patient records and reports live in a local database on this machine only —
-                        nothing is uploaded to the cloud, fully offline.
+                        Patient records and reports live in a local database on this machine only.
+                        Nothing is uploaded to the cloud, fully offline.
                       </p>
                     </div>
                   </div>

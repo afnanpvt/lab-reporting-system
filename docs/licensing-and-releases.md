@@ -182,6 +182,8 @@ the `dev` branch.
 
    ```bash
    npm run test:pagination                    # report page-break rules (20,000 random reports)
+   npm run test:search                        # forgiving search and the unit-follows-range rule
+   node scripts/find-emdash.js                # no em dashes in visible text
    npx tsc --noEmit -p tsconfig.web.json      # only the 10 known, pre-existing errors should remain
    npx electron-vite build
    ```

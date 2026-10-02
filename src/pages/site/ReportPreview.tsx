@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
+import { getPatient, getResultsFor, listDoctors, referredByLine, type Doctor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
 import { getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
 import { useLabels } from './labelsStore'
 import { useFeatures } from './featuresStore'
@@ -111,7 +111,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
           const isOthers = block.sectionKey === 'others'
           const other = isOthers ? decodeOtherRow(data[k]) : null
           const value = other ? other.value : data[k]
-          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
+          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides, unitOverrides)
           const unit = other ? other.unit : unitFor(block.sectionKey, k, unitOverrides)
           const flag = flagFor(value, range, isOthers ? undefined : k, isOthers ? undefined : { sectionKey: block.sectionKey, gender: patient.gender })
           const arrowColor = flag ? 'var(--danger)' : undefined
@@ -142,7 +142,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
   return (
     <div className="avoid-break" data-role="closing-block">
       <div className="text-center text-[11px] tracking-wide text-[var(--ink-3)] border-t border-b border-[#ddd] py-1.5 my-5">
-        — End of report —
+        End of report
       </div>
       {/* items-start, not items-end: the two signature lines must sit level with each other
           regardless of how many lines of text follow (the right side got a second line —
@@ -172,6 +172,8 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
 
 export default function ReportPreview() {
   const location = useLocation()
+  // Opened from the Reports page? Then Back goes there instead of into the patient's results.
+  const from = (location.state as { from?: string } | null)?.from
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
 
@@ -184,6 +186,7 @@ export default function ReportPreview() {
   const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
   const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>({})
   const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
+  const [doctors, setDoctors] = useState<Doctor[]>([])
   // For a sample tested on behalf of another lab that will print it on their own letterhead —
   // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
   // with blank space left at the top for their pre-printed stationery.
@@ -211,6 +214,7 @@ export default function ReportPreview() {
 
   useEffect(() => {
     getLabSettings().then(setSettings)
+    listDoctors().then(setDoctors)
     getRangeOverrides().then(setRangeOverrides)
     getUnitOverrides().then(setUnitOverrides)
     getHiddenReferenceSections().then(setHiddenReferenceSections)
@@ -347,7 +351,7 @@ export default function ReportPreview() {
         <div style={{ height: 110 }} />
       ) : (
         <>
-          <LetterheadWatermark labName={settings.labName} />
+          <LetterheadWatermark labName={settings.labName} logoDataUrl={logo} />
           <div className="relative" style={{ zIndex: 1 }} data-role="letterhead-header">
             <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
           </div>
@@ -370,7 +374,7 @@ export default function ReportPreview() {
             <div className="flex items-center justify-between text-[13px] text-[#333]">
               <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
               {patient.referredBy && patient.referredBy !== 'Self' && (
-                <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+                <span>Referred by <b className="text-[var(--ink)]">{referredByLine(patient.referredBy, doctors)}</b></span>
               )}
               <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
             </div>
@@ -421,11 +425,11 @@ export default function ReportPreview() {
       <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <button
-            onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
+            onClick={() => (from ? navigate(from) : navigate(`/report/${patient.id}`, { state: { patient } }))}
             className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
           >
             <ArrowLeft size={15} />
-            Edit results
+            {from === '/reports' ? 'Back to reports' : 'Edit results'}
           </button>
           <div className="h-5 w-px bg-[var(--border)]" />
           <div>

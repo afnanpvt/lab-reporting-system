@@ -122,7 +122,7 @@ function decodeLicenseKey(key: string): LicenseFile | null {
 export function activateLicenseKey(key: string): ActivationResult {
   const license = decodeLicenseKey(key)
   if (!license) {
-    return { ok: false, error: "That doesn't look like a LumaLabs license key — check the whole key was copied." }
+    return { ok: false, error: "That doesn't look like a LumaLabs license key. Check the whole key was copied." }
   }
   if (!hasValidSignature(license)) {
     return { ok: false, error: 'This license key is not valid. Contact Scalyft for a new one.' }

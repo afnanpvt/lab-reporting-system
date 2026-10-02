@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutGrid, Users, FileBarChart, BarChart3, Settings, Stethoscope, Plus, ShieldCheck, Clock } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { LayoutGrid, Users, FileBarChart, BarChart3, Settings, Stethoscope, Plus, ShieldCheck, Clock, Pin, PinOff } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { syncTitleBarOverlay } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 import TrialBanner from './TrialBanner'
 import ConfirmHost from './ConfirmHost'
+import { useGuardedNavigate } from './leaveGuard'
 import { useLicense, daysLeftLabel } from './licenseStore'
 import { listAllPatientsForAnalytics } from './api'
 import { useFeatures, refreshFeatures } from './featuresStore'
@@ -59,16 +60,28 @@ function isNavActive(path: string, pathname: string): boolean {
 }
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const navigate = useNavigate()
   const location = useLocation()
-  const [expanded, setExpanded] = useState(false)
+  // The sidebar opens over the page while hovered. Pinning keeps it open, beside the page instead of over it.
+  const [hovered, setExpanded] = useState(false)
+  const [pinned, setPinned] = useState<boolean>(() => {
+    try { return localStorage.getItem('labapp:sidebarPinned') === '1' } catch { return false }
+  })
+  const expanded = pinned || hovered
+  const togglePin = () => {
+    const next = !pinned
+    setPinned(next)
+    try { localStorage.setItem('labapp:sidebarPinned', next ? '1' : '0') } catch { /* not remembered, still works */ }
+    if (next) refreshToday()
+  }
   const { labName, logo } = useBranding()
   const license = useLicense()
   const { analytics } = useFeatures()
   const bindingFor = useBindings()
 
   // App-wide shortcuts live here because Shell wraps every page and never remounts.
-  useShortcutHandlers({ 'patient.new': () => navigate('/patient/new') })
+  // Every way out of a screen asks it first, so unsaved edits are never dropped silently.
+  const guardedNavigate = useGuardedNavigate()
+  useShortcutHandlers({ 'patient.new': () => guardedNavigate('/patient/new') })
   const [today, setToday] = useState<TodaySnapshot | null>(null)
   const lastFetch = useRef(0)
 
@@ -81,6 +94,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    if (pinned) refreshToday()
     refreshBranding()
     refreshFeatures()
     refreshShortcuts()
@@ -113,16 +127,30 @@ export default function Shell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex min-h-0 print:h-auto print:overflow-visible">
         {/* Reserves a fixed 80px in the layout so nothing else shifts; the panel that actually
             grows on hover is absolutely positioned and overlays the content instead. */}
-        <aside className="relative flex-shrink-0 z-20 print:hidden" style={{ width: 80 }} onMouseEnter={() => { setExpanded(true); refreshToday() }} onMouseLeave={() => setExpanded(false)}>
+        <aside className="relative flex-shrink-0 z-20 print:hidden transition-[width] duration-200 ease-out" style={{ width: pinned ? 248 : 80 }} onMouseEnter={() => { setExpanded(true); refreshToday() }} onMouseLeave={() => setExpanded(false)}>
           <div
             className="absolute top-0 left-0 h-full bg-[var(--surface)] border-r border-[var(--border)] flex flex-col items-stretch py-6 gap-1.5 overflow-hidden transition-[width] duration-200 ease-out"
-            style={{ width: expanded ? 248 : 80, boxShadow: expanded ? '4px 0 16px rgba(26,36,48,0.12)' : 'none' }}
+            style={{ width: expanded ? 248 : 80, boxShadow: expanded && !pinned ? '4px 0 16px rgba(26,36,48,0.12)' : 'none' }}
           >
+            <div className={`px-3 flex-shrink-0 flex justify-end transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ width: 248 }}>
+              <button
+                type="button"
+                onClick={togglePin}
+                tabIndex={expanded ? 0 : -1}
+                aria-pressed={pinned}
+                title={pinned ? 'Unpin: the menu opens only when you hover over it' : 'Pin the menu open'}
+                aria-label={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
+                className={`inline-flex items-center gap-1.5 text-[11.5px] font-medium rounded-md px-2 py-1 ${pinned ? 'text-[var(--accent-ink)] bg-[var(--accent-soft)]' : 'text-[var(--ink-3)] hover:bg-[var(--bg-hover)]'}`}
+              >
+                {pinned ? <PinOff size={12} /> : <Pin size={12} />}
+                {pinned ? 'Pinned' : 'Pin'}
+              </button>
+            </div>
             <div className="px-3 mb-3 flex-shrink-0">
               <button
                 title={bindingFor('patient.new') ? `New Patient (${comboLabel(bindingFor('patient.new'))})` : 'New Patient'}
                 aria-label="New Patient"
-                onClick={() => { navigate('/patient/new'); setExpanded(false) }}
+                onClick={() => { guardedNavigate('/patient/new'); setExpanded(false) }}
                 className="w-full flex items-center gap-3 h-12 rounded-xl px-3.5 bg-[var(--accent)] text-white shadow-sm hover:bg-[var(--accent-ink)] active:scale-[0.97] transition-all duration-150"
               >
                 <Plus size={19} className="flex-shrink-0" />
@@ -142,7 +170,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                     key={label}
                     title={label}
                     aria-label={label}
-                    onClick={() => { navigate(path); setExpanded(false) }}
+                    onClick={() => { guardedNavigate(path); setExpanded(false) }}
                     className={`flex items-center gap-3 h-12 rounded-xl px-3 flex-shrink-0 transition-all duration-150 active:scale-[0.96] active:bg-[var(--accent-soft-border)] ${
                       active ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--ink-3)] hover:bg-[var(--bg-hover)]'
                     }`}

@@ -25,7 +25,7 @@ Every screen lives under `src/pages/site/`, backed by a single data-access modul
 
 The **Analytics** page (sidebar, bar-chart icon) turns the lab's own records into something readable, with a period switcher (7 days, 30 days, 90 days, 12 months, all time):
 
-- **Highlights** — plain-language findings (revenue up/down on the previous period, busiest weekday, top test, top referring doctor).
+- **Highlights** (closed until you press the Highlights button) — plain-language findings (revenue up/down on the previous period, busiest weekday, top test, top referring doctor).
 - **KPI cards** — revenue, patients, tests, average bill and completion rate, each compared with the previous period.
 - **Trend chart** — revenue / patients / tests by day, week or month. The still-running current week or month is drawn dashed so it isn't read as a drop.
 - **Breakdowns** — report completion, top investigations, top referring doctors, gender, new vs returning patients (matched by mobile number, else name), doctor-referred vs walk-in, age groups, busiest weekdays and a peak-hours heatmap.
@@ -73,6 +73,18 @@ Run `npm run test:pagination` after touching any of this: it paginates 20,000 ra
 ## Confirmation dialogs
 
 Anything that needs a yes/no from the user calls `confirmDialog({ tone, title, subject, message, confirmLabel })` from `confirmStore.ts` and awaits the result (`ConfirmHost`, mounted once in `Shell`, draws it). Don't use `window.confirm()` — it shows the browser's native box, unthemed and titled with the app's internal name. For destructive actions use `tone: 'danger'`, which focuses Cancel first.
+
+## Doctors, search and lists
+
+**Doctors.** `Doctors.tsx` is the directory (Cards / List, search). `DoctorDetail.tsx` (`/doctors/:id`) shows one doctor's referrals for a period; its **Create incentive report** button opens `IncentiveReport.tsx` (`/doctors/:id/report`). Reports and the doctor page pass `from` in the route state so Back returns to where the report was opened. The chosen period is shared by the doctor screens, Reports and the incentive report (`period.ts`, kept in `sessionStorage`). Doctors have `qualifications` (a column added by `addColumnIfNotExists` in `db.ts`); `referredByLine()` in `api.ts` builds the "Referred by Dr. X, MBBS" text.
+
+**Search.** `fuzzySearch.ts` ranks doctors (`searchDoctors`) and patients (`searchPatients`): every typed word must match something (name, qualifications, speciality, phone or, for patients, SID without leading zeros, mobile, tests, referring doctor), allowing prefixes, typos (more for longer words), words that sound alike and a small table of field synonyms ("heart" = cardiology). Run `npm run test:search` after touching it.
+
+**Lists and filters.** `ViewToggle.tsx` is the Cards / List switch (`useViewMode` remembers it per list). `PatientCard.tsx` holds the card, the table and `TestChips` (first three tests plus "+N more"). `SlideFilter.tsx` is the slide-out "Show" control used by Patients (`side` right), and via `PeriodFilter.tsx` by Reports, Analytics and the doctor screens. Dates and times use `DatePicker.tsx` / `TimePicker.tsx`; do not use `<input type="date">` or `type="time"`, which open the browser's unstyled pop-up. `DaysStepper.tsx` is the number box for "last N days".
+
+**Unsaved changes.** A screen with edits registers `useLeaveGuard(dirty, save)` (`leaveGuard.ts`); every way out goes through `useGuardedNavigate()`, which shows Save changes / Discard changes / Keep editing. New screens with a Save button should use it.
+
+**No em dashes.** Visible text never uses the em dash. `node scripts/find-emdash.js` lists any that slipped in (comments are ignored); run it before a release.
 
 ## Saved tests and editable test names
 

@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import DatePicker from './DatePicker'
+import TimePicker from './TimePicker'
+import { useGuardedNavigate, useLeaveGuard } from './leaveGuard'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, AlertCircle, User2, Plus, Clock, X } from 'lucide-react'
 import { ALL_SECTIONS, emptyPatientForm, patientToForm, createPatient, updatePatient, listDoctors, type Patient, type Doctor, type PatientFormData } from './api'
@@ -35,19 +38,19 @@ function DatesTimesEditor({ form, onSave, onClose }: { form: PatientFormData; on
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">SID Date</label>
-            <input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} className={fieldClass} />
+            <DatePicker value={regDate} onChange={setRegDate} className={fieldClass} ariaLabel="SID date" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reg Time</label>
-            <input type="time" value={regTime} onChange={(e) => setRegTime(e.target.value)} className={fieldClass} />
+            <TimePicker value={regTime} onChange={setRegTime} className={fieldClass} ariaLabel="Registration time" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Rpt Date</label>
-            <input type="date" value={rptDate} onChange={(e) => setRptDate(e.target.value)} className={fieldClass} />
+            <DatePicker value={rptDate} onChange={setRptDate} className={fieldClass} ariaLabel="Report date" />
           </div>
           <div>
             <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Rpt Time</label>
-            <input type="time" value={rptTime} onChange={(e) => setRptTime(e.target.value)} className={fieldClass} />
+            <TimePicker value={rptTime} onChange={setRptTime} className={fieldClass} ariaLabel="Report time" />
           </div>
         </div>
 
@@ -76,6 +79,8 @@ export default function PatientEntry() {
   const [showDatesModal, setShowDatesModal] = useState(false)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [saving, setSaving] = useState(false)
+  const initialForm = useRef(JSON.stringify(form))
+  const guardedNavigate = useGuardedNavigate()
 
   useEffect(() => {
     listDoctors().then(setDoctors)
@@ -84,20 +89,26 @@ export default function PatientEntry() {
   const toggleSection = (s: string) =>
     setForm((f) => ({ ...f, sections: f.sections.includes(s) ? f.sections.filter((x) => x !== s) : [...f.sections, s] }))
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) { setError('Please enter the patient\'s name before continuing.'); return }
-    if (form.sections.length === 0) { setError('Select at least one test before continuing.'); return }
-    if (!form.consentGiven) { setError('Patient consent is required before registering — please confirm with the patient and check the consent box below.'); return }
+  // `openReport` is false when saving from the unsaved-changes dialog, which carries on to wherever the user was heading.
+  const save = async (openReport: boolean): Promise<boolean> => {
+    if (!form.name.trim()) { setError('Please enter the patient\'s name before continuing.'); return false }
+    if (form.sections.length === 0) { setError('Select at least one test before continuing.'); return false }
+    if (!form.consentGiven) { setError('Patient consent is required before registering. Please confirm with the patient and check the consent box below.'); return false }
     setError('')
     setSaving(true)
     const patient = editing ? await updatePatient(editing.id, form) : await createPatient(form)
-    navigate(`/report/${patient.id}`, { state: { patient } })
+    if (openReport) navigate(`/report/${patient.id}`, { state: { patient } })
+    return true
   }
+  const handleSubmit = () => save(true)
+
+  // Leaving with unsaved edits (Back, Cancel, the sidebar) offers Save / Discard / Keep editing.
+  useLeaveGuard(JSON.stringify(form) !== initialForm.current && !saving, () => save(false), { what: 'this patient' })
 
   return (
       <main className="px-10 py-9">
         <button
-          onClick={() => navigate('/patients')}
+          onClick={() => guardedNavigate('/patients')}
           className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)] mb-5"
         >
           <ArrowLeft size={15} />
@@ -169,7 +180,7 @@ export default function PatientEntry() {
                   <label className="block text-[14px] font-medium text-[var(--ink)]">Referred By</label>
                   <button
                     type="button"
-                    onClick={() => navigate('/doctors/new')}
+                    onClick={() => guardedNavigate('/doctors/new')}
                     className="inline-flex items-center gap-1 text-[12.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium"
                   >
                     <Plus size={12} />
@@ -183,7 +194,7 @@ export default function PatientEntry() {
                 >
                   <option value="Self">Self (no referring doctor)</option>
                   {doctors.map((d) => (
-                    <option key={d.id} value={d.name}>{d.name}{d.specialty ? ` — ${d.specialty}` : ''}</option>
+                    <option key={d.id} value={d.name}>{d.name}{d.qualifications ? `, ${d.qualifications}` : ''}{d.specialty ? ` (${d.specialty})` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -266,7 +277,7 @@ export default function PatientEntry() {
                 {saving ? 'Saving…' : editing ? 'Save & Continue' : 'Start Entering Results'}
               </button>
               <button
-                onClick={() => navigate('/patients')}
+                onClick={() => guardedNavigate('/patients')}
                 className="px-5 py-2.5 bg-[var(--surface)] text-[var(--ink)] text-[15px] font-medium border border-[var(--border-strong)] rounded-2xl hover:bg-[var(--bg-hover)]"
               >
                 Cancel
@@ -282,7 +293,7 @@ export default function PatientEntry() {
             </div>
             <div className="text-[16.5px] font-semibold text-[var(--ink)] mb-0.5">{form.name.trim() || 'Unnamed Patient'}</div>
             <div className="text-[13.5px] text-[var(--ink-2)] mb-3.5">
-              {form.age || '—'}{form.ageUnit} · {form.gender === 'M' ? 'Male' : 'Female'} · {form.sid || 'SID pending'}
+              {form.age || '?'}{form.ageUnit} · {form.gender === 'M' ? 'Male' : 'Female'} · {form.sid || 'SID pending'}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap mb-3.5">
               {form.sections.length === 0 ? (

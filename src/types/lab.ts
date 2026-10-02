@@ -28,6 +28,8 @@ export interface PatientWithResults extends Patient {
 export interface Doctor {
   id: number
   name: string
+  /** Degrees and qualifications, e.g. "MBBS, MD". Empty on doctors added before this existed. */
+  qualifications?: string
   specialty: string
   phone: string
   created_at: string

@@ -361,8 +361,8 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('doctors:create', (_e, data: Record<string, unknown>) => {
     dbRun(
-      'INSERT INTO doctors (name, specialty, phone) VALUES (?, ?, ?)',
-      [data.name, data.specialty ?? '', data.phone ?? '']
+      'INSERT INTO doctors (name, qualifications, specialty, phone) VALUES (?, ?, ?, ?)',
+      [data.name, data.qualifications ?? '', data.specialty ?? '', data.phone ?? '']
     )
     const inserted = dbGet('SELECT id FROM doctors ORDER BY rowid DESC LIMIT 1')
     return { id: inserted?.id }
@@ -527,6 +527,6 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // light/dark preference changes (and once on launch) to keep it in sync with the app chrome.
   ipcMain.handle('window:setTitleBarOverlay', (e, options: { color: string; symbolColor: string }) => {
     const win = BrowserWindow.fromWebContents(e.sender)
-    win?.setTitleBarOverlay({ color: options.color, symbolColor: options.symbolColor, height: 76 })
+    win?.setTitleBarOverlay({ color: options.color, symbolColor: options.symbolColor, height: 40 })
   })
 }

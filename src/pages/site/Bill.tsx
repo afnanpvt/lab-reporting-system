@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Download, MessageCircle } from 'lucide-react'
-import { getPatient, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import { getPatient, listDoctors, referredByLine, billLineItemsFor, billTotalFor, setBillItemAmount, loadBillingContext, getLabSettings, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, type Patient, type Doctor, type BillingContext, type LabSettingsForm } from './api'
 import { formatTime12h } from './reportFields'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 
 export default function Bill() {
   const location = useLocation()
+  // Opened from the Reports page? Then Back goes there instead of into the patient's results.
+  const from = (location.state as { from?: string } | null)?.from
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
 
@@ -14,6 +16,7 @@ export default function Bill() {
   const [billing, setBilling] = useState<BillingContext | null>(null)
   const [settings, setSettings] = useState<LabSettingsForm | null>(null)
   const [logo, setLogo] = useState<string | null>(null)
+  const [doctors, setDoctors] = useState<Doctor[]>([])
   const [badge, setBadge] = useState<string | null>(null)
   const [certifications, setCertifications] = useState<string[]>([])
 
@@ -21,6 +24,7 @@ export default function Bill() {
     const fromState = (location.state as { patient?: Patient })?.patient
     if (fromState) { setPatient(fromState); return }
     if (id) getPatient(Number(id)).then(setPatient)
+    listDoctors().then(setDoctors)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -63,11 +67,11 @@ export default function Bill() {
       <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <button
-            onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
+            onClick={() => (from ? navigate(from) : navigate(`/report/${patient.id}`, { state: { patient } }))}
             className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
           >
             <ArrowLeft size={15} />
-            Back to patient
+            {from === '/reports' ? 'Back to reports' : 'Back to patient'}
           </button>
           <div className="h-5 w-px bg-[var(--border)]" />
           <div>
@@ -101,7 +105,7 @@ export default function Bill() {
             className="report-paper relative max-w-[780px] mx-auto bg-[var(--surface)] shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
           >
-            <LetterheadWatermark labName={settings.labName} />
+            <LetterheadWatermark labName={settings.labName} logoDataUrl={logo} />
             <div className="relative" style={{ zIndex: 1 }}>
               <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
 
@@ -114,7 +118,7 @@ export default function Bill() {
 
               <div className="avoid-break grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] mb-6">
                 <div>Patient <b className="text-[#111]">{patient.name}</b></div>
-                <div>Referred by <b className="text-[#111]">{patient.referredBy}</b></div>
+                <div>Referred by <b className="text-[#111]">{referredByLine(patient.referredBy, doctors)}</b></div>
                 <div>Age / Sex <b className="text-[#111]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></div>
               </div>
 
@@ -164,7 +168,7 @@ export default function Bill() {
               </table>
 
               <p className="text-[9.5px] text-[var(--ink-3)] italic mt-2 print:hidden">
-                Click an amount above to adjust it for this patient — rates aren't fixed.
+                Click an amount above to adjust it for this patient. Rates aren't fixed.
               </p>
 
               <div className="avoid-break flex items-end justify-between mt-16">

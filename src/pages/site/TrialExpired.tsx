@@ -16,7 +16,7 @@ export default function TrialExpired({ license }: { license: LicenseStatus }) {
         <p className="text-[14.5px] text-[var(--ink-2)] leading-relaxed mb-5">
           The trial for <span className="font-medium text-[var(--ink)]">{license.labName}</span> ended
           {license.expiresAt ? <> on {new Date(license.expiresAt).toLocaleDateString()}</> : ''}. Your patients
-          and reports are safe on this computer — activate the full version to keep using them.
+          and reports are safe on this computer. Activate the full version to keep using them.
         </p>
 
         <div className="rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-4 py-3.5 mb-5 text-left">
