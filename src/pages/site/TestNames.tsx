@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { confirmDialog } from './confirmStore'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronRight, Plus, RotateCcw, Search, Save, Trash2, AlertTriangle } from 'lucide-react'
 import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
@@ -119,9 +120,18 @@ export default function TestNames() {
     return { kind: 'between', a: '', b: '', flag: true }
   }
 
-  const removeTest = (sectionKey: string, test: CustomTest) => {
+  const removeTest = async (sectionKey: string, test: CustomTest) => {
     const existed = (savedCustom[sectionKey] ?? []).some((t) => t.id === test.id)
-    if (existed && !window.confirm(`Remove “${test.name || 'this test'}”?\n\nIt disappears from the result sheet and from printed reports. Values already entered for it are kept in the database but no longer shown.`)) return
+    if (existed) {
+      const ok = await confirmDialog({
+        tone: 'danger',
+        title: 'Remove this test?',
+        subject: test.name || undefined,
+        message: 'It disappears from the result sheet and from printed reports. Values already entered for it are kept in the database but no longer shown.',
+        confirmLabel: 'Remove test'
+      })
+      if (!ok) return
+    }
     setCustom({ ...custom, [sectionKey]: (custom[sectionKey] ?? []).filter((t) => t.id !== test.id) })
   }
 
@@ -177,8 +187,17 @@ export default function TestNames() {
     !q || sectionLabel.toLowerCase().includes(q) || defaultLabelFor(field).toLowerCase().includes(q) || valueOf(key, field).toLowerCase().includes(q)
   const customMatches = (sectionLabel: string, t: CustomTest) => !q || sectionLabel.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)
 
-  const handleBack = () => {
-    if (changeCount > 0 && !window.confirm('Leave without saving your changes?')) return
+  const handleBack = async () => {
+    if (changeCount > 0) {
+      const leave = await confirmDialog({
+        tone: 'warning',
+        title: 'Leave without saving?',
+        message: 'Your changes to the tests haven’t been saved and will be lost.',
+        confirmLabel: 'Leave',
+        cancelLabel: 'Keep editing'
+      })
+      if (!leave) return
+    }
     navigate('/settings')
   }
 

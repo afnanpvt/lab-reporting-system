@@ -8,6 +8,8 @@ import { checksForSection, type IssuesByField, type ValueIssue } from './valueCh
 import { useLabels } from './labelsStore'
 import RangeEditor from './RangeEditor'
 import { saveRangeSpec, useRangeSpecs } from './rangeSpecsStore'
+import { formatThousands, parseResultNumber } from './numberFormat'
+import { useNumberInput } from './useNumberInput'
 import type { RangeSpec } from './rangeSpec'
 import { useFeatures } from './featuresStore'
 import { useCustomTests, customKey } from './customTestsStore'
@@ -730,6 +732,10 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
   const flag = flagFor(value, range, fieldKey, { sectionKey, gender })
   const flagColor = flag ? 'var(--danger)' : undefined
   const rangeInfo = numericRangeInfo(range)
+  // Every way a value gets set — typing, arrow keys, "use this range", a suggested fix — comes out
+  // with thousands separators ("20000" -> "20,000"), so the sheet and the report read the same.
+  const setValue = (text: string) => onChange(formatThousands(text).text)
+  const numberInput = useNumberInput(onChange)
   // What the range editor opens on: the range's real kind (the lab's own edit, else read once from
   // the text), or a blank "between" when the reference has been hidden and is being brought back.
   const startingSpec: RangeSpec = range
@@ -756,16 +762,17 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
     if (!rangeInfo || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
     if (e.ctrlKey || e.metaKey || e.altKey) return // let Ctrl+Arrow bubble up to the pane's section-jump shortcut
     e.preventDefault()
-    const current = value.trim() === '' ? NaN : parseFloat(value)
+    const parsed = parseResultNumber(value)
+    const current = parsed === null ? NaN : parsed
     if (isNaN(current)) {
       const mid = (rangeInfo.min + rangeInfo.max) / 2
-      onChange(mid.toFixed(rangeInfo.decimals))
+      setValue(mid.toFixed(rangeInfo.decimals))
       return
     }
     const dir = e.key === 'ArrowUp' ? 1 : -1
     const step = e.shiftKey ? coarseStepFor(current, rangeInfo.step) : rangeInfo.step
     const ticks = Math.round(current / step) + dir
-    onChange((ticks * step).toFixed(rangeInfo.decimals))
+    setValue((ticks * step).toFixed(rangeInfo.decimals))
   }
 
   return (
@@ -793,8 +800,9 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
         </select>
       ) : (
         <input
+          ref={numberInput.ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={numberInput.onChange}
           onKeyDown={handleValueKeyDown}
           className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
@@ -849,7 +857,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
               !value ? (
                 <button
                   type="button"
-                  onClick={() => onChange(defaultValueForRange(range))}
+                  onClick={() => setValue(defaultValueForRange(range))}
                   title="Use this range as the starting value"
                   className="text-[13px] text-[var(--ink-2)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-soft)] whitespace-nowrap rounded-md px-1.5 py-0.5 transition-colors truncate"
                 >
@@ -880,7 +888,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
       {issues.length > 0 && (
         <div style={{ marginLeft: 'calc(13rem + 0.75rem)' }}>
           {issues.map((issue) => (
-            <IssueNote key={issue.id} issue={issue} onFix={onChange} onDismiss={() => dismiss(fieldKey, issue.id)} />
+            <IssueNote key={issue.id} issue={issue} onFix={setValue} onDismiss={() => dismiss(fieldKey, issue.id)} />
           ))}
         </div>
       )}
@@ -957,6 +965,12 @@ function UnitEditor({ initial, defaultUnit, isOverridden, onCancel, onSave, onRe
       </button>
     </div>
   )
+}
+
+/** A result box that adds thousands separators as a number is typed (see useNumberInput). */
+function NumberInput({ value, onCommit, ...rest }: { value: string; onCommit: (text: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const n = useNumberInput(onCommit)
+  return <input ref={n.ref} value={value} onChange={n.onChange} {...rest} />
 }
 
 /**
@@ -1053,13 +1067,22 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
               </span>
             )}
           </div>
-          <input
-            value={value}
-            onChange={(e) => setRow(i, { value: e.target.value })}
-            placeholder="Result"
-            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-            style={{ width: '9rem', fontFamily: 'Consolas, monospace' }}
-          />
+          {(() => {
+            // Same red highlight as the fixed sections, judged against this row's own reference range.
+            const flag = flagFor(value, reference)
+            return (
+              <div className="relative flex-shrink-0" style={{ width: '9rem' }}>
+                <NumberInput
+                  value={value}
+                  onCommit={(v) => setRow(i, { value: v })}
+                  placeholder="Result"
+                  className="w-full text-[15px] pl-2.5 pr-7 py-1.5 rounded-lg border bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+                  style={{ fontFamily: 'Consolas, monospace', borderColor: flag ? 'var(--danger)' : 'var(--border-strong)', color: flag ? 'var(--danger)' : undefined, fontWeight: flag ? 600 : undefined }}
+                />
+                {flag && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[13px]" style={{ color: 'var(--danger)' }} title={flag === 'high' ? 'Above the reference range' : 'Below the reference range'}>{flag === 'high' ? '▲' : '▼'}</span>}
+              </div>
+            )
+          })()}
           <input
             value={unit}
             onChange={(e) => setRow(i, { unit: e.target.value })}

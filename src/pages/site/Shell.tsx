@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { syncTitleBarOverlay } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
 import TrialBanner from './TrialBanner'
+import ConfirmHost from './ConfirmHost'
 import { useLicense, daysLeftLabel } from './licenseStore'
 import { listAllPatientsForAnalytics } from './api'
 import { useFeatures, refreshFeatures } from './featuresStore'
@@ -187,6 +188,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         </aside>
         <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto">{children}</div>
       </div>
+      <ConfirmHost />
     </div>
   )
 }

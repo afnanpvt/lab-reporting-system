@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { confirmDialog } from './confirmStore'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { deletePatient, listPatientsWithStatus, type Patient, type PatientWithStatus } from './api'
@@ -18,7 +19,14 @@ export default function Patients() {
   }, [])
 
   const removePatient = async (p: Patient) => {
-    if (!window.confirm(`Delete ${p.name} (SID ${p.sid})? This permanently removes their record and results. This cannot be undone.`)) return
+    const ok = await confirmDialog({
+      tone: 'danger',
+      title: 'Delete this patient?',
+      subject: `${p.name} · SID ${p.sid}`,
+      message: 'This permanently removes their record and all of their results. This can’t be undone.',
+      confirmLabel: 'Delete patient'
+    })
+    if (!ok) return
     await deletePatient(p.id)
     refresh()
   }

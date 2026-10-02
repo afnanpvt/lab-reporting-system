@@ -17,7 +17,7 @@ Every screen lives under `src/pages/site/`, backed by a single data-access modul
 - **Bill** — per-patient line items derived from a rate card, with per-patient-per-section amount overrides (rates aren't fixed).
 - **Doctors / Incentive Report** — referring doctors, who they've referred, and a printable incentive statement per doctor.
 - **Reports** — every completed report and bill in one place.
-- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), the Analytics on/off switch, [keyboard shortcuts](#keyboard-shortcuts), [test names and added tests](#saved-tests-and-editable-test-names), saved Others tests, appearance, and a note confirming everything is stored locally.
+- **Settings** — five tabs: **Laboratory** (lab identity — address/phone/email/doctor are editable, the lab *name* is locked to the license — with the only Save button), **Tests** ([renaming and adding tests](#saved-tests-and-editable-test-names), saved Others tests), **Preferences** (Analytics / highlighting / value-check switches, appearance, report output), **Shortcuts** ([keyboard shortcuts](#keyboard-shortcuts)) and **License & About**. Everything outside the Laboratory tab applies the moment it is changed.
 
 12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S. (with a 20-antibiotic antibiogram grid), Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
 
@@ -55,10 +55,24 @@ Rules the recorder enforces: a plain letter, digit, arrow, Enter or Esc on its o
 
 Two separate aids on the result sheet, each with its own switch in **Settings → Features** (both on by default, stored as `lab_settings.feature_flagging` / `feature_value_checks`, `'0'` = off):
 
-- **Abnormal value highlighting** — `flagFor()` in `reportFields.ts` returns `'high'`/`'low'`, which drives the red result text on Result Entry and the ▲/▼ on the printed report. It reads a *structured* range (`RangeSpec` in `rangeSpec.ts`: kind `between` / `upto` / `lt` / `gte` / `gt` / `text`, its number(s), and a highlight flag) rather than guessing from wording. A lab's own edit (made in the `RangeEditor` card beside each reference range) is stored as `lab_settings.range_specs`, keyed like the text overrides (`section.field[.M|.F]`) and always written with the generated range text; a lab-added test carries its own spec; everything else (built-in defaults, Others rows, older saved text) is read once by `parseRangeText`. By default two-sided ranges highlight only for Haemoglobin, Total WBC and Platelet Count, and one-sided ranges (`Up to`, `<`, `≥`, `>`) always do; the editor's checkbox opts any test in or out. Off means `flagFor` always returns `null`.
+- **Abnormal value highlighting** — `flagFor()` in `reportFields.ts` returns `'high'`/`'low'`, which drives the red result text on Result Entry and the ▲/▼ on the printed report. It reads a *structured* range (`RangeSpec` in `rangeSpec.ts`: kind `between` / `upto` / `lt` / `gte` / `gt` / `text`, its number(s), and a highlight flag) rather than guessing from wording. A lab's own edit (made in the `RangeEditor` card beside each reference range) is stored as `lab_settings.range_specs`, keyed like the text overrides (`section.field[.M|.F]`) and always written with the generated range text; a lab-added test carries its own spec; everything else (built-in defaults, Others rows, older saved text) is read once by `parseRangeText`. Every numeric range highlights by default (both sides of a two-sided range, one side of `Up to` / `<` / `≥` / `>`); the editor's checkbox opts a single test out. Qualitative ranges (`Negative`, `Nil`, `Non-Reactive`) have nothing above or below and never show an arrow. A result typed as a span (`4-6/HPF`) counts as high if any part is above the range and low if any part is below. Off means `flagFor` always returns `null`.
 - **Smart value checks** — `checksForSection()` in `valueChecks.ts`: the yellow/red/blue notes and the "check before report" list; see [docs/value-checks.md](docs/value-checks.md). Off means it returns nothing.
 
 Both read the switches through plain functions in `featuresStore.ts` (`isFlaggingOn`, `isValueChecksOn`), and the pages that use them also call `useFeatures()` so they redraw when a switch changes.
+
+## Numbers in results
+
+Values typed in result boxes get thousands separators automatically (`numberFormat.ts`: `20000` → `20,000`, Indian grouping above that, `1,00,000`), with the caret kept beside the digit being typed (`useNumberInput.ts`). Only plain numbers of four or more whole digits are touched; text, spans (`4-6/HPF`), titres (`1:80`) and anything with a unit are left alone. Anything that needs the numeric value of a result must read it with `parseResultNumber()` (or the comma-stripping reader in `rangeSpec.ts` / `valueChecks.ts`) rather than `parseFloat()`, which stops at the first comma.
+
+## Report pagination
+
+The printed report is paginated in JavaScript (`pagination.ts`) so the preview and the PDF break pages in the same places. A page is `overflow: hidden`, so a wrong guess silently clips rows — which is why pagination does **not** use fixed row heights. `ReportPreview` renders an invisible *probe* page holding one of every block (`measureReport.ts`), reads the real height of every row, heading, the sign-off and the room above the footer, and passes those to `paginateReport()` as `PageMetrics`. A self-check re-paginates with extra room if a displayed page ever overflows anyway. The rules (never leave a page holding only the patient header; keep the sign-off with the last rows rather than alone; never strand a single row) live in `paginateReport()`.
+
+Run `npm run test:pagination` after touching any of this: it paginates 20,000 random reports with random row heights and fails if a row is lost, a page overflows, a page holds only the header, or the sign-off is left alone. Row *heights* come from the DOM, so after changing the report's markup also open a few long reports (long test names, long results, method notes) in the preview and check the pages.
+
+## Confirmation dialogs
+
+Anything that needs a yes/no from the user calls `confirmDialog({ tone, title, subject, message, confirmLabel })` from `confirmStore.ts` and awaits the result (`ConfirmHost`, mounted once in `Shell`, draws it). Don't use `window.confirm()` — it shows the browser's native box, unthemed and titled with the app's internal name. For destructive actions use `tone: 'danger'`, which focuses Cancel first.
 
 ## Saved tests and editable test names
 
@@ -122,6 +136,7 @@ npm install
 | `npm run dev` | Launches the app in development mode with hot reload |
 | `npm run build` | Bundles main/preload/renderer for production via `electron-vite` |
 | `npm run preview` | Runs the production build locally without packaging |
+| `npm run test:pagination` | Runs the report-pagination regression test (see [Report pagination](#report-pagination)) |
 | `npm run package` | Runs `build` then `electron-builder` to produce a distributable — see [Packaging](#packaging) |
 
 To type-check explicitly:

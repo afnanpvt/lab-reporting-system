@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { confirmDialog } from './confirmStore'
 import { useNavigate } from 'react-router-dom'
 import { Stethoscope, ChevronRight, Phone, Plus, Pencil, Trash2 } from 'lucide-react'
 import { listDoctors, listPatients, loadBillingContext, incentiveTotalFor, deleteDoctor, type Doctor, type Patient, type BillingContext } from './api'
@@ -26,7 +27,14 @@ export default function Doctors() {
 
   const removeDoctor = async (e: React.MouseEvent, d: Doctor) => {
     e.stopPropagation()
-    if (!window.confirm(`Delete ${d.name}? This only removes them from this list — any patients already referred by them keep their existing records.`)) return
+    const ok = await confirmDialog({
+      tone: 'danger',
+      title: 'Delete this doctor?',
+      subject: d.name,
+      message: 'This only removes them from your list. Patients already referred by them keep their existing records.',
+      confirmLabel: 'Delete doctor'
+    })
+    if (!ok) return
     await deleteDoctor(d.id)
     refresh()
   }
