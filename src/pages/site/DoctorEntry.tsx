@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, AlertCircle, Stethoscope, Phone } from 'lucide-react'
 import { createDoctor, updateDoctor, type Doctor } from './api'
+import { useGuardedNavigate, useLeaveGuard } from './leaveGuard'
 
 export default function DoctorEntry() {
   const navigate = useNavigate()
@@ -9,28 +10,37 @@ export default function DoctorEntry() {
   const editing = (location.state as { doctor?: Doctor })?.doctor
   const [form, setForm] = useState({
     name: editing?.name ?? '',
+    qualifications: editing?.qualifications ?? '',
     specialty: editing?.specialty ?? '',
     phone: editing?.phone ?? ''
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const initialForm = useRef(JSON.stringify(form))
+  const guardedNavigate = useGuardedNavigate()
 
   const update = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) { setError("Please enter the doctor's name before continuing."); return }
+  // `goToList` is false when saving from the unsaved-changes dialog, which carries on to wherever the user was heading.
+  const save = async (goToList: boolean): Promise<boolean> => {
+    if (!form.name.trim()) { setError("Please enter the doctor's name before continuing."); return false }
     setError('')
     setSaving(true)
-    const data = { name: form.name.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() }
+    const data = { name: form.name.trim(), qualifications: form.qualifications.trim(), specialty: form.specialty.trim() || 'General Physician', phone: form.phone.trim() }
     if (editing) await updateDoctor(editing.id, data)
     else await createDoctor(data)
-    navigate('/doctors')
+    if (goToList) navigate('/doctors')
+    return true
   }
+  const handleSubmit = () => save(true)
+
+  // Leaving with unsaved edits (Back, Cancel or the sidebar) offers Save / Discard / Keep editing.
+  useLeaveGuard(JSON.stringify(form) !== initialForm.current && !saving, () => save(false), { what: 'this doctor' })
 
   return (
       <main className="px-10 py-9">
         <button
-          onClick={() => navigate('/doctors')}
+          onClick={() => guardedNavigate('/doctors')}
           className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)] mb-5"
         >
           <ArrowLeft size={15} />
@@ -61,6 +71,16 @@ export default function DoctorEntry() {
               />
             </div>
             <div>
+              <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Qualifications</label>
+              <input
+                value={form.qualifications}
+                onChange={(e) => update('qualifications', e.target.value)}
+                className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--bg-app)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]"
+                placeholder="e.g. MBBS, MD (General Medicine)"
+              />
+              <p className="text-[12.5px] text-[var(--ink-3)] mt-1.5">Shown beside the name, and printed with “Referred by” on reports.</p>
+            </div>
+            <div>
               <label className="block text-[14px] font-medium text-[var(--ink)] mb-1.5">Specialty</label>
               <input
                 value={form.specialty}
@@ -88,7 +108,7 @@ export default function DoctorEntry() {
                 {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Doctor'}
               </button>
               <button
-                onClick={() => navigate('/doctors')}
+                onClick={() => guardedNavigate('/doctors')}
                 className="px-5 py-2.5 bg-[var(--surface)] text-[var(--ink)] text-[15px] font-medium border border-[var(--border-strong)] rounded-2xl hover:bg-[var(--bg-hover)]"
               >
                 Cancel
@@ -103,6 +123,7 @@ export default function DoctorEntry() {
               <Stethoscope size={17} className="text-[var(--ink-3)]" />
             </div>
             <div className="text-[16.5px] font-semibold text-[var(--ink)] mb-0.5">{form.name.trim() || 'Unnamed Doctor'}</div>
+            {form.qualifications.trim() && <div className="text-[13px] text-[var(--ink-3)] mb-0.5">{form.qualifications.trim()}</div>}
             <div className="text-[13.5px] text-[var(--ink-2)] mb-3.5">{form.specialty.trim() || 'General Physician'}</div>
             {form.phone.trim() && (
               <div className="flex items-center gap-1.5 text-[13px] text-[var(--ink-3)]">

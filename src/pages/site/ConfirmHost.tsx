@@ -8,33 +8,40 @@ const TONES: Record<ConfirmTone, { Icon: typeof Trash2; soft: string; fg: string
   default: { Icon: HelpCircle, soft: 'var(--accent-soft)', fg: 'var(--accent)', button: 'var(--accent)', buttonHover: 'var(--accent-ink)' }
 }
 
+const FOCUS = 'focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-40)]'
+
 /**
- * Draws whichever confirmation confirmDialog() has asked for. Mounted once, in Shell. Esc or a click
- * on the backdrop cancels. For a destructive action the safe button (Cancel) has focus when it opens,
- * so a stray Enter can't delete anything; Tab moves between the two buttons.
+ * Draws whichever dialog confirmDialog() / unsavedChangesDialog() has asked for. Mounted once, in
+ * Shell. Esc or a click on the backdrop cancels. For a destructive action the safe button (Cancel)
+ * has focus when it opens, so a stray Enter can't delete anything; otherwise the main button does.
+ * Tab moves between the buttons.
  */
 export default function ConfirmHost() {
   const request = useConfirmRequest()
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const discardRef = useRef<HTMLButtonElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!request) return
-    ;(request.tone === 'danger' ? cancelRef : confirmRef).current?.focus()
+    const first = request.tone === 'danger' || request.noConfirm ? cancelRef : confirmRef
+    first.current?.focus()
   }, [request])
 
   if (!request) return null
   const tone = TONES[request.tone]
 
-  // Nothing typed while the dialog is open may reach the page behind it (shortcuts, field navigation).
+  // Nothing typed while a dialog is open may reach the page behind it (shortcuts, field navigation).
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault()
-      settleConfirm(false)
+      settleConfirm('cancel')
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      const goingToConfirm = document.activeElement === cancelRef.current
-      ;(goingToConfirm ? confirmRef : cancelRef).current?.focus()
+      const order = [cancelRef.current, discardRef.current, confirmRef.current].filter((b): b is HTMLButtonElement => !!b)
+      const at = order.indexOf(document.activeElement as HTMLButtonElement)
+      const next = order[(at + (e.shiftKey ? order.length - 1 : 1)) % order.length]
+      next?.focus()
     }
     e.stopPropagation()
   }
@@ -43,14 +50,14 @@ export default function ConfirmHost() {
     <div
       className="confirm-backdrop fixed inset-0 z-[100] flex items-center justify-center p-6 print:hidden"
       style={{ background: 'rgba(20, 28, 38, 0.5)' }}
-      onMouseDown={(e) => { if (e.target === e.currentTarget) settleConfirm(false) }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) settleConfirm('cancel') }}
       onKeyDown={onKeyDown}
     >
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
-        className="confirm-card w-[27rem] max-w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-6"
+        className="confirm-card w-[28rem] max-w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-6"
         style={{ boxShadow: '0 24px 60px rgba(15, 23, 32, 0.28), 0 4px 14px rgba(15, 23, 32, 0.12)' }}
       >
         <div className="flex items-start gap-4">
@@ -72,22 +79,35 @@ export default function ConfirmHost() {
           <button
             ref={cancelRef}
             type="button"
-            onClick={() => settleConfirm(false)}
-            className="px-4 py-2.5 text-[14px] font-medium rounded-xl border border-[var(--border-strong)] text-[var(--ink)] hover:bg-[var(--bg-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-40)]"
+            onClick={() => settleConfirm('cancel')}
+            className={`px-4 py-2.5 text-[14px] font-medium rounded-xl border border-[var(--border-strong)] text-[var(--ink)] hover:bg-[var(--bg-hover)] ${FOCUS}`}
           >
             {request.cancelLabel}
           </button>
-          <button
-            ref={confirmRef}
-            type="button"
-            onClick={() => settleConfirm(true)}
-            className="px-4 py-2.5 text-[14px] font-medium rounded-xl text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-40)]"
-            style={{ background: tone.button }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tone.buttonHover }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = tone.button }}
-          >
-            {request.confirmLabel}
-          </button>
+          {request.discardLabel && (
+            <button
+              ref={discardRef}
+              type="button"
+              onClick={() => settleConfirm('discard')}
+              className={`px-4 py-2.5 text-[14px] font-medium rounded-xl border hover:bg-[var(--danger-soft)] ${FOCUS}`}
+              style={{ borderColor: 'var(--danger-soft-border)', color: 'var(--danger-ink)' }}
+            >
+              {request.discardLabel}
+            </button>
+          )}
+          {!request.noConfirm && (
+            <button
+              ref={confirmRef}
+              type="button"
+              onClick={() => settleConfirm('confirm')}
+              className={`px-4 py-2.5 text-[14px] font-medium rounded-xl text-white shadow-sm ${FOCUS}`}
+              style={{ background: tone.button }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = tone.buttonHover }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = tone.button }}
+            >
+              {request.confirmLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>

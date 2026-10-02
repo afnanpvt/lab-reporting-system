@@ -264,18 +264,24 @@ export async function listDoctors(): Promise<Doctor[]> {
   return (await window.api.doctors.list()) as unknown as Doctor[]
 }
 
+/** "Dr. Name, MBBS" when the referring doctor is in the Doctors list with qualifications; otherwise the name as it was saved on the patient. */
+export function referredByLine(name: string, doctors: Doctor[]): string {
+  const doctor = doctors.find((d) => d.name === name)
+  return doctor?.qualifications ? `${name}, ${doctor.qualifications}` : name
+}
+
 export async function getDoctor(id: number): Promise<Doctor | null> {
   return (await window.api.doctors.get(id)) as unknown as Doctor | null
 }
 
-export async function createDoctor(data: { name: string; specialty: string; phone: string }): Promise<Doctor> {
+export async function createDoctor(data: { name: string; qualifications: string; specialty: string; phone: string }): Promise<Doctor> {
   const { id } = await window.api.doctors.create(data)
   const doctor = await getDoctor(id)
   if (!doctor) throw new Error('Doctor not found after create')
   return doctor
 }
 
-export async function updateDoctor(id: number, data: { name: string; specialty: string; phone: string }): Promise<Doctor> {
+export async function updateDoctor(id: number, data: { name: string; qualifications: string; specialty: string; phone: string }): Promise<Doctor> {
   await window.api.doctors.update(id, data)
   const doctor = await getDoctor(id)
   if (!doctor) throw new Error('Doctor not found after update')

@@ -215,10 +215,25 @@ export function rangeOverrideKey(sectionKey: string, fieldKey: string, gender?: 
  * field has been overridden, that replaces the hardcoded clinical default; anything not present
  * in the map falls through to FIELD_META exactly as before overrides existed.
  */
-export function getReferenceRange(sectionKey: string, fieldKey: string, gender?: string, overrides?: Record<string, string>): string {
+export function getReferenceRange(sectionKey: string, fieldKey: string, gender?: string, overrides?: Record<string, string>, unitOverrides?: Record<string, string>): string {
   const override = overrides?.[rangeOverrideKey(sectionKey, fieldKey, gender)]
-  if (override !== undefined) return override
-  return defaultReferenceRange(sectionKey, fieldKey, gender)
+  const text = override !== undefined ? override : defaultReferenceRange(sectionKey, fieldKey, gender)
+  return withUnit(text, sectionKey, fieldKey, unitOverrides)
+}
+
+/**
+ * A reference range carries its unit in the text ("13.0-17.0 gm/dl"), so when the lab changes the
+ * unit the range has to follow. The built-in unit at the end of the text is swapped for the lab's
+ * unit (or dropped if they cleared it); a range that doesn't end in the built-in unit is left alone.
+ */
+function withUnit(text: string, sectionKey: string, fieldKey: string, unitOverrides?: Record<string, string>): string {
+  const changed = unitOverrides?.[unitOverrideKey(sectionKey, fieldKey)]
+  if (!text || changed === undefined) return text
+  const original = defaultUnitFor(sectionKey, fieldKey)
+  if (!original || !text.endsWith(original)) return text
+  const base = text.slice(0, text.length - original.length).trimEnd()
+  const next = changed.trim()
+  return next ? `${base} ${next}` : base
 }
 
 /** The unedited clinical default for a field — what "Reset to default" restores, ignoring any override. */

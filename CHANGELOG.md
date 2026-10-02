@@ -4,6 +4,46 @@ Every release is also published on GitHub with its installers. Versions follow
 `major.minor.patch` (see the handbook, `docs/licensing-and-releases.md`). Windows 7 builds carry the
 same version with a `-win7` tag.
 
+## 2.5.3
+
+### Added
+- **Doctors page rebuilt.** The Doctors page is a directory (search, Cards / List, edit, delete). Opening a
+  doctor shows their page: qualifications, speciality, phone, a period filter, patients referred, tests
+  done, amount billed and the list of patients. **Create incentive report** on that page opens the
+  printable report (Super Lab style header, PDF, print) on the same period. Back from the report returns
+  to wherever it was opened (the doctor, or Reports).
+- **Doctor qualifications.** Referring doctors have a Qualifications field ("MBBS, MD"). It shows on the
+  doctor's card, in the doctor dropdown, on the incentive report and in "Referred by Dr. X, MBBS" on
+  printed reports.
+- **Smart search.** Doctors and Patients search forgives spelling slips and understands more than the name:
+  "ravy kumr" finds Ravi Kumar, "mbss" finds every MBBS doctor, "heart" finds a cardiologist, "14" finds
+  SID 000014. Patients are also found by mobile, test and referring doctor. `npm run test:search` covers it.
+- **Cards and List views** on Doctors, Patients and the Dashboard (remembered). A patient card shows the
+  first three tests and a "+N more" chip that opens the full list in place, so cards stay the same height.
+- **Day filter on Patients.** A "Show" button slides out Today, Last 7 days, Last 30 days, All or Custom
+  (any number of days). The Completed / In progress / Draft chips are now filters too.
+- **Period filter on Reports, Analytics and the doctor screens** uses the same slide-out control; the
+  period is shared with the incentive report. Reports lists (patient reports, billing, doctor incentives)
+  follow it.
+- **Unsaved changes.** Leaving a screen with unsaved edits (Back, Cancel, the sidebar, a shortcut) asks
+  Save changes / Discard changes / Keep editing. Covers the patient form, doctor form, Settings
+  (Laboratory) and the test editor.
+- **Reports page tabs** (Patient Reports, Billing, Doctor Incentives) with counts; Analytics
+  **Highlights** open and close on demand.
+- **Pin the sidebar** so the menu stays open beside the page instead of over it.
+- **One look for dates and times.** The browser's own date and time boxes are replaced by an app calendar
+  and time picker everywhere, and the custom-days box is a stepper.
+
+### Changed
+- The report watermark is the lab's **logo** (faint, grey) instead of the lab name in text.
+- Empty dropdowns say "Select" instead of a dash, and **no screen uses em dashes** any more
+  (`node scripts/find-emdash.js` checks).
+- Window buttons (minimise, maximise, close) are a normal height instead of as tall as the logo header.
+
+### Fixed
+- A reference range now follows a changed unit: change a unit and the range text and printed report use it.
+- The tab strips no longer show a stray scrollbar.
+
 ## 2.5.2
 
 ### Fixed

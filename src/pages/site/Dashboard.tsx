@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ClipboardList, Clock3, CheckCircle2, ChevronRight, X } from 'lucide-react'
 import { listPatientsWithStatus, type Patient, type PatientWithStatus, type PatientStatus } from './api'
-import { PatientCard, statusCard } from './PatientCard'
+import { PatientList, statusCard } from './PatientCard'
+import ViewToggle, { useViewMode } from './ViewToggle'
 
 /** Plain, workplace-appropriate greetings — time-of-day aware, with a little variety so the
  * dashboard doesn't say the exact same line every single day. */
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const openPatient = (p: Patient) => navigate(`/report/${p.id}`, { state: { patient: p } })
   const [rows, setRows] = useState<PatientWithStatus[]>([])
+  const [view, changeView] = useViewMode('labapp:patientsView')
   const [greeting] = useState(pickGreeting)
   // Filters the list below to one status at a time — null shows the usual "recent 6" mix.
   // Picking one shows every matching patient instead, since that's the point of asking for
@@ -106,19 +108,19 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          <button onClick={() => navigate('/patients')} className="text-[13.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium inline-flex items-center gap-1">
-            View all patients <ChevronRight size={14} />
-          </button>
+          <div className="flex items-center gap-4">
+            <ViewToggle mode={view} onChange={changeView} />
+            <button onClick={() => navigate('/patients')} className="text-[13.5px] text-[var(--accent)] hover:text-[var(--accent-ink)] font-medium inline-flex items-center gap-1">
+              View all patients <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((r, i) => (
-            <PatientCard key={r.patient.id} patient={r.patient} status={r.status} index={i} onOpen={openPatient} />
-          ))}
-          {statusFilter && filtered.length === 0 && (
-            <p className="text-[14px] text-[var(--ink-3)] col-span-full py-8 text-center">No {statusCard[statusFilter].label.toLowerCase()} patients right now.</p>
-          )}
-        </div>
+        {statusFilter && filtered.length === 0 ? (
+          <p className="text-[14px] text-[var(--ink-3)] py-8 text-center">No {statusCard[statusFilter].label.toLowerCase()} patients right now.</p>
+        ) : (
+          <PatientList rows={filtered} mode={view} onOpen={openPatient} />
+        )}
       </main>
   )
 }

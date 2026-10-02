@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronRight, Plus, RotateCcw, Search, Save, Trash2, AlertTriangle } from 'lucide-react'
 import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
 import RangeEditor from './RangeEditor'
+import { useGuardedNavigate, useLeaveGuard } from './leaveGuard'
 import { parseRangeText, specToText, type RangeSpec } from './rangeSpec'
 import {
   MAX_LABEL_LENGTH,
@@ -187,25 +188,24 @@ export default function TestNames() {
     !q || sectionLabel.toLowerCase().includes(q) || defaultLabelFor(field).toLowerCase().includes(q) || valueOf(key, field).toLowerCase().includes(q)
   const customMatches = (sectionLabel: string, t: CustomTest) => !q || sectionLabel.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)
 
-  const handleBack = async () => {
-    if (changeCount > 0) {
-      const leave = await confirmDialog({
-        tone: 'warning',
-        title: 'Leave without saving?',
-        message: 'Your changes to the tests haven’t been saved and will be lost.',
-        confirmLabel: 'Leave',
-        cancelLabel: 'Keep editing'
-      })
-      if (!leave) return
-    }
-    navigate('/settings')
+  // Saves everything on this screen. Returns false (and saves nothing) while any added test still has a
+  // problem, which is also why the "Save changes" button is withheld from the unsaved-changes dialog then.
+  const persist = async (): Promise<boolean> => {
+    if (hasProblems) return false
+    await saveLabelOverrides(cleaned)
+    await saveCustomTests(cleanedCustom)
+    return true
   }
+
+  // Leaving with unsaved edits (Back, Cancel or the sidebar) offers Save / Discard / Keep editing.
+  const guardedNavigate = useGuardedNavigate()
+  useLeaveGuard(changeCount > 0 && !saving, persist, { canSave: !hasProblems, what: 'the Tests screen' })
+  const handleBack = () => guardedNavigate('/settings')
 
   const handleSave = async () => {
     if (hasProblems) return
     setSaving(true)
-    await saveLabelOverrides(cleaned)
-    await saveCustomTests(cleanedCustom)
+    await persist()
     navigate('/settings', { state: { testNamesSaved: { renamed: renamedTotal, added: addedTotal } } })
   }
 

@@ -108,7 +108,7 @@ export function validateCombo(combo: string, id?: ActionId): string | null {
   // Moving between fields is the one place Tab and Enter are fine on their own — that is what they do by default.
   const fieldNav = !!id?.startsWith('fields.') && (key === 'Tab' || key === 'Enter')
   if (!hasCmd && !fieldNav && (isLetterOrDigit(key) || NEVER_BARE.has(key))) {
-    return `${comboLabel(combo)} on its own would get in the way of typing — add Ctrl or Alt.`
+    return `${comboLabel(combo)} on its own would get in the way of typing. Add Ctrl or Alt.`
   }
   return null
 }
