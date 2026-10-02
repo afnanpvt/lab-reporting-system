@@ -17,7 +17,7 @@ Every screen lives under `src/pages/site/`, backed by a single data-access modul
 - **Bill** — per-patient line items derived from a rate card, with per-patient-per-section amount overrides (rates aren't fixed).
 - **Doctors / Incentive Report** — referring doctors, who they've referred, and a printable incentive statement per doctor.
 - **Reports** — every completed report and bill in one place.
-- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), the Analytics on/off switch, [keyboard shortcuts](#keyboard-shortcuts), appearance, and a note confirming everything is stored locally.
+- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), the Analytics on/off switch, [keyboard shortcuts](#keyboard-shortcuts), [test names and added tests](#saved-tests-and-editable-test-names), saved Others tests, appearance, and a note confirming everything is stored locally.
 
 12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S. (with a 20-antibiotic antibiogram grid), Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
 
@@ -50,6 +50,25 @@ Shortcuts are customisable per lab in **Settings → Keyboard shortcuts**: click
 Fixed and not editable: ↑/↓ value stepping (Shift for bigger steps) and Esc to clear a field. Only changes from the defaults are stored (`lab_settings.shortcut_bindings`, JSON), so a future change to a default reaches every lab that never touched that action.
 
 Rules the recorder enforces: a plain letter, digit, arrow, Enter or Esc on its own is refused (it would get in the way of typing) — except Tab/Enter for the field-navigation rows — and Alt+F4 is refused because Windows takes it first. Ctrl+A/C/V/X/Z/Y can be assigned but only fire when focus is *not* in a text field, so select-all and copy/paste keep working. Everything lives in `src/pages/site/shortcutsStore.ts` (actions, defaults, matching) and `ShortcutSettings.tsx` (the editor).
+
+## Abnormal flagging and value checks
+
+Two separate aids on the result sheet, each with its own switch in **Settings → Features** (both on by default, stored as `lab_settings.feature_flagging` / `feature_value_checks`, `'0'` = off):
+
+- **Abnormal value highlighting** — `flagFor()` in `reportFields.ts` returns `'high'`/`'low'`, which drives the red result text on Result Entry and the ▲/▼ on the printed report. It reads a *structured* range (`RangeSpec` in `rangeSpec.ts`: kind `between` / `upto` / `lt` / `gte` / `gt` / `text`, its number(s), and a highlight flag) rather than guessing from wording. A lab's own edit (made in the `RangeEditor` card beside each reference range) is stored as `lab_settings.range_specs`, keyed like the text overrides (`section.field[.M|.F]`) and always written with the generated range text; a lab-added test carries its own spec; everything else (built-in defaults, Others rows, older saved text) is read once by `parseRangeText`. By default two-sided ranges highlight only for Haemoglobin, Total WBC and Platelet Count, and one-sided ranges (`Up to`, `<`, `≥`, `>`) always do; the editor's checkbox opts any test in or out. Off means `flagFor` always returns `null`.
+- **Smart value checks** — `checksForSection()` in `valueChecks.ts`: the yellow/red/blue notes and the "check before report" list; see [docs/value-checks.md](docs/value-checks.md). Off means it returns nothing.
+
+Both read the switches through plain functions in `featuresStore.ts` (`isFlaggingOn`, `isValueChecksOn`), and the pages that use them also call `useFeatures()` so they redraw when a switch changes.
+
+## Saved tests and editable test names
+
+**Saved "Others" tests.** The *Others* section has no fixed test list, so staff type each test's name, unit and reference range. These are now remembered per lab (`lab_settings.saved_other_tests`, JSON): typing a name offers the saved ones, tabbing out of a saved name fills in its unit and reference, and *Add a saved test* lists them all. A test is saved automatically when its row has a name and a result and focus leaves the row; a saved entry is never overwritten by a one-off change, but blank units/references on it are filled in later. *Settings → Saved tests (Others)* lets the lab edit, add or delete entries and switch automatic saving off (`remember_other_tests = '0'`). Logic: `savedTestsStore.ts`; the row editor is `OthersEditor` in `ResultEntry.tsx`.
+
+**Editable tests (rename and add).** *Settings → Tests → Edit tests…* opens `TestNames.tsx`, where any built-in test can be renamed (search, per-row reset, reset names to defaults) and new tests can be added to any section. It is a separate screen on purpose: a change affects every report, so it can't happen by a stray keystroke on the result sheet, and saving returns to Settings.
+
+- *Renames.* Only names that differ from the default are stored (`lab_settings.test_labels`, JSON keyed `section.field`, so the same field in two sections is renamed independently). Everything that shows a test name goes through `labelFor(section, field)` in `labelsStore.ts` — result sheet, review warnings, printed report — so a new place that shows a field name must use it rather than `humanizeKey`.
+- *Added tests.* Definitions (id, name, unit, reference range) live in `lab_settings.custom_tests` (`customTestsStore.ts`); a test's result key is `x_<id>`. The section tables have fixed columns, so the main process splits `x_` keys off in `results:save` and keeps them in the `section_extras` table (one JSON row per patient per section), merging them back in `results:get` / `results:getAll`. Units, ranges and names for these keys resolve through the same `unitFor` / `getReferenceRange` / `labelFor` functions as built-ins, they print through the normal report path, and they flag against their range like Others rows. Ids are never reused, so renaming can't detach values; removing a test hides its values (pagination skips keys with no definition) but never deletes them.
+- Antibiotics and Others rows are not part of this screen.
 
 ## Tech stack
 

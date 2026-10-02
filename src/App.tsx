@@ -7,6 +7,7 @@ import PatientEntry from './pages/site/PatientEntry'
 import ResultEntry from './pages/site/ResultEntry'
 import ReportPreview from './pages/site/ReportPreview'
 import Settings from './pages/site/Settings'
+import TestNames from './pages/site/TestNames'
 import Doctors from './pages/site/Doctors'
 import DoctorEntry from './pages/site/DoctorEntry'
 import IncentiveReport from './pages/site/IncentiveReport'
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/analytics" element={analytics === false ? <Navigate to="/" replace /> : analytics === null ? null : <Analytics />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/test-names" element={<TestNames />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

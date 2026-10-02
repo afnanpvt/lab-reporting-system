@@ -21,6 +21,20 @@ const SECTION_TABLES: Record<string, string> = {
   abg_sputum: 'abg_sputum'
 }
 
+/** Custom-test keys always start with this; no built-in column does. Keep in sync with customTestsStore.ts. */
+const EXTRA_PREFIX = 'x_'
+
+/** Separates a section's results into values for the fixed table columns and values for lab-added tests. */
+export function splitExtras(data: Record<string, string>): { fixed: Record<string, string>; extras: Record<string, string> } {
+  const fixed: Record<string, string> = {}
+  const extras: Record<string, string> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (k.startsWith(EXTRA_PREFIX)) extras[k] = v
+    else fixed[k] = v
+  }
+  return { fixed, extras }
+}
+
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   // ---- Settings ----
   ipcMain.handle('settings:get', () => {
@@ -77,7 +91,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // started" without one results:getAll round trip per patient.
   ipcMain.handle('patients:listAll', () => {
     const patients = dbAll('SELECT * FROM patients ORDER BY rowid DESC')
-    const tables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results']
+    const tables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results', 'section_extras']
     const withResults = new Set<number>()
     for (const table of tables) {
       for (const row of dbAll(`SELECT patient_id FROM ${table}`)) withResults.add(Number(row.patient_id))
@@ -135,7 +149,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('patients:delete', (_e, id: number) => {
-    const resultTables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results']
+    const resultTables = [...new Set(Object.values(SECTION_TABLES)), 'custom_results', 'section_extras']
     for (const table of resultTables) {
       dbRun(`DELETE FROM ${table} WHERE patient_id=?`, [id])
     }
@@ -157,6 +171,21 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
 
     const table = SECTION_TABLES[section]
     if (!table) return false
+
+    // Custom tests (keys starting 'x_') have no column in the section table — they go to
+    // section_extras. The renderer always sends the whole section back, so the extras row is
+    // replaced wholesale, and removed again once the last custom value has been cleared.
+    const { fixed, extras } = splitExtras(data)
+    if (Object.keys(extras).length > 0) {
+      dbRun(
+        `INSERT INTO section_extras (patient_id, section, data) VALUES (?, ?, ?)
+         ON CONFLICT(patient_id, section) DO UPDATE SET data=excluded.data`,
+        [patientId, section, JSON.stringify(extras)]
+      )
+    } else {
+      dbRun('DELETE FROM section_extras WHERE patient_id=? AND section=?', [patientId, section])
+    }
+    data = fixed
 
     const keys = Object.keys(data).filter((k) => k !== 'patient_id')
     if (keys.length === 0) {
@@ -196,17 +225,27 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     }
   }
 
+  function getExtras(patientId: number, section: string): Record<string, string> {
+    const row = dbGet('SELECT data FROM section_extras WHERE patient_id=? AND section=?', [patientId, section])
+    if (!row) return {}
+    try {
+      return JSON.parse(String(row.data ?? '{}'))
+    } catch {
+      return {}
+    }
+  }
+
   ipcMain.handle('results:get', (_e, section: string, patientId: number) => {
     if (section === 'others') return getCustomResults(patientId)
     const table = SECTION_TABLES[section]
     if (!table) return null
-    return stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
+    return { ...stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId])), ...getExtras(patientId, section) }
   })
 
   ipcMain.handle('results:getAll', (_e, patientId: number) => {
     const result: Record<string, unknown> = {}
     for (const [section, table] of Object.entries(SECTION_TABLES)) {
-      result[section] = stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId]))
+      result[section] = { ...stripPatientId(dbGet(`SELECT * FROM ${table} WHERE patient_id=?`, [patientId])), ...getExtras(patientId, section) }
     }
     result.others = getCustomResults(patientId)
     return result

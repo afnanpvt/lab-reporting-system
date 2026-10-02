@@ -250,6 +250,27 @@ reinstalls, and neither needs a rebuild:
 - **Analytics** — *Settings → Features → Analytics*. Off hides the page and redirects its URL
   (`feature_analytics = '0'`; absent or anything else means on). Offer this to labs that don't want
   revenue figures visible on the front-desk PC.
+- **Abnormal value highlighting** and **Smart value checks** — two more switches in *Settings →
+  Features* (`feature_flagging`, `feature_value_checks`; `'0'` = off, absent = on). The first controls
+  the red ▲/▼ marks on out-of-range results (sheet and printed report); the second controls the
+  yellow/red/blue notes and the "check before report" list. Offer them to labs that find the warnings
+  noisy or don't want results coloured on printed reports.
+- **Reference ranges** — the pencil beside any reference range on the result sheet opens an editor
+  for the range's type (between / up to / below / at least / above / text), its number(s) and whether
+  to highlight results outside it. Edits apply to every patient and are stored as `range_overrides`
+  (the printed text) plus `range_specs` (the structured form that drives highlighting); *Reset*
+  restores the built-in range. The same editor is used for tests added under *Tests*.
+- **Tests (rename and add)** — *Settings → Tests → Edit tests…*. Renames any built-in test (for
+  example "Plasma Glucose F") and adds new tests (name, unit, reference range) to any section, on
+  the result sheet and printed reports. It lives on its own screen so a stray keystroke can't change a
+  test; saving returns to Settings. Renames are stored as `test_labels` (JSON, `section.field` →
+  name) and added tests as `custom_tests`, with their per-patient values in the `section_extras` table;
+  *Reset names to defaults* on that screen restores every built-in name. Old reports reprint with the
+  current names, and a removed test stops printing (its values stay in the database).
+- **Saved tests (Others)** — *Settings → Saved tests (Others)*. Tests staff type under *Others* are
+  remembered with their unit and reference range (`saved_other_tests`), offered as suggestions and in
+  an *Add a saved test* menu. Edit, add or delete entries there, or switch off automatic remembering
+  (`remember_other_tests = '0'`).
 - **Keyboard shortcuts** — *Settings → Keyboard shortcuts*. Only changes from the defaults are
   stored (`shortcut_bindings`, JSON), so default changes in a future release still reach labs that
   never customised. *Reset all* in that card restores the defaults.

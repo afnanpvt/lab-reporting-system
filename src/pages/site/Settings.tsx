@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, ExternalLink } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Save, CheckCircle2, ShieldCheck, Building2, Tags, Lock, FlaskConical, Palette, Check, Sun, Moon, ImageUp, ImageOff, AlertTriangle, Trash2, KeyRound, ExternalLink } from 'lucide-react'
 import {
   getLabSettings,
   saveLabSettings,
@@ -18,8 +18,11 @@ import LicenseKeyForm from './LicenseKeyForm'
 import { contactScalyft } from './contact'
 import { THEMES, getTheme, setTheme, type ThemeId, MODES, getMode, setMode, type ModeId } from './theme'
 import { useBranding, refreshBranding } from './brandingStore'
-import { useFeatures, setAnalyticsEnabled } from './featuresStore'
+import { useFeatures, setAnalyticsEnabled, setFlaggingEnabled, setValueChecksEnabled } from './featuresStore'
 import ShortcutSettings from './ShortcutSettings'
+import SavedTestsSettings from './SavedTestsSettings'
+import { customLabelCount, useLabels } from './labelsStore'
+import { customTestCount, useCustomTests } from './customTestsStore'
 
 const EMPTY: LabSettingsForm = { labName: '', labAddress: '', labPhone: '', labEmail: '', labDoctor: '', labDoctorQualifications: '', labQualityCheck: '' }
 
@@ -47,9 +50,16 @@ function setStoredActiveProfile(name: string | null): void {
 
 export default function Settings() {
   const navigate = useNavigate()
+  const location = useLocation()
+  useLabels() // re-render when tests are saved, so the counts below stay current
+  useCustomTests()
+  const renamedCount = customLabelCount()
+  const addedCount = customTestCount()
+  const justSaved = (location.state as { testNamesSaved?: { renamed: number; added: number } } | null)?.testNamesSaved
   const [form, setForm] = useState<LabSettingsForm>(EMPTY)
   const license = useLicense()
-  const analyticsOn = useFeatures().analytics !== false
+  const features = useFeatures()
+  const analyticsOn = features.analytics !== false
   const hasLicense = license?.state === 'licensed' || license?.state === 'trial'
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -445,22 +455,30 @@ export default function Settings() {
 
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-6">
                   <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)] mb-4">Features</h2>
-                  <div className="flex items-center justify-between gap-6">
-                    <div>
-                      <div className="text-[14.5px] font-medium text-[var(--ink)]">Analytics</div>
-                      <p className="text-[13px] text-[var(--ink-3)] mt-0.5 leading-relaxed">Charts and insights on patients, tests and revenue. Turn off to hide the Analytics page from the menu completely.</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={analyticsOn}
-                      aria-label="Analytics"
-                      onClick={() => setAnalyticsEnabled(!analyticsOn)}
-                      className="relative flex-shrink-0 w-[46px] h-[26px] rounded-full transition-colors duration-200"
-                      style={{ background: analyticsOn ? 'var(--accent)' : 'var(--border-strong)' }}
-                    >
-                      <span className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all duration-200" style={{ left: analyticsOn ? 23 : 3 }} />
-                    </button>
+                  <div className="divide-y divide-[var(--border-soft)]">
+                    {[
+                      { label: 'Analytics', on: analyticsOn, set: setAnalyticsEnabled, text: 'Charts and insights on patients, tests and revenue. Turn off to hide the Analytics page from the menu completely.' },
+                      { label: 'Abnormal value highlighting', on: features.flagging, set: setFlaggingEnabled, text: 'Marks a result with a red ▲ or ▼ when it is outside its reference range, on the result sheet and on printed reports. Turn off to show results without any colour or arrow.' },
+                      { label: 'Smart value checks', on: features.valueChecks, set: setValueChecksEnabled, text: 'The yellow, red and blue notes on the result sheet: likely typos and unit slips, critical values, suggested calculated values, and the “check before report” list. Turn off to enter results with no warnings at all.' }
+                    ].map((f) => (
+                      <div key={f.label} className="flex items-center justify-between gap-6 py-3.5 first:pt-0 last:pb-0">
+                        <div>
+                          <div className="text-[14.5px] font-medium text-[var(--ink)]">{f.label}</div>
+                          <p className="text-[13px] text-[var(--ink-3)] mt-0.5 leading-relaxed">{f.text}</p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={f.on}
+                          aria-label={f.label}
+                          onClick={() => f.set(!f.on)}
+                          className="relative flex-shrink-0 w-[46px] h-[26px] rounded-full transition-colors duration-200"
+                          style={{ background: f.on ? 'var(--accent)' : 'var(--border-strong)' }}
+                        >
+                          <span className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all duration-200" style={{ left: f.on ? 23 : 3 }} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -594,6 +612,38 @@ export default function Settings() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start mt-6">
+              <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <Tags size={16} className="text-[var(--accent)]" />
+                  <h2 className="text-[11px] font-bold uppercase tracking-widest text-[var(--ink-3)]">Tests</h2>
+                </div>
+                <p className="text-[13px] text-[var(--ink-3)] mb-4 leading-relaxed">
+                  Rename any test (for example “Plasma Glucose F”) or add new tests to a section, so reports read the way your lab prefers. These are locked while you work and can only be changed here, so nothing changes by accident.
+                </p>
+                {justSaved !== undefined && (
+                  <div className="flex items-center gap-2 text-[13px] rounded-lg px-3 py-2 mb-4" style={{ background: 'var(--success-soft)', color: 'var(--success)' }}>
+                    <CheckCircle2 size={14} /> Tests saved{justSaved.renamed === 0 && justSaved.added === 0 ? ' — everything uses the default tests.' : '.'}
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[13.5px] text-[var(--ink-2)]">
+                    {renamedCount === 0 && addedCount === 0
+                      ? 'All tests use their default names.'
+                      : [renamedCount > 0 && `${renamedCount} renamed`, addedCount > 0 && `${addedCount} added`].filter(Boolean).join(', ') + '.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/settings/test-names')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-medium border border-[var(--border-strong)] rounded-xl text-[var(--ink)] hover:bg-[var(--bg-hover)] flex-shrink-0"
+                  >
+                    Edit tests…
+                  </button>
+                </div>
+              </div>
+              <SavedTestsSettings />
             </div>
           </div>
         </div>

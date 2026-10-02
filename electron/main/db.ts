@@ -272,6 +272,17 @@ function createTables(): void {
       amount REAL NOT NULL DEFAULT 0,
       PRIMARY KEY (patient_id, section)
     );
+
+    -- Results for tests a lab added to a built-in section from Settings (see customTestsStore.ts).
+    -- The section tables above have fixed columns, so these can't live there: one JSON object per
+    -- patient per section, keyed by the custom test's id (always prefixed 'x_'), merged back into
+    -- that section's results whenever they are read.
+    CREATE TABLE IF NOT EXISTS section_extras (
+      patient_id INTEGER NOT NULL,
+      section TEXT NOT NULL,
+      data TEXT DEFAULT '{}',
+      PRIMARY KEY (patient_id, section)
+    );
   `)
 
   // Safe migrations for existing databases
