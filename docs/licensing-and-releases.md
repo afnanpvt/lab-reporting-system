@@ -178,7 +178,14 @@ the `dev` branch.
    git push
    ```
 
-3. Update `CHANGELOG.md`, then build the installers you're shipping:
+3. Run the checks, update `CHANGELOG.md`, then build the installers you're shipping:
+
+   ```bash
+   npm run test:pagination                    # report page-break rules (20,000 random reports)
+   npx tsc --noEmit -p tsconfig.web.json      # only the 10 known, pre-existing errors should remain
+   npx electron-vite build
+   ```
+
 
    ```bash
    npm run package -- superlab          # one lab

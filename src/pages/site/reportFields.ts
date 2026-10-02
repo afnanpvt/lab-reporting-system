@@ -1,5 +1,5 @@
 import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
-import { findCustomTest, isCustomKey } from './customTestsStore'
+import { findCustomTest } from './customTestsStore'
 import { isFlaggingOn } from './featuresStore'
 import { getStoredSpec } from './rangeSpecsStore'
 import { flagBySpec, parseRangeText, type RangeSpec } from './rangeSpec'
@@ -414,15 +414,16 @@ export function defaultValueForRange(range: string): string {
 // Abnormal (red, up/down arrow) flagging is deliberately limited to these three haematology
 // fields, not every numeric-range field — flagging everything made the report noisy with
 // arrows on fields where a clinically-trivial deviation isn't worth calling out visually.
-const FLAGGABLE_FIELDS = new Set(['haemoglobin', 'total_wbc', 'platelet_count'])
 
 /**
  * The structured range that decides whether a field flags. In order of authority:
  *   1. a range the lab edited in Result Entry (stored together with its text — rangeSpecsStore.ts);
  *   2. a lab-added test's own range (customTestsStore.ts);
- *   3. otherwise the range text is read once into a spec (parseRangeText), with highlighting on only
- *      where it always has been — Haemoglobin, Total WBC and Platelet Count when two-sided — and for
- *      every one-sided range (Upto / < / > / ≥), plus Others rows and the lab's own tests.
+ *   3. otherwise the range text is read once into a spec (parseRangeText), highlighted by default —
+ *      every test with a numeric range flags a result outside it, on both sides where the range has
+ *      two. (An earlier rule let only Haemoglobin, Total WBC and Platelet Count flag, which left most
+ *      tests — RBC, PCV, ESR, electrolytes, liver and kidney values, blood gases… — showing no arrow
+ *      at all.) The lab can still switch one test off with the editor's checkbox.
  * Returns null when there is nothing to flag against (no range, or a text range).
  */
 export function effectiveSpec(range: string, fieldKey?: string, ctx?: { sectionKey: string; gender?: string }): RangeSpec | null {
@@ -435,9 +436,7 @@ export function effectiveSpec(range: string, fieldKey?: string, ctx?: { sectionK
   }
   const parsed = parseRangeText(range)
   if (parsed.kind === 'text') return null
-  const flag =
-    fieldKey === undefined || isCustomKey(fieldKey) || parsed.kind !== 'between' || FLAGGABLE_FIELDS.has(fieldKey)
-  return { ...parsed, flag }
+  return { ...parsed, flag: true }
 }
 
 /**

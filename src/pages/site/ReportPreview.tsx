@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
@@ -8,6 +8,7 @@ import { useFeatures } from './featuresStore'
 import { useRangeSpecs } from './rangeSpecsStore'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
+import { buildProbe, measureProbe, overshootOf, type MeasuredMetrics, type Probe } from './measureReport'
 
 /**
  * A4 is 210x297mm (ISO 216 — the same sheet worldwide, India included). The page box owns the
@@ -218,7 +219,55 @@ export default function ReportPreview() {
     getCertificationDataUrls().then(setCertifications)
   }, [])
 
-  const pages = useMemo(() => (patient && results ? paginateReport(patient, results) : []), [patient, results])
+  // Page breaks come from the report's real, measured sizes (see measureReport.ts): an invisible
+  // "probe" page is rendered with one of every block, measured, and those numbers drive pagination.
+  // The first render uses typical sizes; the measurement lands before the browser paints.
+  const probeRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<HTMLDivElement>(null)
+  // Measurements and the safety margin both belong to one specific report (`probe`): when the report
+  // changes they are discarded rather than carried over, so a stale reading can never shape — or
+  // wrongly widen the margin of — the next patient's pages.
+  const [measured, setMeasured] = useState<{ probe: Probe; metrics: MeasuredMetrics } | null>(null)
+  const [boosted, setBoosted] = useState<{ probe: Probe; value: number } | null>(null)
+  const probe = useMemo(() => (patient && results ? buildProbe(patient.sections, results) : null), [patient, results])
+  // Extra room held back above the footer. Raised only by the self-check below if a displayed page
+  // ever overflows despite the measurements (it should not), so content is never silently clipped.
+  const boost = boosted && boosted.probe === probe ? boosted.value : 0
+  const metrics = measured && measured.probe === probe ? measured.metrics : null
+
+  const remeasure = () => {
+    const root = probeRef.current
+    if (!root || !probe) return
+    const next = measureProbe(root, probe, boost)
+    if (next) setMeasured((prev) => (prev && prev.probe === probe && prev.metrics.sig === next.sig ? prev : { probe, metrics: next }))
+  }
+  const remeasureRef = useRef(remeasure)
+  remeasureRef.current = remeasure
+  useLayoutEffect(() => {
+    remeasure()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probe, rangeOverrides, unitOverrides, hiddenReferenceSections, settings, certifications, logo, badge, externalMode, boost])
+  // The footer's height can change after first paint (certification logos and fonts load late).
+  useEffect(() => {
+    const root = probeRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => remeasureRef.current())
+    ro.observe(root)
+    document.fonts?.ready.then(() => remeasureRef.current())
+    return () => ro.disconnect()
+  }, [probe !== null])
+
+  const pages = useMemo(() => (patient && results ? paginateReport(patient, results, metrics ?? undefined) : []), [patient, results, metrics])
+
+  useLayoutEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || pages.length === 0 || !probe || !metrics) return // only check pages built from this report's own measurements
+    let worst = 0
+    viewer.querySelectorAll<HTMLElement>('[data-role="page"]').forEach((el) => {
+      if (el.offsetParent) worst = Math.max(worst, overshootOf(el) / zoom) // a hidden page (single-page view) can't be measured
+    })
+    if (worst > 0.5 && boost < 80) setBoosted({ probe, value: Math.min(80, boost + Math.ceil(worst) + 2) })
+  }, [pages, zoom, viewMode, currentPage])
   const reportedAt = useMemo(() => formatReportedAt(), [patient?.id])
 
   useEffect(() => {
@@ -279,7 +328,7 @@ export default function ReportPreview() {
 
   // hiddenOnScreen keeps a page in the DOM (so printing still renders the whole document) while
   // collapsing it visually in single-page mode — print:flex brings it back for the print stylesheet.
-  const renderPage = (blocks: ReportBlock[], pageIndex: number, hiddenOnScreen = false) => (
+  const renderPage = (blocks: ReportBlock[], pageIndex: number, hiddenOnScreen = false, probeMode = false) => (
     <div
       key={pageIndex}
       className={`print-page relative bg-[var(--surface)] shadow-lg print:shadow-none flex-col flex-shrink-0 ${hiddenOnScreen ? 'hidden print:flex' : 'flex'}`}
@@ -341,9 +390,13 @@ export default function ReportPreview() {
       })()}
 
       <div className="relative flex-1 mt-3" style={{ zIndex: 1 }} data-role="content">
-        {blocks.map((block, i) => (
-          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} unitOverrides={unitOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
-        ))}
+        {blocks.map((block, i) => {
+          const view = (
+            <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} unitOverrides={unitOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
+          )
+          // flow-root keeps each block's own margins inside the wrapper so its true height can be read.
+          return probeMode ? <div key={i} data-measure={i} style={{ display: 'flow-root' }}>{view}</div> : view
+        })}
       </div>
 
       {/* Absolutely positioned against the page box (not "last flex child pushed down by
@@ -498,7 +551,7 @@ export default function ReportPreview() {
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[var(--bg-canvas)] p-8 print:bg-white print:p-0">
-          <div className="report-viewer flex flex-col items-center gap-9 print:gap-0" style={{ zoom }}>
+          <div ref={viewerRef} className="report-viewer flex flex-col items-center gap-9 print:gap-0" style={{ zoom }}>
             {viewMode === 'two'
               ? Array.from({ length: Math.ceil(pages.length / 2) }, (_, spreadIndex) => {
                   const first = spreadIndex * 2
@@ -512,6 +565,14 @@ export default function ReportPreview() {
               : pages.map((blocks, pageIndex) => renderPage(blocks, pageIndex, viewMode === 'single' && pageIndex !== currentPage))}
           </div>
         </div>
+
+        {/* The invisible probe page the measurements come from (see measureReport.ts). Laid out like a
+            real page but off-screen, never zoomed, and never printed. */}
+        {probe && (
+          <div ref={probeRef} aria-hidden="true" className="print:hidden" style={{ position: 'fixed', left: -20000, top: 0, visibility: 'hidden', pointerEvents: 'none' }}>
+            {renderPage(probe.blocks, -1, false, true)}
+          </div>
+        )}
       </div>
   )
 }

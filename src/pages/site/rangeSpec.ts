@@ -101,22 +101,45 @@ export function describeFlagging(spec: RangeSpec, unit: string): string {
   }
 }
 
-/** Whether a typed result is outside the range, per its kind. Never flags a non-number, a text range, or a spec with highlighting off. */
+/**
+ * The numeric reading in a typed result: a plain number is its own low and high end, and a span such
+ * as "4-6" or "10 – 12" (how pus cells and RBCs are usually reported) covers both. Anything else —
+ * "Nil", "Plenty", "1:80", "<5" — has no reading and is never flagged.
+ */
+function readingOf(raw: string): { lo: number; hi: number } | null {
+  // "11,500" and "1,00,000" are plain numbers: the commas are only there for reading.
+  const value = raw.replace(/,/g, '')
+  const span = value.match(new RegExp(`^\\s*${NUM}\\s*[–-]\\s*${NUM}\\s*(?:/\\s*\\w+)?\\s*$`))
+  if (span) {
+    const x = parseFloat(span[1])
+    const y = parseFloat(span[2])
+    return { lo: Math.min(x, y), hi: Math.max(x, y) }
+  }
+  if (!/^\s*-?\d+(?:\.\d+)?\s*[A-Za-z%/]*\s*$/.test(value)) return null
+  const v = parseFloat(value)
+  return isNaN(v) ? null : { lo: v, hi: v }
+}
+
+/**
+ * Whether a typed result is outside the range, per its kind. A result is "high" if any part of it is
+ * above the range and "low" if any part is below, so a reported span like "4-6" against 0–4 is high.
+ * Never flags a non-number, a text range, or a spec with highlighting off.
+ */
 export function flagBySpec(value: string, spec: RangeSpec): 'high' | 'low' | null {
   if (!spec.flag || spec.kind === 'text') return null
-  const v = parseFloat(value)
-  if (isNaN(v) || !isNum(spec.a)) return null
+  const r = readingOf(value)
+  if (!r || !isNum(spec.a)) return null
   const a = parseFloat(spec.a)
   switch (spec.kind) {
     case 'between': {
       if (!isNum(spec.b)) return null
       const b = parseFloat(spec.b)
-      return v > b ? 'high' : v < a ? 'low' : null
+      return r.hi > b ? 'high' : r.lo < a ? 'low' : null
     }
-    case 'upto': return v > a ? 'high' : null
-    case 'lt': return v >= a ? 'high' : null
-    case 'gte': return v < a ? 'low' : null
-    case 'gt': return v <= a ? 'low' : null
+    case 'upto': return r.hi > a ? 'high' : null
+    case 'lt': return r.hi >= a ? 'high' : null
+    case 'gte': return r.lo < a ? 'low' : null
+    case 'gt': return r.lo <= a ? 'low' : null
   }
 }
 

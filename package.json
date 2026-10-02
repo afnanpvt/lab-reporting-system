@@ -1,6 +1,6 @@
 {
   "name": "lumalabs",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "LumaLabs — offline-first desktop platform for laboratory registration, results, reporting, and billing",
   "main": "out/main/index.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "preview": "electron-vite preview",
     "package": "node scripts/package.js",
     "profile": "node scripts/apply-profile.js",
-    "license": "node scripts/license.js"
+    "license": "node scripts/license.js",
+    "test:pagination": "node scripts/test-pagination.js"
   },
   "dependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",

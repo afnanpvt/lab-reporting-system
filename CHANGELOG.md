@@ -4,6 +4,66 @@ Every release is also published on GitHub with its installers. Versions follow
 `major.minor.patch` (see the handbook, `docs/licensing-and-releases.md`). Windows 7 builds carry the
 same version with a `-win7` tag.
 
+## 2.5.2
+
+### Fixed
+- **Blank first page on a printed report.** A report with one long section (for example a Urine report
+  of 11–12 rows) could print with page 1 holding only the patient header and the whole table on page 2.
+  The rule that keeps the sign-off from sitting alone on a page was moving the *entire* last section to
+  the next page; it now moves only the last couple of rows with the sign-off (as a "(continued)" chunk),
+  and moves a whole section only when the page it leaves behind is still well filled. The bug dates from
+  the 2.4.0 page-break change and only appeared at particular row counts.
+- **Report pages no longer guess how tall things are.** The paginator used fixed sizes (a row is 38px, the
+  sign-off is 118px…), so any content taller than the guess — a long test name or result that wraps onto
+  extra lines, a method note, a footer with many logos — ran past the bottom of the page and was silently
+  clipped (in testing, up to 1,200px of rows lost). Pagination now uses the **measured** height of every
+  row, heading and sign-off, and the real room above the footer, taken from an invisible copy of the
+  report (`measureReport.ts`). If a page ever still overflows, the report re-paginates with extra room
+  rather than clipping.
+- A single row is no longer left alone on the next page ("(continued)" with one row), and a page that is
+  nearly empty now takes whatever rows fit instead of being skipped.
+- **Red ▲/▼ arrows were missing on most tests.** Only Haemoglobin, Total WBC and Platelet Count could
+  flag a result outside its reference range; every other test with a numeric range (RBC Count, PCV,
+  the differential counts, ESR, MCV/MCH/MCHC, urea, creatinine, uric acid, cholesterol, proteins,
+  calcium, all electrolytes, bilirubin, GGT, PT/INR, blood gases, urine microscopy and more — 66 test
+  ranges in all) never showed one. Every numeric range now flags a result above or below it, on the
+  result sheet and on the printed report. A single test can still be switched off with the
+  "Highlight results outside this range" checkbox in its range editor, and the whole feature with
+  Settings → Features → Abnormal value highlighting.
+- Results typed as a span, such as urine pus cells "4-6/HPF", are judged by both ends (high if any
+  part is above the range) instead of by the first number only.
+- Others rows now show the red highlight and arrow on the result sheet too (they already did on the
+  printed report), judged against the row's own reference range.
+
+### Changed
+- **Settings is organised into tabs** — Laboratory, Tests, Preferences, Shortcuts, License & About — instead
+  of one long page of cards. Only the Laboratory tab has a Save button (everything else applies at once).
+  Unsaved lab details survive switching tabs, the last tab is remembered, and saving in the test editor
+  returns to the Tests tab.
+- **Settings page layout.** The cards now flow down two balanced columns instead of a fixed left/right
+  split with a separate row underneath, which had left a large empty area beside the lab details. No
+  gaps, a single column on a narrow window.
+- **A proper delete / confirmation dialog.** Deleting a patient, a doctor, a profile or an added test,
+  and leaving the test editor with unsaved changes, used to pop up the old Windows message box
+  (titled "lumalabs"). They now use the app's own dialog: themed, with the name of what is being
+  deleted shown clearly, a red "Delete patient" style button, and Cancel focused by default so a stray
+  Enter can't delete anything. Esc or a click outside cancels.
+
+### Added
+- `npm run test:pagination` — a regression test that paginates 20,000 random reports (random sections, row
+  counts and row heights, including very tall rows) and checks that every row prints once and in order,
+  no page overflows, no page holds only the patient header, and the sign-off is not left alone.
+- **Automatic thousands separators.** Typing a number of four or more digits into a result adds the
+  commas as you go: `20000` becomes `20,000`, `11500` becomes `11,500`, and larger numbers use Indian
+  grouping (`1,00,000`). The cursor stays beside the digit you typed, so editing in the middle of a
+  number works normally. Only plain numbers change: text, spans like `4-6/HPF`, titres like `1:80`,
+  decimals under 1,000 and anything typed with a unit are left exactly as typed. It applies to every
+  result box, including Others rows, and to values set with the arrow keys, "use this range" and the
+  one-click fixes. Printed reports show the value as entered (`11,500`).
+
+### Notes
+- Windows 7 build: `v2.5.2-win7` (Electron 22, 32-bit installer, also runs on 64-bit Windows).
+
 ## 2.5.1
 
 ### Changed
