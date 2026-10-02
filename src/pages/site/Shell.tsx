@@ -8,6 +8,10 @@ import TrialBanner from './TrialBanner'
 import { useLicense, daysLeftLabel } from './licenseStore'
 import { listAllPatientsForAnalytics } from './api'
 import { useFeatures, refreshFeatures } from './featuresStore'
+import { refreshLabels } from './labelsStore'
+import { refreshCustomTests } from './customTestsStore'
+import { refreshRangeSpecs } from './rangeSpecsStore'
+import { refreshSavedTests } from './savedTestsStore'
 import { useShortcutHandlers, useBindings, refreshShortcuts, comboLabel } from './shortcutsStore'
 import { parseDate } from './analyticsData'
 
@@ -79,6 +83,10 @@ export default function Shell({ children }: { children: ReactNode }) {
     refreshBranding()
     refreshFeatures()
     refreshShortcuts()
+    refreshLabels()
+    refreshCustomTests()
+    refreshRangeSpecs()
+    refreshSavedTests()
     syncTitleBarOverlay()
   }, [])
 

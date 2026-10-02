@@ -1,4 +1,8 @@
 import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
+import { findCustomTest, isCustomKey } from './customTestsStore'
+import { isFlaggingOn } from './featuresStore'
+import { getStoredSpec } from './rangeSpecsStore'
+import { flagBySpec, parseRangeText, type RangeSpec } from './rangeSpec'
 
 export { SECTIONS, SECTION_FIELD_KEYS }
 
@@ -214,14 +218,14 @@ export function rangeOverrideKey(sectionKey: string, fieldKey: string, gender?: 
 export function getReferenceRange(sectionKey: string, fieldKey: string, gender?: string, overrides?: Record<string, string>): string {
   const override = overrides?.[rangeOverrideKey(sectionKey, fieldKey, gender)]
   if (override !== undefined) return override
-  const meta = FIELD_META[sectionKey]?.[fieldKey]
-  if (!meta) return ''
-  if (typeof meta.range === 'string') return meta.range
-  return gender === 'F' ? meta.range.F : meta.range.M
+  return defaultReferenceRange(sectionKey, fieldKey, gender)
 }
 
 /** The unedited clinical default for a field — what "Reset to default" restores, ignoring any override. */
 export function defaultReferenceRange(sectionKey: string, fieldKey: string, gender?: string): string {
+  // A test the lab added in Settings carries its own reference range (one range, not by sex).
+  const custom = findCustomTest(sectionKey, fieldKey)
+  if (custom) return custom.reference
   const meta = FIELD_META[sectionKey]?.[fieldKey]
   if (!meta) return ''
   if (typeof meta.range === 'string') return meta.range
@@ -241,11 +245,13 @@ export function unitOverrideKey(sectionKey: string, fieldKey: string): string {
 export function unitFor(sectionKey: string, fieldKey: string, overrides?: Record<string, string>): string {
   const override = overrides?.[unitOverrideKey(sectionKey, fieldKey)]
   if (override !== undefined) return override
-  return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
+  return defaultUnitFor(sectionKey, fieldKey)
 }
 
 /** The unedited clinical default unit for a field — what "Reset to default" restores, ignoring any override. */
 export function defaultUnitFor(sectionKey: string, fieldKey: string): string {
+  const custom = findCustomTest(sectionKey, fieldKey)
+  if (custom) return custom.unit
   return FIELD_META[sectionKey]?.[fieldKey]?.unit ?? ''
 }
 
@@ -385,7 +391,7 @@ export function numericRangeInfo(range: string): NumericRangeInfo | null {
   if (m) return rangeInfo(m[1], m[2])
   m = clean.match(/upto\s*(-?\d+(?:\.\d+)?)/i)
   if (m) return rangeInfo('0', m[1])
-  m = clean.match(/^\s*>\s*(-?\d+(?:\.\d+)?)/)
+  m = clean.match(/^\s*(?:>=|≥|>)\s*(-?\d+(?:\.\d+)?)/)
   if (m) return rangeInfo(m[1], String(parseFloat(m[1]) * 1.3))
   m = clean.match(/^\s*<\s*(-?\d+(?:\.\d+)?)/)
   if (m) return rangeInfo('0', m[1])
@@ -410,15 +416,41 @@ export function defaultValueForRange(range: string): string {
 // arrows on fields where a clinically-trivial deviation isn't worth calling out visually.
 const FLAGGABLE_FIELDS = new Set(['haemoglobin', 'total_wbc', 'platelet_count'])
 
-/** Whether an entered value falls outside its reference range — drives the abnormal (red) flagging on Result Entry and the printed report. Only Haemoglobin, Total WBC, and Platelet Count ever flag; every other field always returns null regardless of range. `fieldKey` is optional so 'Others' rows (which have no fixed key) can still pass value/range through without flagging. */
-export function flagFor(value: string, range: string, fieldKey?: string): 'high' | 'low' | null {
-  if (fieldKey !== undefined && !FLAGGABLE_FIELDS.has(fieldKey)) return null
-  if (!value || !range) return null
-  const info = numericRangeInfo(range)
-  if (!info) return null
-  const v = parseFloat(value)
-  if (isNaN(v)) return null
-  if (v > info.max) return 'high'
-  if (v < info.min) return 'low'
-  return null
+/**
+ * The structured range that decides whether a field flags. In order of authority:
+ *   1. a range the lab edited in Result Entry (stored together with its text — rangeSpecsStore.ts);
+ *   2. a lab-added test's own range (customTestsStore.ts);
+ *   3. otherwise the range text is read once into a spec (parseRangeText), with highlighting on only
+ *      where it always has been — Haemoglobin, Total WBC and Platelet Count when two-sided — and for
+ *      every one-sided range (Upto / < / > / ≥), plus Others rows and the lab's own tests.
+ * Returns null when there is nothing to flag against (no range, or a text range).
+ */
+export function effectiveSpec(range: string, fieldKey?: string, ctx?: { sectionKey: string; gender?: string }): RangeSpec | null {
+  if (!range) return null
+  if (ctx && fieldKey) {
+    const stored = getStoredSpec(rangeOverrideKey(ctx.sectionKey, fieldKey, ctx.gender))
+    if (stored) return stored
+    const custom = findCustomTest(ctx.sectionKey, fieldKey)
+    if (custom?.spec) return custom.spec
+  }
+  const parsed = parseRangeText(range)
+  if (parsed.kind === 'text') return null
+  const flag =
+    fieldKey === undefined || isCustomKey(fieldKey) || parsed.kind !== 'between' || FLAGGABLE_FIELDS.has(fieldKey)
+  return { ...parsed, flag }
+}
+
+/**
+ * Whether an entered value falls outside its reference range — drives the red result text on Result
+ * Entry and the ▲/▼ on the printed report. What counts as outside comes from the range's kind (see
+ * rangeSpec.ts), not from guessing at its wording: "Up to" flags only above the limit, "Below" at or
+ * above it, "At least" / "Above" only below, "Between" on either side. Returns null for everything
+ * else, and always when highlighting is switched off in Settings → Features. `fieldKey` is omitted
+ * for 'Others' rows, which have no fixed key; `ctx` lets the lab's own edits to a range be found.
+ */
+export function flagFor(value: string, range: string, fieldKey?: string, ctx?: { sectionKey: string; gender?: string }): 'high' | 'low' | null {
+  if (!isFlaggingOn()) return null
+  if (!value) return null
+  const spec = effectiveSpec(range, fieldKey, ctx)
+  return spec ? flagBySpec(value, spec) : null
 }

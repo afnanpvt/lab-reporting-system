@@ -1,4 +1,6 @@
-import { humanizeKey, unitFor } from './reportFields'
+import { unitFor } from './reportFields'
+import { labelFor } from './labelsStore'
+import { isValueChecksOn } from './featuresStore'
 
 /**
  * Entry-time sanity checks for Result Entry. These are deliberately separate from reference
@@ -263,7 +265,7 @@ function fieldIssue(sectionKey: string, fieldKey: string, raw: string | undefine
     return {
       id: `limit:${typed}`,
       level: 'check',
-      message: `${withUnit(typed, sectionKey, fieldKey)} is outside what's realistic for ${humanizeKey(fieldKey)} (${limit.min}–${limit.max}). Please confirm it isn't a typo.${dilute}`
+      message: `${withUnit(typed, sectionKey, fieldKey)} is outside what's realistic for ${labelFor(sectionKey, fieldKey)} (${limit.min}–${limit.max}). Please confirm it isn't a typo.${dilute}`
     }
   }
 
@@ -375,7 +377,7 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
         add(issues, k, {
           id: `esrorder:${previous.n}:${n}`,
           level: 'check',
-          message: `Lower than the earlier ${humanizeKey(previous.k)} reading (${previous.n} mm) — ESR readings can only stay the same or rise over time.`
+          message: `Lower than the earlier ${labelFor('haematology', previous.k)} reading (${previous.n} mm) — ESR readings can only stay the same or rise over time.`
         })
       }
       previous = { k, n }
@@ -454,6 +456,8 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
 /** Every check for one section's current values, grouped under the field each note should appear beneath. */
 export function checksForSection(sectionKey: string, data: Data): IssuesByField {
   const issues: IssuesByField = {}
+  // Switched off in Settings → Features: no notes, no suggestions, nothing for "Review report" to list.
+  if (!isValueChecksOn()) return issues
   const fields = new Set([
     ...Object.keys(LIMITS[sectionKey] ?? {}),
     ...Object.keys(SLIPS[sectionKey] ?? {}),

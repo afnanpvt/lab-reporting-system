@@ -8,9 +8,17 @@ import { useSyncExternalStore } from 'react'
 interface FeaturesState {
   // null until the first read finishes, so a disabled page can't flash before it's redirected away.
   analytics: boolean | null
+  // Red ▲/▼ marks (and red result text) when a result is outside its reference range.
+  flagging: boolean
+  // The yellow / red / blue notes on Result Entry (typo and unit-slip warnings, critical values,
+  // suggested calculated values) and the "check before report" list they feed.
+  valueChecks: boolean
 }
 
-let state: FeaturesState = { analytics: null }
+// Both switches default to on, so a lab sees no change until it turns one off. They are read from
+// plain functions (isFlaggingOn / isValueChecksOn) as well as the hook, because flagFor() and
+// checksForSection() are pure helpers called from many places.
+let state: FeaturesState = { analytics: null, flagging: true, valueChecks: true }
 const listeners = new Set<() => void>()
 
 function emit(): void {
@@ -25,7 +33,11 @@ function subscribe(listener: () => void): () => void {
 export async function refreshFeatures(): Promise<void> {
   const raw = await window.api.settings.get()
   // On unless explicitly switched off, so existing labs keep the page after updating.
-  state = { analytics: raw.feature_analytics !== '0' }
+  state = {
+    analytics: raw.feature_analytics !== '0',
+    flagging: raw.feature_flagging !== '0',
+    valueChecks: raw.feature_value_checks !== '0'
+  }
   emit()
 }
 
@@ -34,6 +46,21 @@ export async function setAnalyticsEnabled(enabled: boolean): Promise<void> {
   emit()
   await window.api.settings.set('feature_analytics', enabled ? '1' : '0')
 }
+
+export async function setFlaggingEnabled(enabled: boolean): Promise<void> {
+  state = { ...state, flagging: enabled }
+  emit()
+  await window.api.settings.set('feature_flagging', enabled ? '1' : '0')
+}
+
+export async function setValueChecksEnabled(enabled: boolean): Promise<void> {
+  state = { ...state, valueChecks: enabled }
+  emit()
+  await window.api.settings.set('feature_value_checks', enabled ? '1' : '0')
+}
+
+export const isFlaggingOn = (): boolean => state.flagging
+export const isValueChecksOn = (): boolean => state.valueChecks
 
 export function useFeatures(): FeaturesState {
   return useSyncExternalStore(subscribe, () => state)

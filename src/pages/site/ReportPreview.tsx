@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
+import { getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
+import { useLabels } from './labelsStore'
+import { useFeatures } from './featuresStore'
+import { useRangeSpecs } from './rangeSpecsStore'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
 import { paginateReport, type ReportBlock } from './pagination'
 
@@ -31,6 +34,9 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
   block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; unitOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
   hiddenReferenceSections: Record<string, boolean>
 }) {
+  const labelFor = useLabels()
+  useFeatures() // re-render if highlighting is switched on/off
+  useRangeSpecs() // ...or a range is edited
   if (block.kind === 'patientInfo') {
     // Reported uses the date/time entered on the patient form (see PatientEntry.tsx's "Dates &
     // Times" editor) once it's been set; a patient saved before that existed still falls back to
@@ -106,7 +112,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
           const value = other ? other.value : data[k]
           const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
           const unit = other ? other.unit : unitFor(block.sectionKey, k, unitOverrides)
-          const flag = flagFor(value, range, isOthers ? undefined : k)
+          const flag = flagFor(value, range, isOthers ? undefined : k, isOthers ? undefined : { sectionKey: block.sectionKey, gender: patient.gender })
           const arrowColor = flag ? 'var(--danger)' : undefined
           // "Method/kit used" note (see supportsMethodNote and ResultEntry.tsx's FieldRow) —
           // printed as a small parenthetical under the result, matching how Super Lab's old
@@ -114,7 +120,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
           const method = !isOthers && supportsMethodNote(block.sectionKey, k) ? data[k + '_method'] : undefined
           return (
             <div key={k} className={`grid ${gridCols} items-baseline text-[13px] py-2 border-b border-[#e8e8e8]`} data-role="result-row">
-              <span className="font-bold text-[#111]">{isOthers ? k : humanizeKey(k)}</span>
+              <span className="font-bold text-[#111]">{isOthers ? k : labelFor(block.sectionKey, k)}</span>
               <span>
                 <span style={{ fontWeight: flag ? 700 : 600, fontSize: '13.5px', color: flag ? arrowColor : '#111', fontFamily: 'Consolas, monospace' }}>
                   {flag === 'high' && <span>▲ </span>}

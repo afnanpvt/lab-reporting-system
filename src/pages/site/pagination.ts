@@ -1,4 +1,5 @@
 import { sectionKeyForLabel, supportsMethodNote } from './reportFields'
+import { findCustomTest, isCustomKey } from './customTestsStore'
 import type { Patient } from './api'
 
 // Mantoux's injection/reading date-time columns are printed inline under the section heading, not
@@ -117,7 +118,8 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     // injection/reading date-time are metadata too — they print inline under the section heading
     // (see ReportPreview.tsx's data-role="mantoux-times"), never as their own rows.
     const label = sectionKey === 'others' && data.__label ? data.__label : rawLabel
-    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && !k.endsWith('_method') && !MANTOUX_TIME_KEYS.has(k) && data[k] && data[k].trim() !== '')
+    // A value for a custom test that has since been deleted in Settings stays in the database but no longer prints.
+    const filledKeys = Object.keys(data).filter((k) => k !== '__label' && !k.endsWith('_method') && !MANTOUX_TIME_KEYS.has(k) && data[k] && data[k].trim() !== '' && (!isCustomKey(k) || !!findCustomTest(sectionKey ?? '', k)))
 
     if (filledKeys.length === 0) {
       placeWhole({ kind: 'emptySection', label }, SECTION_HEADER_HEIGHT + EMPTY_NOTICE_HEIGHT)

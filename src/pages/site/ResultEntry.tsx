@@ -1,13 +1,20 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator } from 'lucide-react'
+import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator, BookmarkCheck, ChevronDown } from 'lucide-react'
 import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, getUnitOverrides, setUnitOverride, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
+import { getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, effectiveSpec, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
 import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
+import { useLabels } from './labelsStore'
+import RangeEditor from './RangeEditor'
+import { saveRangeSpec, useRangeSpecs } from './rangeSpecsStore'
+import type { RangeSpec } from './rangeSpec'
+import { useFeatures } from './featuresStore'
+import { useCustomTests, customKey } from './customTestsStore'
+import { useSavedTests, findSavedTest, rememberOtherRow } from './savedTestsStore'
 import { useShortcutHandlers, useBindings, eventToCombo, comboLabel, FIXED_SHORTCUTS } from './shortcutsStore'
 
-interface PendingIssue { sectionIndex: number; sectionLabel: string; field: string; issue: ValueIssue }
+interface PendingIssue { sectionIndex: number; sectionKey: string; sectionLabel: string; field: string; issue: ValueIssue }
 
 // Excludes the reference-range editor's own <input> (see RangeEditor's data-range-editor
 // attribute) — without that, opening a range editor mid-entry would insert it into the Tab/Enter/
@@ -122,6 +129,7 @@ export default function ResultEntry() {
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set())
   const [pendingIssues, setPendingIssues] = useState<PendingIssue[] | null>(null)
 
+  const { valueChecks: valueChecksOn } = useFeatures()
   const issuesBySection = useMemo(() => {
     const out: Record<string, IssuesByField> = {}
     if (!patient) return out
@@ -134,7 +142,7 @@ export default function ResultEntry() {
       out[c.key] = visible
     }
     return out
-  }, [categories, results, dismissed, patient])
+  }, [categories, results, dismissed, patient, valueChecksOn])
 
   useEffect(() => {
     if (!resultsLoaded) return
@@ -189,7 +197,7 @@ export default function ResultEntry() {
     if (!patient) return
     const pending = categories.flatMap((c, sectionIndex) =>
       Object.entries(issuesBySection[c.key] ?? {}).flatMap(([field, list]) =>
-        list.filter((issue) => issue.level !== 'suggest').map((issue) => ({ sectionIndex, sectionLabel: c.label || 'Others', field, issue }))
+        list.filter((issue) => issue.level !== 'suggest').map((issue) => ({ sectionIndex, sectionKey: c.key, sectionLabel: c.label || 'Others', field, issue }))
       )
     )
     if (pending.length === 0) navigate(`/preview/${patient.id}`, { state: { patient } })
@@ -588,32 +596,6 @@ function coarseStepFor(value: number, fineStep: number): number {
   return Math.max(candidate, fineStep * 10)
 }
 
-// Splits a "low–high[ unit]" range string (e.g. "13.0–17.0 gm/dl", "4.6-6.0 m/cumm", "-2 to +2")
-// into separate low/high numbers plus the trailing unit text, so RangeEditor can offer two plain
-// number boxes instead of one free-text box. Anchored at the start specifically so single-bound
-// ranges ("Upto 140.0 mg/dl", "> 40 mg/dl", "Negative") don't false-match — those fall back to
-// the old single free-text box, since "low/high" doesn't mean anything for them.
-function parseLowHigh(range: string): { low: string; high: string; suffix: string; usesTo: boolean } | null {
-  const m = range.match(/^(-?\d+(?:\.\d+)?)\s*(to|[–-])\s*\+?(-?\d+(?:\.\d+)?)\s*(.*)$/i)
-  if (!m) return null
-  return { low: m[1], high: m[3], suffix: m[4].trim(), usesTo: /to/i.test(m[2]) }
-}
-
-function formatLowHigh(low: string, high: string, suffix: string, usesTo: boolean): string {
-  const suffixPart = suffix ? ` ${suffix}` : ''
-  if (usesTo) {
-    const highNum = parseFloat(high)
-    const highStr = !isNaN(highNum) && highNum >= 0 ? `+${high}` : high
-    return `${low} to ${highStr}${suffixPart}`
-  }
-  return `${low}–${high}${suffixPart}`
-}
-
-function decimalPlacesOf(numStr: string): number {
-  const i = numStr.indexOf('.')
-  return i === -1 ? 0 : numStr.length - i - 1
-}
-
 function Dot({ state }: { state: CompletionState }) {
   if (state === 'complete') return <span className="w-2 h-2 rounded-full bg-[var(--success-muted)] flex-shrink-0" />
   if (state === 'partial') return <span className="w-2 h-2 rounded-full bg-[var(--accent)] opacity-60 flex-shrink-0" />
@@ -656,6 +638,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const labelFor = useLabels()
   const critical = issues.filter((i) => i.issue.level === 'critical').length
 
   return (
@@ -677,7 +660,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
         </p>
 
         <div className="overflow-y-auto -mx-1 px-1 space-y-1.5 mb-5">
-          {issues.map(({ sectionIndex, sectionLabel, field, issue }) => {
+          {issues.map(({ sectionIndex, sectionKey, sectionLabel, field, issue }) => {
             const tone = ISSUE_TONES[issue.level]
             return (
               <button
@@ -689,7 +672,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
               >
                 <tone.Icon size={14} className="flex-shrink-0 mt-[3px]" />
                 <span className="text-[13px] leading-snug">
-                  <span className="font-semibold">{sectionLabel} · {humanizeKey(field)}</span> — {issue.message}
+                  <span className="font-semibold">{sectionLabel} · {labelFor(sectionKey, field)}</span> — {issue.message}
                 </span>
               </button>
             )
@@ -734,16 +717,24 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
   // if a note is already saved, so nothing already filled in ever hides itself.
   const [showMethod, setShowMethod] = useState(!!methodValue)
 
-  const label = humanizeKey(fieldKey)
+  const labelFor = useLabels()
+  const label = labelFor(sectionKey, fieldKey)
   const unit = unitFor(sectionKey, fieldKey, unitOverrides)
   const unitKey = unitOverrideKey(sectionKey, fieldKey)
   const unitIsOverridden = unitOverrides[unitKey] !== undefined
   const range = getReferenceRange(sectionKey, fieldKey, gender, overrides)
   const key = rangeOverrideKey(sectionKey, fieldKey, gender)
   const isOverridden = overrides[key] !== undefined
-  const flag = flagFor(value, range, fieldKey)
+  useFeatures() // re-render if highlighting is switched on/off
+  useRangeSpecs() // ...or a range is edited
+  const flag = flagFor(value, range, fieldKey, { sectionKey, gender })
   const flagColor = flag ? 'var(--danger)' : undefined
   const rangeInfo = numericRangeInfo(range)
+  // What the range editor opens on: the range's real kind (the lab's own edit, else read once from
+  // the text), or a blank "between" when the reference has been hidden and is being brought back.
+  const startingSpec: RangeSpec = range
+    ? effectiveSpec(range, fieldKey, { sectionKey, gender }) ?? { kind: 'text', text: range, flag: false }
+    : { kind: 'between', a: '', b: '', flag: true }
   const options = optionsFor(sectionKey, fieldKey)
   const longestOption = options ? options.reduce((longest, opt) => (opt.length > longest.length ? opt : longest), '') : ''
 
@@ -830,18 +821,30 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
         </button>
       )}
 
-      <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
-        {hideReference ? null : editing ? (
-          <RangeEditor
-            initial={range}
-            defaultRange={defaultReferenceRange(sectionKey, fieldKey, gender)}
-            isOverridden={isOverridden}
-            onCancel={() => setEditing(false)}
-            onSave={(next) => { setOverride(key, next); setEditing(false) }}
-            onReset={() => { setOverride(key, null); setEditing(false) }}
-          />
-        ) : (
+      <div className="relative flex-1 flex items-center justify-end gap-1 min-w-0">
+        {hideReference ? null : (
           <>
+            {editing && (
+              <>
+                {/* Clicking anywhere else closes the card without saving. */}
+                <div className="fixed inset-0 z-20" onClick={() => setEditing(false)} />
+                <div className="absolute right-0 top-full mt-2 z-30">
+                  <RangeEditor
+                    title={label}
+                    unit={unit}
+                    initial={startingSpec}
+                    isOverridden={isOverridden}
+                    defaultText={defaultReferenceRange(sectionKey, fieldKey, gender)}
+                    removeLabel="Hide"
+                    removeTitle="Hide the reference for just this test"
+                    onCancel={() => setEditing(false)}
+                    onSave={(spec, text) => { setOverride(key, text); saveRangeSpec(key, spec); setEditing(false) }}
+                    onReset={() => { setOverride(key, null); saveRangeSpec(key, null); setEditing(false) }}
+                    onRemove={range || defaultReferenceRange(sectionKey, fieldKey, gender) ? () => { setOverride(key, ''); saveRangeSpec(key, null); setEditing(false) } : undefined}
+                  />
+                </div>
+              </>
+            )}
             {range && (
               !value ? (
                 <button
@@ -957,139 +960,6 @@ function UnitEditor({ initial, defaultUnit, isOverridden, onCancel, onSave, onRe
 }
 
 /**
- * Inline popover-style editor for a field's reference range — no modal, no navigating away from
- * Result Entry, since the whole point is editing the range right where staff already notice it
- * looks wrong. Most ranges are a plain "low–high[ unit]" (Haemoglobin, RBC Count, etc.), so those
- * get two number boxes — native spinner + arrow-key increment/decrement built in — instead of
- * retyping the whole string by hand. A range that doesn't parse as low/high (e.g. "Upto 140.0
- * mg/dl", "> 40 mg/dl", "Negative") falls back to the original single free-text box.
- */
-function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, onReset }: {
-  initial: string; defaultRange: string; isOverridden: boolean
-  onCancel: () => void; onSave: (range: string) => void; onReset: () => void
-}) {
-  const parsed = useMemo(() => parseLowHigh(initial), [initial])
-  const [lowDraft, setLowDraft] = useState(parsed?.low ?? '')
-  const [highDraft, setHighDraft] = useState(parsed?.high ?? '')
-  const [rawDraft, setRawDraft] = useState(initial)
-  const lowRef = useRef<HTMLInputElement>(null)
-  const rawRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (parsed) { lowRef.current?.focus(); lowRef.current?.select() }
-    else { rawRef.current?.focus(); rawRef.current?.select() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const stopAndHandle = (onCommit: () => void) => (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); onCommit() }
-    if (e.key === 'Escape') { e.preventDefault(); onCancel() }
-    e.stopPropagation()
-  }
-
-  if (!parsed) {
-    // Saving with the box cleared is deliberate, not blocked: an explicit blank override hides
-    // just this field's reference (see setRangeOverride in api.ts) without touching the
-    // section-wide "Show reference values" checkbox — clear it, hit save, the pencil stays put
-    // to bring a reference back later.
-    const commitRaw = () => onSave(rawDraft.trim())
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          ref={rawRef}
-          data-range-editor="true"
-          value={rawDraft}
-          onChange={(e) => setRawDraft(e.target.value)}
-          onKeyDown={stopAndHandle(commitRaw)}
-          placeholder="e.g. Upto 140.0 mg/dl — leave blank to hide"
-          className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
-          style={{ width: '13rem' }}
-        />
-        <button type="button" onClick={commitRaw} title="Save — applies to every patient (leave blank to hide this reference)" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
-          <CheckCircle2 size={14} />
-        </button>
-        {isOverridden && (
-          <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
-            Reset
-          </button>
-        )}
-        {defaultRange && (
-          <button type="button" onClick={() => onSave('')} title="Hide this reference from the report" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
-            Remove
-          </button>
-        )}
-        <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
-          <X size={14} />
-        </button>
-      </div>
-    )
-  }
-
-  const decimals = Math.max(decimalPlacesOf(parsed.low), decimalPlacesOf(parsed.high))
-  const step = decimals > 0 ? 1 / 10 ** decimals : 1
-  const lowInvalid = lowDraft.trim() === '' || isNaN(parseFloat(lowDraft))
-  const highInvalid = highDraft.trim() === '' || isNaN(parseFloat(highDraft))
-  const hasInvalid = lowInvalid || highInvalid
-  const commit = () => { if (!hasInvalid) onSave(formatLowHigh(lowDraft.trim(), highDraft.trim(), parsed.suffix, parsed.usesTo)) }
-  const boxClass = (invalid: boolean) =>
-    `text-[13px] text-center px-1.5 py-1 rounded-md border bg-[var(--surface)] focus:outline-none ${invalid ? 'border-[var(--danger)]' : 'border-[var(--accent)]'}`
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <input
-        ref={lowRef}
-        data-range-editor="true"
-        type="number"
-        step={step}
-        value={lowDraft}
-        onChange={(e) => setLowDraft(e.target.value)}
-        onKeyDown={stopAndHandle(commit)}
-        title="Low end of the range"
-        className={boxClass(lowInvalid)}
-        style={{ width: '4.5rem', fontFamily: 'Consolas, monospace' }}
-      />
-      <span className="text-[12px] text-[var(--ink-3)]">–</span>
-      <input
-        data-range-editor="true"
-        type="number"
-        step={step}
-        value={highDraft}
-        onChange={(e) => setHighDraft(e.target.value)}
-        onKeyDown={stopAndHandle(commit)}
-        title="High end of the range"
-        className={boxClass(highInvalid)}
-        style={{ width: '4.5rem', fontFamily: 'Consolas, monospace' }}
-      />
-      {parsed.suffix && <span className="text-[12px] text-[var(--ink-3)] whitespace-nowrap px-0.5">{parsed.suffix}</span>}
-      {hasInvalid && <AlertTriangle size={14} className="text-[var(--danger)] flex-shrink-0" title="Both ends of the range need a number" />}
-      <button
-        type="button"
-        onClick={commit}
-        disabled={hasInvalid}
-        title={hasInvalid ? 'Enter a number for both ends' : 'Save — applies to every patient'}
-        className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)] disabled:opacity-30 disabled:hover:bg-transparent"
-      >
-        <CheckCircle2 size={14} />
-      </button>
-      {isOverridden && (
-        <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
-          Reset
-        </button>
-      )}
-      {/* Two required number boxes can't themselves go blank the way the free-text editor's one
-          box can, so hiding this field's reference gets its own explicit action instead — same
-          effect as clearing and saving there (see setRangeOverride in api.ts). */}
-      <button type="button" onClick={() => onSave('')} title="Hide the reference for just this test" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
-        Remove
-      </button>
-      <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
-        <X size={14} />
-      </button>
-    </div>
-  )
-}
-
-/**
  * 'Others' has no fixed test list — the technician types the test name, result, unit, and
  * reference range, one row per custom investigation. While editing, rows live as a plain array
  * indexed by position (so clearing a name field to retype it never makes the row disappear or
@@ -1121,6 +991,38 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
     commit(rows.filter((_, i) => i !== index))
   }
 
+  const { tests: savedTests } = useSavedTests()
+  const listId = useId()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const inRows = (name: string) => rows.some((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase())
+  const pickable = savedTests.filter((t) => !inRows(t.name))
+
+  // When a row's name matches a saved test (typed in full or chosen from the suggestions), fill in
+  // its usual unit and reference range — but only into blanks, never over something just typed.
+  // Then, if the row now has a name and a result, remember it for next time (see savedTestsStore).
+  const prefillRow = (index: number) => {
+    const row = rows[index]
+    if (!row) return
+    const hit = findSavedTest(row.name)
+    if (!hit) return
+    // Adopt the saved spelling ("vitamin b12" -> "Vitamin B12") so the same test always prints the same way.
+    const patch: Partial<typeof row> = {}
+    if (row.name !== hit.name) patch.name = hit.name
+    if (!row.unit && !row.reference && (hit.unit || hit.reference)) {
+      patch.unit = hit.unit
+      patch.reference = hit.reference
+    }
+    if (Object.keys(patch).length > 0) setRow(index, patch)
+  }
+
+  // Remembering waits until focus leaves the whole row, not just one box, so the unit and reference
+  // typed after the result are included in what gets saved.
+  const rememberRow = (index: number, e: React.FocusEvent<HTMLElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    const row = rows[index]
+    if (row) void rememberOtherRow(row)
+  }
+
   const addRow = () => {
     commit([...rows, { name: '', value: '', unit: '', reference: '' }])
   }
@@ -1135,13 +1037,22 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
         <span className="w-8 flex-shrink-0" />
       </div>
       {rows.map(({ name, value, unit, reference }, i) => (
-        <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[var(--border-soft)]">
-          <input
-            value={name}
-            onChange={(e) => setRow(i, { name: e.target.value })}
-            placeholder="Test name"
-            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] flex-1 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-          />
+        <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[var(--border-soft)]" onBlur={(e) => rememberRow(i, e)}>
+          <div className="relative flex-1">
+            <input
+              value={name}
+              list={listId}
+              onChange={(e) => setRow(i, { name: e.target.value })}
+              onBlur={() => prefillRow(i)}
+              placeholder="Test name"
+              className="w-full text-[15px] pl-2.5 pr-8 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+            />
+            {findSavedTest(name) && (
+              <span title="Saved in your test list" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--accent)]">
+                <BookmarkCheck size={15} />
+              </span>
+            )}
+          </div>
           <input
             value={value}
             onChange={(e) => setRow(i, { value: e.target.value })}
@@ -1174,14 +1085,55 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
         </div>
       ))}
 
-      <button
-        type="button"
-        onClick={addRow}
-        className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--accent-ink)] bg-[var(--accent-soft)] rounded-xl hover:bg-[var(--accent-soft-border)]"
-      >
-        <Plus size={14} />
-        Add test
-      </button>
+      <datalist id={listId}>
+        {savedTests.map((t) => <option key={t.name} value={t.name} />)}
+      </datalist>
+
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={addRow}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--accent-ink)] bg-[var(--accent-soft)] rounded-xl hover:bg-[var(--accent-soft-border)]"
+        >
+          <Plus size={14} />
+          Add test
+        </button>
+
+        {pickable.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--ink-2)] border border-[var(--border-strong)] rounded-xl hover:bg-[var(--bg-hover)]"
+            >
+              <BookmarkCheck size={14} />
+              Add a saved test
+              <ChevronDown size={14} />
+            </button>
+            {pickerOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
+                <div className="absolute left-0 top-full mt-1.5 z-20 w-80 max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg py-1">
+                  {pickable.map((t) => (
+                    <button
+                      key={t.name}
+                      type="button"
+                      onClick={() => {
+                        commit([...rows, { name: t.name, value: '', unit: t.unit, reference: t.reference }])
+                        setPickerOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--bg-hover)]"
+                    >
+                      <span className="block text-[14px] text-[var(--ink)]">{t.name}</span>
+                      {(t.unit || t.reference) && <span className="block text-[12px] text-[var(--ink-3)]">{[t.unit, t.reference].filter(Boolean).join(' · ')}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -1195,7 +1147,27 @@ function SubHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
+/** A section's own fields, followed by any tests the lab added to it in Settings → Test names. */
+function SectionBody(props: {
+  sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void; onReplace: (next: Record<string, string>) => void
+}) {
+  const added = useCustomTests()[props.sectionKey] ?? []
+  if (props.sectionKey === 'others' || added.length === 0) return <BuiltInSectionBody {...props} />
+  return (
+    <>
+      <BuiltInSectionBody {...props} />
+      <div>
+        <SubHeading>Added tests</SubHeading>
+        {added.map((t) => {
+          const key = customKey(t.id)
+          return <FieldRow key={t.id} sectionKey={props.sectionKey} fieldKey={key} gender={props.gender} value={props.data[key] ?? ''} onChange={(val) => props.onChange(key, val)} />
+        })}
+      </div>
+    </>
+  )
+}
+
+function BuiltInSectionBody({ sectionKey, gender, data, onChange, onReplace }: {
   sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void; onReplace: (next: Record<string, string>) => void
 }) {
   const v = (k: string) => data[k] ?? ''
