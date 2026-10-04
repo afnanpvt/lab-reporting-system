@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* In-app confirmation dialog (see ConfirmHost.tsx): the backdrop fades in, the card settles in. */
+@keyframes confirm-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes confirm-pop { from { opacity: 0; transform: translateY(8px) scale(0.97) } to { opacity: 1; transform: none } }
+.confirm-backdrop { animation: confirm-fade 0.12s ease-out }
+.confirm-card { animation: confirm-pop 0.16s ease-out }
+@media (prefers-reduced-motion: reduce) { .confirm-backdrop, .confirm-card { animation: none } }
+
 :root {
   /* Mirrors tailwind.config.js exactly — used for inline styles (report output, shell chrome). */
   --bg-app: #f5f7fa;

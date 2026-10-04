@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { getPatient, getResultsFor, getLabSettings, getRangeOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
-import { humanizeKey, getReferenceRange, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
+import { AlertTriangle, ArrowLeft, Download, Printer, MessageCircle, Building2, ZoomIn, ZoomOut, FileText, Columns2, Rows3, ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { getPatient, getResultsFor, listDoctors, referredByLine, type Doctor, getLabSettings, getRangeOverrides, getUnitOverrides, getHiddenReferenceSections, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, setPatientCompleted, type Patient, type ResultsBySection, type LabSettingsForm } from './api'
+import { getReferenceRange, sectionKeyForLabel, unitFor, flagFor, formatTime12h, decodeOtherRow, supportsMethodNote } from './reportFields'
+import { useLabels } from './labelsStore'
+import { useFeatures } from './featuresStore'
+import { useRangeSpecs } from './rangeSpecsStore'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
-import { paginateReport, type ReportBlock } from './pagination'
+import { filledKeysFor, paginateReport, type ReportBlock } from './pagination'
+import { reportBlockers } from './valueChecks'
+import { buildProbe, measureProbe, overshootOf, type MeasuredMetrics, type Probe } from './measureReport'
 
 /**
  * A4 is 210x297mm (ISO 216 — the same sheet worldwide, India included). The page box owns the
@@ -27,10 +32,29 @@ function formatReportedAt(): string {
   return `${date} ${formatTime12h(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`
 }
 
-function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, labDoctor, labDoctorQualifications, hiddenReferenceSections }: {
-  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
+function useMarginSetting(storageKey: string, fallback: number) {
+  const [mm, setMm] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      const n = Number(raw)
+      return raw !== null && n >= 0 && n <= 80 ? n : fallback
+    } catch { return fallback }
+  })
+  const set = (n: number) => {
+    const clamped = Math.min(80, Math.max(0, Math.round(n) || 0))
+    setMm(clamped)
+    try { localStorage.setItem(storageKey, String(clamped)) } catch { /* not remembered, still applied */ }
+  }
+  return [mm, set] as const
+}
+
+function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, unitOverrides, labDoctor, labDoctorQualifications, hiddenReferenceSections }: {
+  block: ReportBlock; patient: Patient; results: ResultsBySection; reportedAt: string; rangeOverrides: Record<string, string>; unitOverrides: Record<string, string>; labDoctor: string; labDoctorQualifications: string
   hiddenReferenceSections: Record<string, boolean>
 }) {
+  const labelFor = useLabels()
+  useFeatures() // re-render if highlighting is switched on/off
+  useRangeSpecs() // ...or a range is edited
   if (block.kind === 'patientInfo') {
     // Reported uses the date/time entered on the patient form (see PatientEntry.tsx's "Dates &
     // Times" editor) once it's been set; a patient saved before that existed still falls back to
@@ -73,32 +97,64 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
     // A lab can turn the reference column off for a whole section (see the "Show reference
     // values" checkbox in ResultEntry.tsx) — when it's off the column is dropped entirely
     // rather than left blank, on-screen and on paper alike.
-    const showReference = !hiddenReferenceSections[block.sectionKey]
-    const gridCols = showReference ? 'grid-cols-[2.4fr_1fr_1fr_1.6fr]' : 'grid-cols-[2.4fr_1fr_1fr]'
+    const isCs = block.sectionKey === 'cs'
+    // C.S. has no units or ranges (organism, remarks, S/I/R per antibiotic), so it gets a wide
+    // result column instead of two permanently empty ones.
+    const showReference = !isCs && !hiddenReferenceSections[block.sectionKey]
+    const gridCols = isCs ? 'grid-cols-[2.4fr_3.6fr]' : showReference ? 'grid-cols-[2.4fr_1fr_1fr_1.6fr]' : 'grid-cols-[2.4fr_1fr_1fr]'
+    // Mantoux is the one two-visit test — print when the PPD was injected and when the induration
+    // was read, on a small line under the heading (only on the first chunk, not a "(continued)"
+    // one), and only for whichever of the two the technician actually filled in.
+    const mantouxData = block.sectionKey === 'mantoux' ? (results.mantoux ?? {}) : null
+    const injectionAt = mantouxData?.injection_date
+      ? `${mantouxData.injection_date}${mantouxData.injection_time ? ' ' + formatTime12h(mantouxData.injection_time) : ''}`
+      : ''
+    const readingAt = mantouxData?.reading_date
+      ? `${mantouxData.reading_date}${mantouxData.reading_time ? ' ' + formatTime12h(mantouxData.reading_time) : ''}`
+      : ''
     return (
       <div className="avoid-break mb-6" data-role="section-chunk">
         <div className="text-[13px] font-bold uppercase tracking-widest text-[#111] border-b-2 border-[#333] pb-1.5 mb-2" data-role="section-header">
           {block.label}{block.continued && <span className="font-normal italic text-[var(--ink-3)]"> (continued)</span>}
         </div>
+        {!block.continued && (injectionAt || readingAt) && (
+          <div className="flex flex-wrap gap-x-6 text-[11.5px] text-[#333] mb-2" data-role="mantoux-times">
+            {injectionAt && <span>Injected <b className="text-[#111]">{injectionAt}</b></span>}
+            {readingAt && <span>Read <b className="text-[#111]">{readingAt}</b></span>}
+          </div>
+        )}
         <div className={`grid ${gridCols} text-[11.5px] font-bold uppercase tracking-wide text-[var(--ink)] border-b border-[#bbb] pb-1.5 mb-1`} data-role="column-header">
-          <span>Test</span><span>Result</span><span>Unit</span>{showReference && <span>Reference</span>}
+          <span>{isCs ? 'Test / Antibiotic' : 'Test'}</span><span>Result</span>{!isCs && <span>Unit</span>}{showReference && <span>Reference</span>}
         </div>
         {block.keys.map((k) => {
           const data = results[block.sectionKey] ?? {}
           const isOthers = block.sectionKey === 'others'
           const other = isOthers ? decodeOtherRow(data[k]) : null
           const value = other ? other.value : data[k]
-          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides)
-          const unit = other ? other.unit : unitFor(block.sectionKey, k)
-          const flag = flagFor(value, range, isOthers ? undefined : k)
+          const range = other ? other.reference : getReferenceRange(block.sectionKey, k, patient.gender, rangeOverrides, unitOverrides)
+          const unit = other ? other.unit : unitFor(block.sectionKey, k, unitOverrides)
+          const flag = flagFor(value, range, isOthers ? undefined : k, isOthers ? undefined : { sectionKey: block.sectionKey, gender: patient.gender })
           const arrowColor = flag ? 'var(--danger)' : undefined
           // "Method/kit used" note (see supportsMethodNote and ResultEntry.tsx's FieldRow) —
           // printed as a small parenthetical under the result, matching how Super Lab's old
           // system printed e.g. "Negative (SD Diagnostics)". Blank unless staff filled it in.
           const method = !isOthers && supportsMethodNote(block.sectionKey, k) ? data[k + '_method'] : undefined
+          // Remarks, interpretations and long free text would wrap inside a ~30mm column and print as
+          // a tall sliver (or run past the footer): give them the full row width, line breaks kept.
+          if (/[\r\n]/.test(value) || value.length > 40) {
+            return (
+              <div key={k} className="text-[13px] py-2 border-b border-[#e8e8e8]" data-role="result-row">
+                <div className="font-bold text-[#111] mb-0.5">{isOthers ? k : labelFor(block.sectionKey, k)}</div>
+                <div style={{ fontWeight: 600, fontSize: '13.5px', color: '#111', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {value}{unit ? <span className="font-normal text-[#333]"> {unit}</span> : null}
+                </div>
+                {showReference && range && <div className="text-[11px] text-[#555] mt-0.5">Reference: {range}</div>}
+              </div>
+            )
+          }
           return (
             <div key={k} className={`grid ${gridCols} items-baseline text-[13px] py-2 border-b border-[#e8e8e8]`} data-role="result-row">
-              <span className="font-bold text-[#111]">{isOthers ? k : humanizeKey(k)}</span>
+              <span className="font-bold text-[#111]">{isOthers ? k : labelFor(block.sectionKey, k)}</span>
               <span>
                 <span style={{ fontWeight: flag ? 700 : 600, fontSize: '13.5px', color: flag ? arrowColor : '#111', fontFamily: 'Consolas, monospace' }}>
                   {flag === 'high' && <span>▲ </span>}
@@ -107,7 +163,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
                 </span>
                 {method && <span className="block text-[10.5px] italic text-[#666] font-normal">({method})</span>}
               </span>
-              <span className="text-[#333]">{unit}</span>
+              {!isCs && <span className="text-[#333]">{unit}</span>}
               {showReference && <span className="text-[#333]">{range}</span>}
             </div>
           )
@@ -119,7 +175,7 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
   return (
     <div className="avoid-break" data-role="closing-block">
       <div className="text-center text-[11px] tracking-wide text-[var(--ink-3)] border-t border-b border-[#ddd] py-1.5 my-5">
-        — End of report —
+        End of report
       </div>
       {/* items-start, not items-end: the two signature lines must sit level with each other
           regardless of how many lines of text follow (the right side got a second line —
@@ -149,6 +205,8 @@ function ReportBlockView({ block, patient, results, reportedAt, rangeOverrides, 
 
 export default function ReportPreview() {
   const location = useLocation()
+  // Opened from the Reports page? Then Back goes there instead of into the patient's results.
+  const from = (location.state as { from?: string } | null)?.from
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
 
@@ -159,11 +217,17 @@ export default function ReportPreview() {
   const [badge, setBadge] = useState<string | null>(null)
   const [certifications, setCertifications] = useState<string[]>([])
   const [rangeOverrides, setRangeOverrides] = useState<Record<string, string>>({})
+  const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>({})
   const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
+  const [doctors, setDoctors] = useState<Doctor[]>([])
   // For a sample tested on behalf of another lab that will print it on their own letterhead —
   // no logo, watermark, footer, or named staff sign-off, just the patient info and results,
   // with blank space left at the top for their pre-printed stationery.
   const [externalMode, setExternalMode] = useState(false)
+  // Space kept clear at the top and bottom of an external-lab page for their own letterhead and
+  // footer. Their stationery isn't ours, so staff can adjust it; remembered between reports.
+  const [externalTopMm, setExternalTopMm] = useMarginSetting('lumalabs.externalTopMm', 29)
+  const [externalBottomMm, setExternalBottomMm] = useMarginSetting('lumalabs.externalBottomMm', 30)
 
   // On-screen viewer controls only — printing always renders every page at 100%, regardless of
   // these (see the .report-viewer print override in index.css and the hidden/print:flex dance
@@ -187,15 +251,75 @@ export default function ReportPreview() {
 
   useEffect(() => {
     getLabSettings().then(setSettings)
+    listDoctors().then(setDoctors)
     getRangeOverrides().then(setRangeOverrides)
+    getUnitOverrides().then(setUnitOverrides)
     getHiddenReferenceSections().then(setHiddenReferenceSections)
     getLogoDataUrl().then(setLogo)
     getBadgeDataUrl().then(setBadge)
     getCertificationDataUrls().then(setCertifications)
   }, [])
 
-  const pages = useMemo(() => (patient && results ? paginateReport(patient, results) : []), [patient, results])
+  // Page breaks come from the report's real, measured sizes (see measureReport.ts): an invisible
+  // "probe" page is rendered with one of every block, measured, and those numbers drive pagination.
+  // The first render uses typical sizes; the measurement lands before the browser paints.
+  const probeRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<HTMLDivElement>(null)
+  // Measurements and the safety margin both belong to one specific report (`probe`): when the report
+  // changes they are discarded rather than carried over, so a stale reading can never shape — or
+  // wrongly widen the margin of — the next patient's pages.
+  const [measured, setMeasured] = useState<{ probe: Probe; metrics: MeasuredMetrics } | null>(null)
+  const [boosted, setBoosted] = useState<{ probe: Probe; value: number } | null>(null)
+  const probe = useMemo(() => (patient && results ? buildProbe(patient.sections, results) : null), [patient, results])
+  // Extra room held back above the footer. Raised only by the self-check below if a displayed page
+  // ever overflows despite the measurements (it should not), so content is never silently clipped.
+  const boost = boosted && boosted.probe === probe ? boosted.value : 0
+  const metrics = measured && measured.probe === probe ? measured.metrics : null
+
+  const remeasure = () => {
+    const root = probeRef.current
+    if (!root || !probe) return
+    const next = measureProbe(root, probe, boost)
+    if (next) setMeasured((prev) => (prev && prev.probe === probe && prev.metrics.sig === next.sig ? prev : { probe, metrics: next }))
+  }
+  const remeasureRef = useRef(remeasure)
+  remeasureRef.current = remeasure
+  useLayoutEffect(() => {
+    remeasure()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probe, rangeOverrides, unitOverrides, hiddenReferenceSections, settings, certifications, logo, badge, externalMode, externalTopMm, externalBottomMm, boost])
+  // The footer's height can change after first paint (certification logos and fonts load late).
+  useEffect(() => {
+    const root = probeRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => remeasureRef.current())
+    ro.observe(root)
+    document.fonts?.ready.then(() => remeasureRef.current())
+    return () => ro.disconnect()
+  }, [probe !== null])
+
+  const pages = useMemo(() => (patient && results ? paginateReport(patient, results, metrics ?? undefined) : []), [patient, results, metrics])
+
+  useLayoutEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || pages.length === 0 || !probe || !metrics) return // only check pages built from this report's own measurements
+    let worst = 0
+    viewer.querySelectorAll<HTMLElement>('[data-role="page"]').forEach((el) => {
+      if (el.offsetParent) worst = Math.max(worst, overshootOf(el) / zoom) // a hidden page (single-page view) can't be measured
+    })
+    if (worst > 0.5 && boost < 80) setBoosted({ probe, value: Math.min(80, boost + Math.ceil(worst) + 2) })
+  }, [pages, zoom, viewMode, currentPage])
   const reportedAt = useMemo(() => formatReportedAt(), [patient?.id])
+  // Sections picked for this patient with nothing entered aren't printed (see paginateReport); they
+  // are listed above the report instead, and a report with no results at all can't be printed or saved.
+  const emptySections = useMemo(() => {
+    if (!patient || !results) return []
+    return patient.sections.filter((label) => {
+      const key = sectionKeyForLabel(label)
+      return !key || filledKeysFor(key, results[key] ?? {}).length === 0
+    })
+  }, [patient, results])
+  const noResults = !!patient && emptySections.length === patient.sections.length
 
   useEffect(() => {
     setCurrentPage((p) => Math.min(p, Math.max(pages.length - 1, 0)))
@@ -224,6 +348,13 @@ export default function ReportPreview() {
     setSavingPdf(true)
     try {
       const result = await window.api.print.pdf(`${patient.name}_${patient.sid}`)
+      if (!result.saved && result.reason !== 'canceled') {
+        window.alert(`The PDF could not be saved.
+
+${result.reason}
+
+If a PDF with the same name is open in another program, close it and try again.`)
+      }
       if (result.saved) {
         window.api.shell.openPath(result.filePath)
         if (!patient.markedComplete) {
@@ -253,9 +384,34 @@ export default function ReportPreview() {
     )
   }
 
+  // Impossible results (a differential over 100%) mean there is no report to show, print or save.
+  // Every route here (Reports list, Review report) lands on this; see valueChecks.ts's reportBlockers.
+  const blockers = reportBlockers(patient.sections.map((l) => sectionKeyForLabel(l) ?? ''), results)
+  if (blockers.length > 0) {
+    return (
+      <main className="px-10 py-9 max-w-xl">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle size={20} className="text-[var(--danger)]" />
+          <h1 className="text-[18px] font-semibold text-[var(--ink)]">This report can't be opened yet</h1>
+        </div>
+        <p className="text-[14px] text-[var(--ink-2)] mb-3">{patient.name} · {patient.sid}</p>
+        <ul className="list-disc pl-5 mb-5 text-[14px] text-[var(--ink)] space-y-1">
+          {blockers.map((b) => <li key={`${b.sectionKey}:${b.field}`}>{b.issue.message}</li>)}
+        </ul>
+        <p className="text-[13px] text-[var(--ink-3)] mb-5">Correct the values in Result Entry. The report, print and PDF stay unavailable until the totals are valid.</p>
+        <button
+          onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
+          className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
+        >
+          Back to results
+        </button>
+      </main>
+    )
+  }
+
   // hiddenOnScreen keeps a page in the DOM (so printing still renders the whole document) while
   // collapsing it visually in single-page mode — print:flex brings it back for the print stylesheet.
-  const renderPage = (blocks: ReportBlock[], pageIndex: number, hiddenOnScreen = false) => (
+  const renderPage = (blocks: ReportBlock[], pageIndex: number, hiddenOnScreen = false, probeMode = false) => (
     <div
       key={pageIndex}
       className={`print-page relative bg-[var(--surface)] shadow-lg print:shadow-none flex-col flex-shrink-0 ${hiddenOnScreen ? 'hidden print:flex' : 'flex'}`}
@@ -271,42 +427,45 @@ export default function ReportPreview() {
       {externalMode ? (
         // Blank space reserved for the external lab's own pre-printed letterhead —
         // no logo, watermark, or footer of ours anywhere on the page.
-        <div style={{ height: 110 }} />
+        <div style={{ height: `${externalTopMm}mm` }} />
       ) : (
         <>
-          <LetterheadWatermark labName={settings.labName} />
+          <LetterheadWatermark labName={settings.labName} logoDataUrl={logo} />
           <div className="relative" style={{ zIndex: 1 }} data-role="letterhead-header">
             <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
           </div>
         </>
       )}
 
-      {/* Repeats on every page (not just the one with the full patient-info block) so a page that
-          gets separated from the rest of the report still identifies whose it is. Same
-          Patient/Referred by/Age-Sex layout the report used to show once on page 1 only, with
-          SID folded into the first row. Counted as a fixed per-page cost in pagination.ts's
-          PATIENT_STRIP_HEIGHT — re-measure there if this grows again. */}
+      {/* Repeats on every page so a page separated from the rest of the report still identifies
+          whose it is. The customer wants pages 2, 3... laid out exactly like page 1, so below it
+          every page also carries the full "LABORATORY REPORT" block with SID/Collected/Received/
+          Reported (a fixed per-page cost, see paginateReport). */}
       <div className="relative pt-1.5 pb-2" style={{ zIndex: 1, borderBottom: '1px solid #e5e5e5' }} data-role="patient-strip">
         <div className="flex items-center justify-between text-[13px] text-[#333]">
           <span>Patient <b className="text-[var(--ink)]">{patient.name}</b></span>
           {patient.referredBy && patient.referredBy !== 'Self' && (
-            <span>Referred by <b className="text-[var(--ink)]">{patient.referredBy}</b></span>
+            <span>Referred by <b className="text-[var(--ink)]">{referredByLine(patient.referredBy, doctors)}</b></span>
           )}
           <span>SID <b className="text-[var(--ink)]">{patient.sid}</b></span>
         </div>
         <div className="flex items-center flex-wrap gap-x-0 text-[#333] mt-1">
           <span className="text-[13px]">Age / Sex <b className="text-[var(--ink)]">{patient.age}{patient.ageUnit} / {patient.gender === 'M' ? 'Male' : 'Female'}</b></span>
-          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
-          <span className="text-[12px]">Collected <b className="text-[var(--ink)]">{patient.date}{patient.regTime ? ' ' + formatTime12h(patient.regTime) : ''}</b></span>
-          <span className="text-[11.5px] text-[#ccc] mx-2">·</span>
-          <span className="text-[12px]">Reported <b className="text-[var(--ink)]">{patient.rptDate ? `${patient.rptDate} ${formatTime12h(patient.rptTime)}` : reportedAt}</b></span>
         </div>
       </div>
 
       <div className="relative flex-1 mt-3" style={{ zIndex: 1 }} data-role="content">
-        {blocks.map((block, i) => (
-          <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
-        ))}
+        {/* In the probe the patient-info block is measured through its own plan entry instead. */}
+        {!probeMode && (
+          <ReportBlockView block={{ kind: 'patientInfo' }} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} unitOverrides={unitOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
+        )}
+        {blocks.map((block, i) => {
+          const view = (
+            <ReportBlockView key={i} block={block} patient={patient} results={results} reportedAt={reportedAt} rangeOverrides={rangeOverrides} unitOverrides={unitOverrides} labDoctor={settings.labDoctor} labDoctorQualifications={settings.labDoctorQualifications} hiddenReferenceSections={hiddenReferenceSections} />
+          )
+          // flow-root keeps each block's own margins inside the wrapper so its true height can be read.
+          return probeMode ? <div key={i} data-measure={i} style={{ display: 'flow-root' }}>{view}</div> : view
+        })}
       </div>
 
       {/* Absolutely positioned against the page box (not "last flex child pushed down by
@@ -319,7 +478,11 @@ export default function ReportPreview() {
           everything else on the page — only the wave underneath it bleeds past that inset (see
           bleedMm) to reach both paper edges, so it reads as a band closing off the sheet rather
           than a bar that stops short on both sides. */}
-      {!externalMode && (
+      {externalMode ? (
+        // Their pre-printed footer (address, contact, accreditation) sits down here, so keep clear
+        // of it. Registered as the footer so measuring and the overflow self-check both stop above it.
+        <div className="absolute left-0 right-0 bottom-0" style={{ height: `${externalBottomMm}mm` }} data-role="letterhead-footer" />
+      ) : (
         <div className="absolute" style={{ zIndex: 1, left: PAGE_PAD_H, right: PAGE_PAD_H, bottom: 0 }} data-role="letterhead-footer">
           <LetterheadFooter settings={settings} certificationDataUrls={certifications} bleedMm={PAGE_PAD_H_MM} />
         </div>
@@ -331,11 +494,11 @@ export default function ReportPreview() {
       <div className="flex flex-col h-full print:h-auto">
         <div className="flex items-center gap-4 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <button
-            onClick={() => navigate(`/report/${patient.id}`, { state: { patient } })}
+            onClick={() => (from ? navigate(from) : navigate(`/report/${patient.id}`, { state: { patient } }))}
             className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
           >
             <ArrowLeft size={15} />
-            Edit results
+            {from === '/reports' ? 'Back to reports' : 'Edit results'}
           </button>
           <div className="h-5 w-px bg-[var(--border)]" />
           <div>
@@ -370,13 +533,14 @@ export default function ReportPreview() {
             <div className="h-5 w-px bg-[var(--border)]" />
             <button
               onClick={handleSavePdf}
-              disabled={savingPdf}
+              disabled={savingPdf || noResults}
+              title={noResults ? 'No results have been entered yet' : undefined}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)] disabled:opacity-60"
             >
               <Download size={14} />
               {savingPdf ? 'Saving…' : 'Save PDF'}
             </button>
-            <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
+            <button onClick={() => window.print()} disabled={noResults} title={noResults ? 'No results have been entered yet' : undefined} className="disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-soft)] text-[var(--accent-ink)] text-[14px] font-medium rounded-xl hover:bg-[var(--accent-soft-border)]">
               <Printer size={14} />
               Print
             </button>
@@ -391,6 +555,15 @@ export default function ReportPreview() {
             </button>
           </div>
         </div>
+
+        {emptySections.length > 0 && (
+          <div className="flex items-center gap-2 px-8 py-2 text-[13px] flex-shrink-0 print:hidden" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', borderBottom: '1px solid var(--danger-soft-border)' }}>
+            <AlertTriangle size={14} className="flex-shrink-0" />
+            {noResults
+              ? 'No results have been entered yet, so there is nothing to print or save.'
+              : `No results entered for ${emptySections.join(', ')}. ${emptySections.length === 1 ? 'It is' : 'They are'} left out of this report.`}
+          </div>
+        )}
 
         <div className="flex items-center gap-3 px-8 py-2 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-app)] p-0.5">
@@ -437,6 +610,22 @@ export default function ReportPreview() {
             </div>
           )}
 
+          {externalMode && (
+            <div className="inline-flex items-center gap-3 text-[13px] text-[var(--ink-2)]" title="Blank space kept at the top and bottom of every page for the other lab's letterhead and footer">
+              {([['Top', externalTopMm, setExternalTopMm], ['Bottom', externalBottomMm, setExternalBottomMm]] as const).map(([label, value, set]) => (
+                <label key={label} className="inline-flex items-center gap-1.5">
+                  {label} margin
+                  <input
+                    type="number" min={0} max={80} value={value}
+                    onChange={(e) => set(Number(e.target.value))}
+                    className="w-14 px-2 py-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-app)] text-[var(--ink)] tabular-nums"
+                  />
+                  mm
+                </label>
+              ))}
+            </div>
+          )}
+
           <div className="flex-1" />
 
           <div className="inline-flex items-center gap-1">
@@ -461,7 +650,7 @@ export default function ReportPreview() {
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-auto print:overflow-visible print:h-auto bg-[var(--bg-canvas)] p-8 print:bg-white print:p-0">
-          <div className="report-viewer flex flex-col items-center gap-9 print:gap-0" style={{ zoom }}>
+          <div ref={viewerRef} className="report-viewer flex flex-col items-center gap-9 print:gap-0" style={{ zoom }}>
             {viewMode === 'two'
               ? Array.from({ length: Math.ceil(pages.length / 2) }, (_, spreadIndex) => {
                   const first = spreadIndex * 2
@@ -475,6 +664,14 @@ export default function ReportPreview() {
               : pages.map((blocks, pageIndex) => renderPage(blocks, pageIndex, viewMode === 'single' && pageIndex !== currentPage))}
           </div>
         </div>
+
+        {/* The invisible probe page the measurements come from (see measureReport.ts). Laid out like a
+            real page but off-screen, never zoomed, and never printed. */}
+        {probe && (
+          <div ref={probeRef} aria-hidden="true" className="print:hidden" style={{ position: 'fixed', left: -20000, top: 0, visibility: 'hidden', pointerEvents: 'none' }}>
+            {renderPage(probe.blocks, -1, false, true)}
+          </div>
+        )}
       </div>
   )
 }

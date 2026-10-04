@@ -23,6 +23,7 @@ const api = {
   },
   patients: {
     list: (search?: string) => ipcRenderer.invoke('patients:list', search),
+    listAll: () => ipcRenderer.invoke('patients:listAll'),
     create: (data: unknown) => ipcRenderer.invoke('patients:create', data),
     get: (id: number) => ipcRenderer.invoke('patients:get', id),
     update: (id: number, data: unknown) => ipcRenderer.invoke('patients:update', id, data),
@@ -51,7 +52,8 @@ const api = {
     list: () => ipcRenderer.invoke('doctors:list'),
     get: (id: number) => ipcRenderer.invoke('doctors:get', id),
     create: (data: unknown) => ipcRenderer.invoke('doctors:create', data),
-    update: (id: number, data: unknown) => ipcRenderer.invoke('doctors:update', id, data)
+    update: (id: number, data: unknown) => ipcRenderer.invoke('doctors:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('doctors:delete', id)
   },
   billing: {
     rateCard: () => ipcRenderer.invoke('billing:rateCard'),

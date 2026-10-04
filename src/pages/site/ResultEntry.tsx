@@ -1,12 +1,24 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
+import DatePicker from './DatePicker'
+import TimePicker from './TimePicker'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator } from 'lucide-react'
-import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, type Patient, type ResultsBySection } from './api'
-import { humanizeKey, getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, flagFor, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
+import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, Pencil, Stethoscope, Plus, X, Keyboard, AlertTriangle, AlertOctagon, Calculator, BookmarkCheck, ChevronDown } from 'lucide-react'
+import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, getUnitOverrides, setUnitOverride, type Patient, type ResultsBySection } from './api'
+import { getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, effectiveSpec, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
-import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
+import { checksForSection, reportBlockers, type IssuesByField, type ValueIssue } from './valueChecks'
+import { useLabels } from './labelsStore'
+import RangeEditor from './RangeEditor'
+import { saveRangeSpec, useRangeSpecs } from './rangeSpecsStore'
+import { formatThousands, parseResultNumber } from './numberFormat'
+import { useNumberInput } from './useNumberInput'
+import type { RangeSpec } from './rangeSpec'
+import { useFeatures } from './featuresStore'
+import { useCustomTests, customKey } from './customTestsStore'
+import { useSavedTests, findSavedTest, rememberOtherRow } from './savedTestsStore'
+import { useShortcutHandlers, useBindings, eventToCombo, comboLabel, FIXED_SHORTCUTS } from './shortcutsStore'
 
-interface PendingIssue { sectionIndex: number; sectionLabel: string; field: string; issue: ValueIssue }
+interface PendingIssue { sectionIndex: number; sectionKey: string; sectionLabel: string; field: string; issue: ValueIssue; blocking?: boolean }
 
 // Excludes the reference-range editor's own <input> (see RangeEditor's data-range-editor
 // attribute) — without that, opening a range editor mid-entry would insert it into the Tab/Enter/
@@ -26,7 +38,12 @@ const RangeOverridesContext = createContext<{
   // Whether the active section's reference column is hidden lab-wide (see the "Show reference
   // values" checkbox in ResultEntry) — a section-level on/off, not per-field like overrides above.
   hideReference: boolean
-}>({ overrides: {}, setOverride: () => {}, hideReference: false })
+  // Lab-wide unit customizations, threaded the same way as range overrides above — a lab that
+  // reports Haemoglobin in g/L instead of the default gm/dl edits it once here and every report
+  // follows (see setUnitOverride in api.ts).
+  unitOverrides: Record<string, string>
+  setUnit: (key: string, unit: string | null) => void
+}>({ overrides: {}, setOverride: () => {}, hideReference: false, unitOverrides: {}, setUnit: () => {} })
 
 /** The active section's value-check notes (see valueChecks.ts), threaded the same way as range overrides. */
 const ValueChecksContext = createContext<{
@@ -51,6 +68,9 @@ export default function ResultEntry() {
   // sectionKey, e.g. a lab that never wants a reference shown on urine reports. Loaded once here
   // and remembered for every future patient/report, same as range overrides above.
   const [hiddenReferenceSections, setHiddenReferenceSections] = useState<Record<string, boolean>>({})
+  // Lab-wide unit customizations (see api.ts) — loaded once, applied to every patient/report, same
+  // lifecycle as the range overrides above.
+  const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const paneRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef<false | 'first' | 'last'>(false)
@@ -59,10 +79,15 @@ export default function ResultEntry() {
     listPatients().then(setPatients)
     getRangeOverrides().then(setRangeOverrides)
     getHiddenReferenceSections().then(setHiddenReferenceSections)
+    getUnitOverrides().then(setUnitOverrides)
   }, [])
 
   const setOverride = useCallback((key: string, range: string | null) => {
     setRangeOverride(key, range).then(setRangeOverrides)
+  }, [])
+
+  const setUnit = useCallback((key: string, unit: string | null) => {
+    setUnitOverride(key, unit).then(setUnitOverrides)
   }, [])
 
   const toggleReferenceVisibility = useCallback((sectionKey: string, hidden: boolean) => {
@@ -108,6 +133,7 @@ export default function ResultEntry() {
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set())
   const [pendingIssues, setPendingIssues] = useState<PendingIssue[] | null>(null)
 
+  const { valueChecks: valueChecksOn } = useFeatures()
   const issuesBySection = useMemo(() => {
     const out: Record<string, IssuesByField> = {}
     if (!patient) return out
@@ -120,7 +146,7 @@ export default function ResultEntry() {
       out[c.key] = visible
     }
     return out
-  }, [categories, results, dismissed, patient])
+  }, [categories, results, dismissed, patient, valueChecksOn])
 
   useEffect(() => {
     if (!resultsLoaded) return
@@ -173,14 +199,24 @@ export default function ResultEntry() {
   // outstanding first. Suggestions (calculated values) never hold it up.
   const openReview = useCallback(() => {
     if (!patient) return
-    const pending = categories.flatMap((c, sectionIndex) =>
+    // Hard blockers (a differential over 100%) come first, ignore dismissals and the value-checks
+    // switch, and remove the "Review report anyway" way through.
+    const blockers = reportBlockers(categories.map((c) => c.key), results).map((b) => {
+      const sectionIndex = categories.findIndex((c) => c.key === b.sectionKey)
+      return { sectionIndex, sectionKey: b.sectionKey, sectionLabel: categories[sectionIndex].label, field: b.field, issue: b.issue, blocking: true }
+    })
+    const blockerIds = new Set(blockers.map((b) => `${b.sectionKey}:${b.field}:${b.issue.id}`))
+    const soft = categories.flatMap((c, sectionIndex) =>
       Object.entries(issuesBySection[c.key] ?? {}).flatMap(([field, list]) =>
-        list.filter((issue) => issue.level !== 'suggest').map((issue) => ({ sectionIndex, sectionLabel: c.label || 'Others', field, issue }))
+        list
+          .filter((issue) => issue.level !== 'suggest' && !blockerIds.has(`${c.key}:${field}:${issue.id}`))
+          .map((issue) => ({ sectionIndex, sectionKey: c.key, sectionLabel: c.label || 'Others', field, issue }))
       )
     )
+    const pending: PendingIssue[] = [...blockers, ...soft]
     if (pending.length === 0) navigate(`/preview/${patient.id}`, { state: { patient } })
     else setPendingIssues(pending)
-  }, [patient, categories, issuesBySection, navigate])
+  }, [patient, categories, issuesBySection, results, navigate])
 
   const isOthers = active?.key === 'others'
 
@@ -199,38 +235,18 @@ export default function ResultEntry() {
   }, [categories.length])
 
   // These are page-level actions, not "field navigation," so they work no matter what has focus
-  // (or nothing at all) — a plain window listener rather than the pane's onKeyDown, which only
-  // ever sees keydowns whose target is actually inside the results pane (i.e. only fires while a
-  // field there is focused). '?' is skipped while actually typing in a text field so it can still
-  // be typed as a literal character (e.g. in the Others test-name column or CS remarks).
-  useEffect(() => {
-    const onGlobalKey = (e: KeyboardEvent) => {
-      if (e.key === '?') {
-        const target = e.target as HTMLElement
-        const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-        if (isTyping) return
-        e.preventDefault()
-        setShowShortcuts(true)
-        return
-      }
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault()
-        openReview()
-        return
-      }
-      if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        e.preventDefault()
-        goTo(activeIndex + (e.key === 'ArrowUp' ? -1 : 1))
-        return
-      }
-      if (e.key === 'PageUp' || e.key === 'PageDown') {
-        e.preventDefault()
-        goToPatient(e.key === 'PageUp' ? prevPatient : nextPatient)
-      }
-    }
-    window.addEventListener('keydown', onGlobalKey)
-    return () => window.removeEventListener('keydown', onGlobalKey)
-  }, [patient, navigate, goTo, activeIndex, prevPatient, nextPatient, openReview])
+  // (or nothing at all). Which key triggers each is the lab's choice — see shortcutsStore.ts and
+  // Settings → Keyboard shortcuts. A bare character key such as '?' is skipped while typing in a
+  // text field so it can still be typed literally (e.g. in the Others test-name column).
+  const bindingFor = useBindings()
+  useShortcutHandlers({
+    'results.help': () => setShowShortcuts(true),
+    'results.review': openReview,
+    'results.prevSection': () => goTo(activeIndex - 1),
+    'results.nextSection': () => goTo(activeIndex + 1),
+    'results.prevPatient': () => goToPatient(prevPatient),
+    'results.nextPatient': () => goToPatient(nextPatient)
+  })
 
   // Enter, forward-Tab, and Shift+Tab all move straight between value fields — skipping over each
   // row's inline range-fill/edit-range buttons, which sit in the DOM between one row's input and
@@ -240,10 +256,11 @@ export default function ResultEntry() {
   // steps back into the previous section's LAST field, not its first, so backward navigation
   // feels continuous rather than jumping to the top.
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const isEnter = e.key === 'Enter'
-    const isForwardTab = e.key === 'Tab' && !e.shiftKey
-    const isBackwardTab = e.key === 'Tab' && e.shiftKey
-    if (!isEnter && !isForwardTab && !isBackwardTab) return
+    const combo = eventToCombo(e.nativeEvent)
+    if (!combo) return
+    const isBackwardTab = combo === bindingFor('fields.prev')
+    const isForward = combo === bindingFor('fields.next') || combo === bindingFor('fields.nextAlt')
+    if (!isForward && !isBackwardTab) return
     const pane = paneRef.current
     if (!pane) return
     const fields = Array.from(pane.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
@@ -288,14 +305,17 @@ export default function ResultEntry() {
   // to the row editor, so every other consumer of this section's data works off the rest.
   const { __label: _othersLabel, ...visibleData } = activeData
   const totalCount = isOthers ? Object.keys(visibleData).length : SECTION_FIELD_KEYS[active.key]?.length ?? 0
-  // A '_method' key (Serology's "kit/method used" note, see FieldRow) is an annotation on its
-  // own field, not a test of its own — it must not inflate this count past the section's real
-  // field total.
-  const filledCount = Object.entries(visibleData).filter(([k, v]) => !k.endsWith('_method') && v && v.trim() !== '').length
+  // For a fixed section, "X of Y entered" only counts the section's real schema fields — never the
+  // annotation/metadata keys that also live in the same data object (Serology's "_method" kit
+  // notes, Mantoux's injection/reading date-time), which would otherwise push the count past Y.
+  // 'others' has no fixed schema, so it counts every typed row instead.
+  const filledCount = isOthers
+    ? Object.entries(visibleData).filter(([k, v]) => !k.endsWith('_method') && v && v.trim() !== '').length
+    : (SECTION_FIELD_KEYS[active.key] ?? []).filter((k) => visibleData[k] && visibleData[k].trim() !== '').length
   const completion = getCompletionState(active.key, visibleData)
 
   return (
-    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride, hideReference: !!hiddenReferenceSections[active.key] }}>
+    <RangeOverridesContext.Provider value={{ overrides: rangeOverrides, setOverride, hideReference: !!hiddenReferenceSections[active.key], unitOverrides, setUnit }}>
     <ValueChecksContext.Provider value={{ issues: issuesBySection[active.key] ?? {}, dismiss: dismissIssue }}>
       <div className="flex flex-col h-full">
         {/* Patient context bar */}
@@ -505,31 +525,27 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const bindingFor = useBindings()
+  const live = (id: Parameters<typeof bindingFor>[0], description: string) => ({ keys: comboLabel(bindingFor(id)), description })
+
+  // The navigate/action keys are whatever the lab has set in Settings; the field keys are fixed.
   const groups: { label: string; shortcuts: { keys: string; description: string }[] }[] = [
     {
       label: 'Fields',
-      shortcuts: [
-        { keys: 'Tab', description: 'Next field' },
-        { keys: 'Shift Tab', description: 'Previous field' },
-        { keys: 'Enter', description: 'Same as Tab' },
-        { keys: '↑ / ↓', description: 'Step by the range’s precision' },
-        { keys: 'Shift ↑ / ↓', description: 'Bigger, rounder step' },
-        { keys: 'Esc', description: 'Clear field, or exit if empty' }
-      ]
+      shortcuts: [live('fields.next', 'Next field'), live('fields.nextAlt', 'Next field (alternate)'), live('fields.prev', 'Previous field'), ...FIXED_SHORTCUTS]
     },
     {
       label: 'Navigate',
       shortcuts: [
-        { keys: 'Ctrl ↑ / ↓', description: 'Previous / next section' },
-        { keys: 'Page Up/Dn', description: 'Previous / next patient' }
+        live('results.prevSection', 'Previous section'),
+        live('results.nextSection', 'Next section'),
+        live('results.prevPatient', 'Previous patient'),
+        live('results.nextPatient', 'Next patient')
       ]
     },
     {
       label: 'Actions',
-      shortcuts: [
-        { keys: 'Ctrl Enter', description: 'Review report' },
-        { keys: '?', description: 'Open this guide' }
-      ]
+      shortcuts: [live('results.review', 'Review report'), live('results.help', 'Open this guide')]
     }
   ]
 
@@ -556,7 +572,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
             <X size={15} />
           </button>
         </div>
-        <p className="text-[13px] text-[var(--ink-3)] mb-5">Enter results faster without touching the mouse.</p>
+        <p className="text-[13px] text-[var(--ink-3)] mb-5">Enter results faster without touching the mouse. Change these in Settings → Keyboard shortcuts.</p>
 
         <div className="space-y-4">
           {groups.map(({ label, shortcuts }) => (
@@ -564,7 +580,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
               <div className="text-[10.5px] font-bold uppercase tracking-widest text-[var(--ink-4)] mb-2">{label}</div>
               <div className="grid gap-x-3 gap-y-1.5" style={{ gridTemplateColumns: 'auto 1fr' }}>
                 {shortcuts.map(({ keys, description }) => (
-                  <div key={keys} className="contents">
+                  <div key={description} className="contents">
                     <span
                       className="justify-self-start text-[12px] font-semibold text-[var(--ink)] bg-[var(--bg-app)] border border-[var(--border)] rounded-md px-2 py-1 whitespace-nowrap"
                       style={{ fontFamily: 'Consolas, monospace' }}
@@ -592,32 +608,6 @@ function coarseStepFor(value: number, fineStep: number): number {
   const magnitude = value === 0 ? 0 : Math.floor(Math.log10(Math.abs(value)))
   const candidate = Math.pow(10, Math.max(magnitude - 1, 0))
   return Math.max(candidate, fineStep * 10)
-}
-
-// Splits a "low–high[ unit]" range string (e.g. "13.0–17.0 gm/dl", "4.6-6.0 m/cumm", "-2 to +2")
-// into separate low/high numbers plus the trailing unit text, so RangeEditor can offer two plain
-// number boxes instead of one free-text box. Anchored at the start specifically so single-bound
-// ranges ("Upto 140.0 mg/dl", "> 40 mg/dl", "Negative") don't false-match — those fall back to
-// the old single free-text box, since "low/high" doesn't mean anything for them.
-function parseLowHigh(range: string): { low: string; high: string; suffix: string; usesTo: boolean } | null {
-  const m = range.match(/^(-?\d+(?:\.\d+)?)\s*(to|[–-])\s*\+?(-?\d+(?:\.\d+)?)\s*(.*)$/i)
-  if (!m) return null
-  return { low: m[1], high: m[3], suffix: m[4].trim(), usesTo: /to/i.test(m[2]) }
-}
-
-function formatLowHigh(low: string, high: string, suffix: string, usesTo: boolean): string {
-  const suffixPart = suffix ? ` ${suffix}` : ''
-  if (usesTo) {
-    const highNum = parseFloat(high)
-    const highStr = !isNaN(highNum) && highNum >= 0 ? `+${high}` : high
-    return `${low} to ${highStr}${suffixPart}`
-  }
-  return `${low}–${high}${suffixPart}`
-}
-
-function decimalPlacesOf(numStr: string): number {
-  const i = numStr.indexOf('.')
-  return i === -1 ? 0 : numStr.length - i - 1
 }
 
 function Dot({ state }: { state: CompletionState }) {
@@ -662,7 +652,9 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const labelFor = useLabels()
   const critical = issues.filter((i) => i.issue.level === 'critical').length
+  const blocked = issues.some((i) => i.blocking)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26, 36, 48, 0.35)' }} onClick={onClose}>
@@ -674,16 +666,17 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
         <div className="flex items-center gap-2 mb-1">
           <AlertTriangle size={17} className="text-[var(--warning)]" />
           <h2 className="text-[16px] font-semibold text-[var(--ink)]">
-            {issues.length} value{issues.length === 1 ? '' : 's'} to check before the report
+            {blocked ? 'The report is blocked until this is fixed' : `${issues.length} value${issues.length === 1 ? '' : 's'} to check before the report`}
           </h2>
         </div>
         <p className="text-[13px] text-[var(--ink-3)] mb-4">
-          {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'} — inform the referring doctor. ` : ''}
+          {blocked ? 'A report with impossible values can’t be viewed, printed or saved. ' : ''}
+          {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'}. Inform the referring doctor. ` : ''}
           Click one to jump to it.
         </p>
 
         <div className="overflow-y-auto -mx-1 px-1 space-y-1.5 mb-5">
-          {issues.map(({ sectionIndex, sectionLabel, field, issue }) => {
+          {issues.map(({ sectionIndex, sectionKey, sectionLabel, field, issue }) => {
             const tone = ISSUE_TONES[issue.level]
             return (
               <button
@@ -695,7 +688,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
               >
                 <tone.Icon size={14} className="flex-shrink-0 mt-[3px]" />
                 <span className="text-[13px] leading-snug">
-                  <span className="font-semibold">{sectionLabel} · {humanizeKey(field)}</span> — {issue.message}
+                  <span className="font-semibold">{sectionLabel} · {labelFor(sectionKey, field)}</span>: {issue.message}
                 </span>
               </button>
             )
@@ -710,13 +703,15 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
           >
             Back to results
           </button>
-          <button
-            type="button"
-            onClick={onContinue}
-            className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
-          >
-            Review report anyway
-          </button>
+          {!blocked && (
+            <button
+              type="button"
+              onClick={onContinue}
+              className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
+            >
+              Review report anyway
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -729,24 +724,39 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
   // SerologyResult's `_method` fields and docs/value-checks.md.
   methodValue?: string; onMethodChange?: (v: string) => void
 }) {
-  const { overrides, setOverride, hideReference } = useContext(RangeOverridesContext)
+  const { overrides, setOverride, hideReference, unitOverrides, setUnit } = useContext(RangeOverridesContext)
   const { issues: sectionIssues, dismiss } = useContext(ValueChecksContext)
   const issues = sectionIssues[fieldKey] ?? []
   const checkBorder = issues.some((i) => i.level === 'critical') ? 'var(--danger)' : issues.some((i) => i.level === 'check') ? 'var(--warning)' : undefined
   const [editing, setEditing] = useState(false)
+  const [editingUnit, setEditingUnit] = useState(false)
   // Collapsed by default so a section with a method box on every row doesn't turn into a wall of
   // empty inputs — most tests just use the lab's normal method and never need this. Starts open
   // if a note is already saved, so nothing already filled in ever hides itself.
   const [showMethod, setShowMethod] = useState(!!methodValue)
 
-  const label = humanizeKey(fieldKey)
-  const unit = unitFor(sectionKey, fieldKey)
-  const range = getReferenceRange(sectionKey, fieldKey, gender, overrides)
+  const labelFor = useLabels()
+  const label = labelFor(sectionKey, fieldKey)
+  const unit = unitFor(sectionKey, fieldKey, unitOverrides)
+  const unitKey = unitOverrideKey(sectionKey, fieldKey)
+  const unitIsOverridden = unitOverrides[unitKey] !== undefined
+  const range = getReferenceRange(sectionKey, fieldKey, gender, overrides, unitOverrides)
   const key = rangeOverrideKey(sectionKey, fieldKey, gender)
   const isOverridden = overrides[key] !== undefined
-  const flag = flagFor(value, range, fieldKey)
+  useFeatures() // re-render if highlighting is switched on/off
+  useRangeSpecs() // ...or a range is edited
+  const flag = flagFor(value, range, fieldKey, { sectionKey, gender })
   const flagColor = flag ? 'var(--danger)' : undefined
   const rangeInfo = numericRangeInfo(range)
+  // Every way a value gets set — typing, arrow keys, "use this range", a suggested fix — comes out
+  // with thousands separators ("20000" -> "20,000"), so the sheet and the report read the same.
+  const setValue = (text: string) => onChange(formatThousands(text).text)
+  const numberInput = useNumberInput(onChange)
+  // What the range editor opens on: the range's real kind (the lab's own edit, else read once from
+  // the text), or a blank "between" when the reference has been hidden and is being brought back.
+  const startingSpec: RangeSpec = range
+    ? effectiveSpec(range, fieldKey, { sectionKey, gender }) ?? { kind: 'text', text: range, flag: false }
+    : { kind: 'between', a: '', b: '', flag: true }
   const options = optionsFor(sectionKey, fieldKey)
   const longestOption = options ? options.reduce((longest, opt) => (opt.length > longest.length ? opt : longest), '') : ''
 
@@ -768,16 +778,17 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
     if (!rangeInfo || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
     if (e.ctrlKey || e.metaKey || e.altKey) return // let Ctrl+Arrow bubble up to the pane's section-jump shortcut
     e.preventDefault()
-    const current = value.trim() === '' ? NaN : parseFloat(value)
+    const parsed = parseResultNumber(value)
+    const current = parsed === null ? NaN : parsed
     if (isNaN(current)) {
       const mid = (rangeInfo.min + rangeInfo.max) / 2
-      onChange(mid.toFixed(rangeInfo.decimals))
+      setValue(mid.toFixed(rangeInfo.decimals))
       return
     }
     const dir = e.key === 'ArrowUp' ? 1 : -1
     const step = e.shiftKey ? coarseStepFor(current, rangeInfo.step) : rangeInfo.step
     const ticks = Math.round(current / step) + dir
-    onChange((ticks * step).toFixed(rangeInfo.decimals))
+    setValue((ticks * step).toFixed(rangeInfo.decimals))
   }
 
   return (
@@ -794,9 +805,9 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
           className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           // Wide enough for the longest option's own text (e.g. Widal's "Positive 1:160 dilution")
           // so the closed box doesn't clip it — a plain Negative/Positive field just gets 8.5rem.
-          style={{ width: `${Math.max(8.5, longestOption.length * 0.5 + 2.5)}rem`, borderColor: checkBorder ?? 'var(--border-strong)', color: 'var(--ink)' }}
+          style={{ width: `${Math.max(8.5, longestOption.length * 0.5 + 2.5)}rem`, borderColor: checkBorder ?? 'var(--border-strong)', color: value ? 'var(--ink)' : 'var(--ink-4)' }}
         >
-          <option value="">—</option>
+          <option value="">Select</option>
           {options.map((opt) => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
@@ -805,32 +816,64 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
         </select>
       ) : (
         <input
+          ref={numberInput.ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={numberInput.onChange}
           onKeyDown={handleValueKeyDown}
           className="text-center text-[15px] px-2 py-1.5 rounded-lg border bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           style={{ width: '7rem', fontFamily: 'Consolas, monospace', borderColor: flagColor ?? checkBorder ?? 'var(--border-strong)', color: flagColor ?? 'var(--ink)', fontWeight: flag ? 600 : 400 }}
         />
       )}
-      <span className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0" style={{ width: '6rem' }}>{unit}</span>
+      {editingUnit ? (
+        <UnitEditor
+          initial={unit}
+          defaultUnit={defaultUnitFor(sectionKey, fieldKey)}
+          isOverridden={unitIsOverridden}
+          onCancel={() => setEditingUnit(false)}
+          onSave={(next) => { setUnit(unitKey, next); setEditingUnit(false) }}
+          onReset={() => { setUnit(unitKey, null); setEditingUnit(false) }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditingUnit(true)}
+          title="Edit the unit for this test (applies to every patient)"
+          className="text-[13.5px] text-[var(--ink-2)] flex-shrink-0 text-left rounded-md px-1.5 py-0.5 hover:bg-[var(--bg-hover)] hover:text-[var(--ink)] transition-colors truncate"
+          style={{ width: '6rem' }}
+        >
+          {unit || <span className="text-[var(--ink-4)] italic">unit</span>}
+        </button>
+      )}
 
-      <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
-        {hideReference ? null : editing ? (
-          <RangeEditor
-            initial={range}
-            defaultRange={defaultReferenceRange(sectionKey, fieldKey, gender)}
-            isOverridden={isOverridden}
-            onCancel={() => setEditing(false)}
-            onSave={(next) => { setOverride(key, next); setEditing(false) }}
-            onReset={() => { setOverride(key, null); setEditing(false) }}
-          />
-        ) : (
+      <div className="relative flex-1 flex items-center justify-end gap-1 min-w-0">
+        {hideReference ? null : (
           <>
+            {editing && (
+              <>
+                {/* Clicking anywhere else closes the card without saving. */}
+                <div className="fixed inset-0 z-20" onClick={() => setEditing(false)} />
+                <div className="absolute right-0 top-full mt-2 z-30">
+                  <RangeEditor
+                    title={label}
+                    unit={unit}
+                    initial={startingSpec}
+                    isOverridden={isOverridden}
+                    defaultText={defaultReferenceRange(sectionKey, fieldKey, gender)}
+                    removeLabel="Hide"
+                    removeTitle="Hide the reference for just this test"
+                    onCancel={() => setEditing(false)}
+                    onSave={(spec, text) => { setOverride(key, text); saveRangeSpec(key, spec); setEditing(false) }}
+                    onReset={() => { setOverride(key, null); saveRangeSpec(key, null); setEditing(false) }}
+                    onRemove={range || defaultReferenceRange(sectionKey, fieldKey, gender) ? () => { setOverride(key, ''); saveRangeSpec(key, null); setEditing(false) } : undefined}
+                  />
+                </div>
+              </>
+            )}
             {range && (
               !value ? (
                 <button
                   type="button"
-                  onClick={() => onChange(defaultValueForRange(range))}
+                  onClick={() => setValue(defaultValueForRange(range))}
                   title="Use this range as the starting value"
                   className="text-[13px] text-[var(--ink-2)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-soft)] whitespace-nowrap rounded-md px-1.5 py-0.5 transition-colors truncate"
                 >
@@ -847,7 +890,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
             <button
               type="button"
               onClick={() => setEditing(true)}
-              title={isOverridden ? (range ? 'Custom range — click to edit or reset to default' : 'Reference hidden for this test — click to add one back') : 'Edit reference range for every patient'}
+              title={isOverridden ? (range ? 'Custom range. Click to edit or reset to default' : 'Reference hidden for this test. Click to add one back') : 'Edit reference range for every patient'}
               className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors ${
                 isOverridden ? 'text-[var(--accent)] hover:bg-[var(--accent-soft)]' : 'text-[var(--border-strong)] hover:text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'
               }`}
@@ -861,7 +904,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
       {issues.length > 0 && (
         <div style={{ marginLeft: 'calc(13rem + 0.75rem)' }}>
           {issues.map((issue) => (
-            <IssueNote key={issue.id} issue={issue} onFix={onChange} onDismiss={() => dismiss(fieldKey, issue.id)} />
+            <IssueNote key={issue.id} issue={issue} onFix={setValue} onDismiss={() => dismiss(fieldKey, issue.id)} />
           ))}
         </div>
       )}
@@ -873,7 +916,7 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
               value={methodValue ?? ''}
               onChange={(e) => onMethodChange(e.target.value)}
               onBlur={() => { if (!methodValue) setShowMethod(false) }}
-              placeholder="Method / kit used — prints under the result"
+              placeholder="Method / kit used (prints under the result)"
               className="w-full max-w-xs text-[12.5px] px-2 py-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
             />
           ) : (
@@ -892,136 +935,58 @@ function FieldRow({ sectionKey, fieldKey, gender, value, onChange, indent, metho
 }
 
 /**
- * Inline popover-style editor for a field's reference range — no modal, no navigating away from
- * Result Entry, since the whole point is editing the range right where staff already notice it
- * looks wrong. Most ranges are a plain "low–high[ unit]" (Haemoglobin, RBC Count, etc.), so those
- * get two number boxes — native spinner + arrow-key increment/decrement built in — instead of
- * retyping the whole string by hand. A range that doesn't parse as low/high (e.g. "Upto 140.0
- * mg/dl", "> 40 mg/dl", "Negative") falls back to the original single free-text box.
+ * Inline editor for a field's unit — one free-text box, since a unit ("gm/dl", "cells/cumm",
+ * "/HPF") is always just a short string with no low/high structure. Clearing it and saving is a
+ * real, deliberate choice (some fields legitimately have no unit), so a blank save is allowed;
+ * "Reset" restores the built-in default (see setUnitOverride / defaultUnitFor).
  */
-function RangeEditor({ initial, defaultRange, isOverridden, onCancel, onSave, onReset }: {
-  initial: string; defaultRange: string; isOverridden: boolean
-  onCancel: () => void; onSave: (range: string) => void; onReset: () => void
+function UnitEditor({ initial, defaultUnit, isOverridden, onCancel, onSave, onReset }: {
+  initial: string; defaultUnit: string; isOverridden: boolean
+  onCancel: () => void; onSave: (unit: string) => void; onReset: () => void
 }) {
-  const parsed = useMemo(() => parseLowHigh(initial), [initial])
-  const [lowDraft, setLowDraft] = useState(parsed?.low ?? '')
-  const [highDraft, setHighDraft] = useState(parsed?.high ?? '')
-  const [rawDraft, setRawDraft] = useState(initial)
-  const lowRef = useRef<HTMLInputElement>(null)
-  const rawRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState(initial)
+  const ref = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (parsed) { lowRef.current?.focus(); lowRef.current?.select() }
-    else { rawRef.current?.focus(); rawRef.current?.select() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
 
-  const stopAndHandle = (onCommit: () => void) => (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); onCommit() }
+  const commit = () => onSave(draft.trim())
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit() }
     if (e.key === 'Escape') { e.preventDefault(); onCancel() }
     e.stopPropagation()
   }
 
-  if (!parsed) {
-    // Saving with the box cleared is deliberate, not blocked: an explicit blank override hides
-    // just this field's reference (see setRangeOverride in api.ts) without touching the
-    // section-wide "Show reference values" checkbox — clear it, hit save, the pencil stays put
-    // to bring a reference back later.
-    const commitRaw = () => onSave(rawDraft.trim())
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          ref={rawRef}
-          data-range-editor="true"
-          value={rawDraft}
-          onChange={(e) => setRawDraft(e.target.value)}
-          onKeyDown={stopAndHandle(commitRaw)}
-          placeholder="e.g. Upto 140.0 mg/dl — leave blank to hide"
-          className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
-          style={{ width: '13rem' }}
-        />
-        <button type="button" onClick={commitRaw} title="Save — applies to every patient (leave blank to hide this reference)" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
-          <CheckCircle2 size={14} />
-        </button>
-        {isOverridden && (
-          <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
-            Reset
-          </button>
-        )}
-        {defaultRange && (
-          <button type="button" onClick={() => onSave('')} title="Hide this reference from the report" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
-            Remove
-          </button>
-        )}
-        <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
-          <X size={14} />
-        </button>
-      </div>
-    )
-  }
-
-  const decimals = Math.max(decimalPlacesOf(parsed.low), decimalPlacesOf(parsed.high))
-  const step = decimals > 0 ? 1 / 10 ** decimals : 1
-  const lowInvalid = lowDraft.trim() === '' || isNaN(parseFloat(lowDraft))
-  const highInvalid = highDraft.trim() === '' || isNaN(parseFloat(highDraft))
-  const hasInvalid = lowInvalid || highInvalid
-  const commit = () => { if (!hasInvalid) onSave(formatLowHigh(lowDraft.trim(), highDraft.trim(), parsed.suffix, parsed.usesTo)) }
-  const boxClass = (invalid: boolean) =>
-    `text-[13px] text-center px-1.5 py-1 rounded-md border bg-[var(--surface)] focus:outline-none ${invalid ? 'border-[var(--danger)]' : 'border-[var(--accent)]'}`
-
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 flex-shrink-0">
       <input
-        ref={lowRef}
+        ref={ref}
         data-range-editor="true"
-        type="number"
-        step={step}
-        value={lowDraft}
-        onChange={(e) => setLowDraft(e.target.value)}
-        onKeyDown={stopAndHandle(commit)}
-        title="Low end of the range"
-        className={boxClass(lowInvalid)}
-        style={{ width: '4.5rem', fontFamily: 'Consolas, monospace' }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="e.g. gm/dl"
+        className="text-[13px] px-2 py-1 rounded-md border border-[var(--accent)] bg-[var(--surface)] focus:outline-none"
+        style={{ width: '7rem' }}
       />
-      <span className="text-[12px] text-[var(--ink-3)]">–</span>
-      <input
-        data-range-editor="true"
-        type="number"
-        step={step}
-        value={highDraft}
-        onChange={(e) => setHighDraft(e.target.value)}
-        onKeyDown={stopAndHandle(commit)}
-        title="High end of the range"
-        className={boxClass(highInvalid)}
-        style={{ width: '4.5rem', fontFamily: 'Consolas, monospace' }}
-      />
-      {parsed.suffix && <span className="text-[12px] text-[var(--ink-3)] whitespace-nowrap px-0.5">{parsed.suffix}</span>}
-      {hasInvalid && <AlertTriangle size={14} className="text-[var(--danger)] flex-shrink-0" title="Both ends of the range need a number" />}
-      <button
-        type="button"
-        onClick={commit}
-        disabled={hasInvalid}
-        title={hasInvalid ? 'Enter a number for both ends' : 'Save — applies to every patient'}
-        className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)] disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+      <button type="button" onClick={commit} title="Save for every patient" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--success)] hover:bg-[var(--success-soft)]">
         <CheckCircle2 size={14} />
       </button>
       {isOverridden && (
-        <button type="button" onClick={onReset} title={`Reset to default: ${defaultRange || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
+        <button type="button" onClick={onReset} title={`Reset to default: ${defaultUnit || '(none)'}`} className="text-[11px] text-[var(--ink-3)] hover:text-[var(--accent-ink)] underline whitespace-nowrap">
           Reset
         </button>
       )}
-      {/* Two required number boxes can't themselves go blank the way the free-text editor's one
-          box can, so hiding this field's reference gets its own explicit action instead — same
-          effect as clearing and saving there (see setRangeOverride in api.ts). */}
-      <button type="button" onClick={() => onSave('')} title="Hide the reference for just this test" className="text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)] underline whitespace-nowrap">
-        Remove
-      </button>
       <button type="button" onClick={onCancel} title="Cancel" className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:bg-[var(--bg-hover)]">
         <X size={14} />
       </button>
     </div>
   )
+}
+
+/** A result box that adds thousands separators as a number is typed (see useNumberInput). */
+function NumberInput({ value, onCommit, ...rest }: { value: string; onCommit: (text: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const n = useNumberInput(onCommit)
+  return <input ref={n.ref} value={value} onChange={n.onChange} {...rest} />
 }
 
 /**
@@ -1056,6 +1021,38 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
     commit(rows.filter((_, i) => i !== index))
   }
 
+  const { tests: savedTests } = useSavedTests()
+  const listId = useId()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const inRows = (name: string) => rows.some((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase())
+  const pickable = savedTests.filter((t) => !inRows(t.name))
+
+  // When a row's name matches a saved test (typed in full or chosen from the suggestions), fill in
+  // its usual unit and reference range — but only into blanks, never over something just typed.
+  // Then, if the row now has a name and a result, remember it for next time (see savedTestsStore).
+  const prefillRow = (index: number) => {
+    const row = rows[index]
+    if (!row) return
+    const hit = findSavedTest(row.name)
+    if (!hit) return
+    // Adopt the saved spelling ("vitamin b12" -> "Vitamin B12") so the same test always prints the same way.
+    const patch: Partial<typeof row> = {}
+    if (row.name !== hit.name) patch.name = hit.name
+    if (!row.unit && !row.reference && (hit.unit || hit.reference)) {
+      patch.unit = hit.unit
+      patch.reference = hit.reference
+    }
+    if (Object.keys(patch).length > 0) setRow(index, patch)
+  }
+
+  // Remembering waits until focus leaves the whole row, not just one box, so the unit and reference
+  // typed after the result are included in what gets saved.
+  const rememberRow = (index: number, e: React.FocusEvent<HTMLElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    const row = rows[index]
+    if (row) void rememberOtherRow(row)
+  }
+
   const addRow = () => {
     commit([...rows, { name: '', value: '', unit: '', reference: '' }])
   }
@@ -1070,20 +1067,38 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
         <span className="w-8 flex-shrink-0" />
       </div>
       {rows.map(({ name, value, unit, reference }, i) => (
-        <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[var(--border-soft)]">
-          <input
-            value={name}
-            onChange={(e) => setRow(i, { name: e.target.value })}
-            placeholder="Test name"
-            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] flex-1 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-          />
-          <input
-            value={value}
-            onChange={(e) => setRow(i, { value: e.target.value })}
-            placeholder="Result"
-            className="text-[15px] px-2.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-            style={{ width: '9rem', fontFamily: 'Consolas, monospace' }}
-          />
+        <div key={i} className="flex items-center gap-3 py-2.5 border-b border-[var(--border-soft)]" onBlur={(e) => rememberRow(i, e)}>
+          <div className="relative flex-1">
+            <input
+              value={name}
+              list={listId}
+              onChange={(e) => setRow(i, { name: e.target.value })}
+              onBlur={() => prefillRow(i)}
+              placeholder="Test name"
+              className="w-full text-[15px] pl-2.5 pr-8 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+            />
+            {findSavedTest(name) && (
+              <span title="Saved in your test list" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--accent)]">
+                <BookmarkCheck size={15} />
+              </span>
+            )}
+          </div>
+          {(() => {
+            // Same red highlight as the fixed sections, judged against this row's own reference range.
+            const flag = flagFor(value, reference)
+            return (
+              <div className="relative flex-shrink-0" style={{ width: '9rem' }}>
+                <NumberInput
+                  value={value}
+                  onCommit={(v) => setRow(i, { value: v })}
+                  placeholder="Result"
+                  className="w-full text-[15px] pl-2.5 pr-7 py-1.5 rounded-lg border bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
+                  style={{ fontFamily: 'Consolas, monospace', borderColor: flag ? 'var(--danger)' : 'var(--border-strong)', color: flag ? 'var(--danger)' : undefined, fontWeight: flag ? 600 : undefined }}
+                />
+                {flag && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[13px]" style={{ color: 'var(--danger)' }} title={flag === 'high' ? 'Above the reference range' : 'Below the reference range'}>{flag === 'high' ? '▲' : '▼'}</span>}
+              </div>
+            )
+          })()}
           <input
             value={unit}
             onChange={(e) => setRow(i, { unit: e.target.value })}
@@ -1109,14 +1124,55 @@ function OthersEditor({ data, onReplace }: { data: Record<string, string>; onRep
         </div>
       ))}
 
-      <button
-        type="button"
-        onClick={addRow}
-        className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--accent-ink)] bg-[var(--accent-soft)] rounded-xl hover:bg-[var(--accent-soft-border)]"
-      >
-        <Plus size={14} />
-        Add test
-      </button>
+      <datalist id={listId}>
+        {savedTests.map((t) => <option key={t.name} value={t.name} />)}
+      </datalist>
+
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={addRow}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--accent-ink)] bg-[var(--accent-soft)] rounded-xl hover:bg-[var(--accent-soft-border)]"
+        >
+          <Plus size={14} />
+          Add test
+        </button>
+
+        {pickable.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-[var(--ink-2)] border border-[var(--border-strong)] rounded-xl hover:bg-[var(--bg-hover)]"
+            >
+              <BookmarkCheck size={14} />
+              Add a saved test
+              <ChevronDown size={14} />
+            </button>
+            {pickerOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
+                <div className="absolute left-0 top-full mt-1.5 z-20 w-80 max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg py-1">
+                  {pickable.map((t) => (
+                    <button
+                      key={t.name}
+                      type="button"
+                      onClick={() => {
+                        commit([...rows, { name: t.name, value: '', unit: t.unit, reference: t.reference }])
+                        setPickerOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--bg-hover)]"
+                    >
+                      <span className="block text-[14px] text-[var(--ink)]">{t.name}</span>
+                      {(t.unit || t.reference) && <span className="block text-[12px] text-[var(--ink-3)]">{[t.unit, t.reference].filter(Boolean).join(' · ')}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -1130,7 +1186,27 @@ function SubHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
+/** A section's own fields, followed by any tests the lab added to it in Settings → Test names. */
+function SectionBody(props: {
+  sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void; onReplace: (next: Record<string, string>) => void
+}) {
+  const added = useCustomTests()[props.sectionKey] ?? []
+  if (props.sectionKey === 'others' || added.length === 0) return <BuiltInSectionBody {...props} />
+  return (
+    <>
+      <BuiltInSectionBody {...props} />
+      <div>
+        <SubHeading>Added tests</SubHeading>
+        {added.map((t) => {
+          const key = customKey(t.id)
+          return <FieldRow key={t.id} sectionKey={props.sectionKey} fieldKey={key} gender={props.gender} value={props.data[key] ?? ''} onChange={(val) => props.onChange(key, val)} />
+        })}
+      </div>
+    </>
+  )
+}
+
+function BuiltInSectionBody({ sectionKey, gender, data, onChange, onReplace }: {
   sectionKey: string; gender: string; data: Record<string, string>; onChange: (f: string, v: string) => void; onReplace: (next: Record<string, string>) => void
 }) {
   const v = (k: string) => data[k] ?? ''
@@ -1200,6 +1276,40 @@ function SectionBody({ sectionKey, gender, data, onChange, onReplace }: {
             className="w-full px-3.5 py-2.5 text-[15px] border border-[var(--border-strong)] rounded-xl bg-[var(--surface)] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
           />
         </div>
+      </div>
+    )
+  }
+
+  if (sectionKey === 'mantoux') {
+    // Two-visit test: PPD injected on day 0, induration read 48-72h later. The two date/time
+    // pairs are metadata, not test-value rows (no unit/reference/flag), so they get their own
+    // date+time pickers up top rather than going through FieldRow. They're stored as extra
+    // columns on the mantoux table (see db.ts) and kept out of SECTION_FIELD_KEYS so they don't
+    // count toward the section's "X of Y entered" total. Left blank by default, fully editable.
+    const dtField = 'w-full px-3 py-2 text-[14px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)] focus:border-[var(--accent)]'
+    return (
+      <div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 max-w-lg">
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection date</label>
+            <DatePicker value={v('injection_date')} onChange={set('injection_date')} className={dtField} ariaLabel="Injection date" />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Injection time</label>
+            <TimePicker value={v('injection_time')} onChange={set('injection_time')} className={dtField} ariaLabel="Injection time" />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading date</label>
+            <DatePicker value={v('reading_date')} onChange={set('reading_date')} className={dtField} ariaLabel="Reading date" />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-[var(--ink-2)] mb-1">Reading time</label>
+            <TimePicker value={v('reading_time')} onChange={set('reading_time')} className={dtField} ariaLabel="Reading time" />
+          </div>
+        </div>
+        {(SECTION_FIELD_KEYS.mantoux ?? []).map((k) => (
+          <FieldRow key={k} sectionKey={sectionKey} fieldKey={k} gender={gender} value={v(k)} onChange={set(k)} />
+        ))}
       </div>
     )
   }

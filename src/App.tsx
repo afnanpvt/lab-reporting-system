@@ -7,16 +7,21 @@ import PatientEntry from './pages/site/PatientEntry'
 import ResultEntry from './pages/site/ResultEntry'
 import ReportPreview from './pages/site/ReportPreview'
 import Settings from './pages/site/Settings'
+import TestNames from './pages/site/TestNames'
 import Doctors from './pages/site/Doctors'
 import DoctorEntry from './pages/site/DoctorEntry'
 import IncentiveReport from './pages/site/IncentiveReport'
+import DoctorDetail from './pages/site/DoctorDetail'
 import Reports from './pages/site/Reports'
+import Analytics from './pages/site/Analytics'
 import Bill from './pages/site/Bill'
 import TrialExpired from './pages/site/TrialExpired'
+import { useFeatures } from './pages/site/featuresStore'
 import { refreshLicense, useLicense } from './pages/site/licenseStore'
 
 export default function App() {
   const license = useLicense()
+  const { analytics } = useFeatures()
 
   useEffect(() => {
     refreshLicense()
@@ -37,9 +42,12 @@ export default function App() {
         <Route path="/bill/:id" element={<Bill />} />
         <Route path="/doctors" element={<Doctors />} />
         <Route path="/doctors/new" element={<DoctorEntry />} />
-        <Route path="/doctors/:id" element={<IncentiveReport />} />
+        <Route path="/doctors/:id" element={<DoctorDetail />} />
+        <Route path="/doctors/:id/report" element={<IncentiveReport />} />
+        <Route path="/analytics" element={analytics === false ? <Navigate to="/" replace /> : analytics === null ? null : <Analytics />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/test-names" element={<TestNames />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

@@ -1,4 +1,6 @@
-import { humanizeKey, unitFor } from './reportFields'
+import { unitFor } from './reportFields'
+import { labelFor } from './labelsStore'
+import { isValueChecksOn } from './featuresStore'
 
 /**
  * Entry-time sanity checks for Result Entry. These are deliberately separate from reference
@@ -165,11 +167,11 @@ const ALBUMIN_G_L: Slip = { when: (n) => n >= 10, to: (n) => fmt(n / 10, 1), why
 const SLIPS: Record<string, Record<string, Slip[]>> = {
   haematology: {
     haemoglobin: [{ when: (n) => n >= 60 && n <= 250, to: (n) => fmt(n / 10, 1), why: 'looks like g/L' }],
-    rbc_count: [{ when: (n) => n >= 10000, to: (n) => fmt(n / 1e6, 2), why: 'looks like a count per cumm — this field is in millions' }],
+    rbc_count: [{ when: (n) => n >= 10000, to: (n) => fmt(n / 1e6, 2), why: 'looks like a count per cumm, but this field is in millions' }],
     total_wbc: [{ when: (n, raw) => n < 100 && raw.includes('.'), to: (n) => fmt(n * 1000, 0), why: 'looks like thousands (×10³/µL)' }],
     platelet_count: [
-      { when: (n) => n > 20 && n < 5000, to: (n) => fmt(n / 100, 2), why: 'looks like thousands (×10³/µL) — this field is in lakhs' },
-      { when: (n) => n >= 5000, to: (n) => fmt(n / 100000, 2), why: 'looks like a count per cumm — this field is in lakhs' }
+      { when: (n) => n > 20 && n < 5000, to: (n) => fmt(n / 100, 2), why: 'looks like thousands (×10³/µL), but this field is in lakhs' },
+      { when: (n) => n >= 5000, to: (n) => fmt(n / 100000, 2), why: 'looks like a count per cumm, but this field is in lakhs' }
     ]
   },
   biochemistry: {
@@ -194,7 +196,7 @@ const SLIPS: Record<string, Record<string, Slip[]>> = {
   },
   abg_sputum: {
     ph: [{ when: (n) => n >= 60 && n <= 80, to: (n) => fmt(n / 10, 2), why: 'seems to be missing its decimal point' }],
-    fio2: [{ when: (n) => n >= 0.21 && n <= 1, to: (n) => fmt(n * 100, 0), why: 'looks like a fraction — this field is a percentage' }]
+    fio2: [{ when: (n) => n >= 0.21 && n <= 1, to: (n) => fmt(n * 100, 0), why: 'looks like a fraction, but this field is a percentage' }]
   }
 }
 
@@ -263,12 +265,12 @@ function fieldIssue(sectionKey: string, fieldKey: string, raw: string | undefine
     return {
       id: `limit:${typed}`,
       level: 'check',
-      message: `${withUnit(typed, sectionKey, fieldKey)} is outside what's realistic for ${humanizeKey(fieldKey)} (${limit.min}–${limit.max}). Please confirm it isn't a typo.${dilute}`
+      message: `${withUnit(typed, sectionKey, fieldKey)} is outside what's realistic for ${labelFor(sectionKey, fieldKey)} (${limit.min}–${limit.max}). Please confirm it isn't a typo.${dilute}`
     }
   }
 
   if (CRITICAL[sectionKey]?.[fieldKey]?.(n)) {
-    return { id: `critical:${typed}`, level: 'critical', message: 'Critical value — inform the referring doctor.' }
+    return { id: `critical:${typed}`, level: 'critical', message: 'Critical value. Inform the referring doctor.' }
   }
   return null
 }
@@ -323,20 +325,50 @@ function bilirubinAndProtein(section: string, data: Data, issues: IssuesByField)
   }
 }
 
+const DIFFERENTIAL_KEYS = ['neutrophils', 'eosinophils', 'basophils', 'lymphocytes', 'monocytes']
+
+/**
+ * The one check that is not advisory: a differential count above 100% is arithmetically impossible,
+ * so (at the customer's request) the report cannot be viewed, printed or saved until it is fixed.
+ * Unlike every other check it ignores the "Smart value checks" switch and can't be dismissed. Uses
+ * every filled-in differential field, not just the sane ones — 150 in one field is already over.
+ */
+function differentialOver100(data: Data): { field: string; issue: ValueIssue } | null {
+  const filled = DIFFERENTIAL_KEYS.map((k) => ({ k, n: num(data[k]) })).filter((d) => d.n !== null)
+  const sum = filled.reduce((a, d) => a + (d.n as number), 0)
+  if (Math.round(sum * 100) / 100 <= 100) return null
+  const total = fmt(sum, 1)
+  return {
+    field: filled[filled.length - 1].k,
+    issue: { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It can't be more than 100%.` }
+  }
+}
+
+export interface ReportBlocker { sectionKey: string; field: string; issue: ValueIssue }
+
+/** Problems that stop the report from opening at all (see differentialOver100). `results` is keyed by section key. */
+export function reportBlockers(sectionKeys: string[], results: Record<string, Data>): ReportBlocker[] {
+  const out: ReportBlocker[] = []
+  if (sectionKeys.includes('haematology')) {
+    const over = differentialOver100(results.haematology ?? {})
+    if (over) out.push({ sectionKey: 'haematology', ...over })
+  }
+  return out
+}
+
 const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> = {
   haematology: (data, issues) => {
     const s = (k: string) => sane('haematology', data, k)
 
     const dlcKeys = ['neutrophils', 'eosinophils', 'basophils', 'lymphocytes', 'monocytes']
-    const dlc = dlcKeys.map((k) => ({ k, n: s(k) })).filter((d) => d.n !== null)
-    if (dlc.length > 0) {
+    const over = differentialOver100(data)
+    if (over) add(issues, over.field, over.issue)
+    else {
+      const dlc = dlcKeys.map((k) => ({ k, n: s(k) })).filter((d) => d.n !== null)
       const sum = dlc.reduce((a, d) => a + (d.n as number), 0)
-      const anchor = dlc[dlc.length - 1].k
-      const total = fmt(sum, 1)
-      if (sum > 100.5) {
-        add(issues, anchor, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}% — it can't be more than 100%.` })
-      } else if (dlc.length === dlcKeys.length && Math.abs(sum - 100) > 0.5) {
-        add(issues, anchor, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}% — it should total 100%.` })
+      if (dlc.length === dlcKeys.length && Math.abs(sum - 100) > 0.5) {
+        const total = fmt(sum, 1)
+        add(issues, dlc[dlc.length - 1].k, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It should total 100%.` })
       }
     }
 
@@ -355,7 +387,7 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
         add(issues, 'pcv', {
           id: `mchc36:${hb}:${pcv}`,
           level: 'check',
-          message: `Haemoglobin and PCV give an MCHC of ${fmt(mchc, 1)}% — above 36 usually means a measurement error or a lipemic sample.`
+          message: `Haemoglobin and PCV give an MCHC of ${fmt(mchc, 1)}%. Above 36 usually means a measurement error or a lipemic sample.`
         })
       }
       calculated(issues, data, 'mchc', mchc, 1, 0.5, 'Haemoglobin and PCV')
@@ -375,7 +407,7 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
         add(issues, k, {
           id: `esrorder:${previous.n}:${n}`,
           level: 'check',
-          message: `Lower than the earlier ${humanizeKey(previous.k)} reading (${previous.n} mm) — ESR readings can only stay the same or rise over time.`
+          message: `Lower than the earlier ${labelFor('haematology', previous.k)} reading (${previous.n} mm). ESR readings can only stay the same or rise over time.`
         })
       }
       previous = { k, n }
@@ -387,7 +419,7 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
     const pre = sane('biochemistry', data, 'blood_urea_pre')
     const post = sane('biochemistry', data, 'blood_urea_post')
     if (pre !== null && post !== null && post > pre) {
-      add(issues, 'blood_urea_post', { id: `urea:${pre}:${post}`, level: 'check', message: 'Post-dialysis urea is higher than pre-dialysis — check the two aren’t swapped.' })
+      add(issues, 'blood_urea_post', { id: `urea:${pre}:${post}`, level: 'check', message: 'Post-dialysis urea is higher than pre-dialysis. Check the two aren’t swapped.' })
     }
   },
 
@@ -417,7 +449,7 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
       add(issues, 'ldl', {
         id: `tg400:${tg}`,
         level: 'suggest',
-        message: 'Triglycerides are above 400 mg/dl, so LDL and VLDL can’t be calculated reliably — use a direct LDL test.'
+        message: 'Triglycerides are above 400 mg/dl, so LDL and VLDL can’t be calculated reliably. Use a direct LDL test.'
       })
     } else if (tg !== null) {
       calculated(issues, data, 'vldl', tg / 5, 1, 1, 'triglycerides ÷ 5')
@@ -454,6 +486,8 @@ const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> =
 /** Every check for one section's current values, grouped under the field each note should appear beneath. */
 export function checksForSection(sectionKey: string, data: Data): IssuesByField {
   const issues: IssuesByField = {}
+  // Switched off in Settings → Features: no notes, no suggestions, nothing for "Review report" to list.
+  if (!isValueChecksOn()) return issues
   const fields = new Set([
     ...Object.keys(LIMITS[sectionKey] ?? {}),
     ...Object.keys(SLIPS[sectionKey] ?? {}),

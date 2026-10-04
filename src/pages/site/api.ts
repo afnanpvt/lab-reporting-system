@@ -241,6 +241,21 @@ export async function listPatientsWithStatus(search?: string): Promise<PatientWi
   return patients.map((patient, i) => ({ patient, status: computePatientStatus(patient, resultsList[i]) }))
 }
 
+/**
+ * Every patient with a cheap status, for aggregate views (Analytics). Unlike listPatientsWithStatus
+ * this isn't capped at 100 rows and doesn't fetch each patient's results — 'in progress' just means
+ * some result has been saved, rather than the per-field completion check.
+ */
+export async function listAllPatientsForAnalytics(): Promise<PatientWithStatus[]> {
+  const { patients, withResults } = await window.api.patients.listAll()
+  const started = new Set(withResults)
+  return patients.map((row) => {
+    const patient = rowToPatient(row)
+    const status: PatientStatus = patient.markedComplete ? 'completed' : started.has(patient.id) ? 'partial' : 'draft'
+    return { patient, status }
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Doctors
 // ---------------------------------------------------------------------------
@@ -249,15 +264,35 @@ export async function listDoctors(): Promise<Doctor[]> {
   return (await window.api.doctors.list()) as unknown as Doctor[]
 }
 
+/** "Dr. Name, MBBS" when the referring doctor is in the Doctors list with qualifications; otherwise the name as it was saved on the patient. */
+export function referredByLine(name: string, doctors: Doctor[]): string {
+  const doctor = doctors.find((d) => d.name === name)
+  return doctor?.qualifications ? `${name}, ${doctor.qualifications}` : name
+}
+
 export async function getDoctor(id: number): Promise<Doctor | null> {
   return (await window.api.doctors.get(id)) as unknown as Doctor | null
 }
 
-export async function createDoctor(data: { name: string; specialty: string; phone: string }): Promise<Doctor> {
+export async function createDoctor(data: { name: string; qualifications: string; specialty: string; phone: string }): Promise<Doctor> {
   const { id } = await window.api.doctors.create(data)
   const doctor = await getDoctor(id)
   if (!doctor) throw new Error('Doctor not found after create')
   return doctor
+}
+
+export async function updateDoctor(id: number, data: { name: string; qualifications: string; specialty: string; phone: string }): Promise<Doctor> {
+  await window.api.doctors.update(id, data)
+  const doctor = await getDoctor(id)
+  if (!doctor) throw new Error('Doctor not found after update')
+  return doctor
+}
+
+// Patients keep whatever doctor name they were already referred by (see doctors:delete in
+// ipc.ts) — deleting a doctor here only removes them from this list and from "New Patient"'s
+// referring-doctor picker, it doesn't touch any patient's existing records or incentive history.
+export async function deleteDoctor(id: number): Promise<boolean> {
+  return window.api.doctors.delete(id)
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +499,34 @@ export async function setRangeOverride(key: string, range: string | null): Promi
     next[key] = range  // '' means "explicitly no reference" — distinct from key absent (use default)
   }
   await window.api.settings.set(RANGE_OVERRIDES_KEY, JSON.stringify(next))
+  return next
+}
+
+// ---------------------------------------------------------------------------
+// Unit overrides — lab-wide, same one-JSON-blob approach as range overrides above. Keyed
+// "sectionKey.fieldKey" (see unitOverrideKey in reportFields.ts) — units aren't gender-specific
+// the way some reference ranges are, so there's no gender component to the key.
+// ---------------------------------------------------------------------------
+
+const UNIT_OVERRIDES_KEY = 'unit_overrides'
+
+export async function getUnitOverrides(): Promise<Record<string, string>> {
+  const raw = await window.api.settings.get()
+  const stored = raw[UNIT_OVERRIDES_KEY]
+  if (!stored) return {}
+  try {
+    return JSON.parse(stored)
+  } catch {
+    return {}
+  }
+}
+
+export async function setUnitOverride(key: string, unit: string | null): Promise<Record<string, string>> {
+  const current = await getUnitOverrides()
+  const next = { ...current }
+  if (unit === null) delete next[key]
+  else next[key] = unit
+  await window.api.settings.set(UNIT_OVERRIDES_KEY, JSON.stringify(next))
   return next
 }
 

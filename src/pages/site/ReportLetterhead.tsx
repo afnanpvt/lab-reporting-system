@@ -26,8 +26,23 @@ export function LetterheadHeader({ labName, logoDataUrl, badgeDataUrl }: { labNa
   )
 }
 
-/** Faint centered security watermark behind the page content. */
-export function LetterheadWatermark({ labName }: { labName: string }) {
+/**
+ * Faint centered watermark behind the page content: the lab's logo when it has one, otherwise its
+ * name in large type. (It used to be the name in every case, so a lab with a proper logo got its
+ * name spelled out across the page instead of its logo.)
+ */
+export function LetterheadWatermark({ labName, logoDataUrl }: { labName: string; logoDataUrl?: string | null }) {
+  if (logoDataUrl) {
+    return (
+      <img
+        src={logoDataUrl}
+        alt=""
+        aria-hidden="true"
+        className="absolute pointer-events-none select-none"
+        style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '62%', maxHeight: '38%', objectFit: 'contain', opacity: 0.07, filter: 'grayscale(1)', zIndex: 0 }}
+      />
+    )
+  }
   return (
     <div
       aria-hidden="true"

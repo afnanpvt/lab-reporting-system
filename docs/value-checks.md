@@ -3,6 +3,12 @@
 What the yellow, red and blue notes on Result Entry mean, and where every limit and formula comes
 from. The rules live in [`src/pages/site/valueChecks.ts`](../src/pages/site/valueChecks.ts).
 
+## Turning them off
+
+The whole feature can be switched off per lab in **Settings → Features → Smart value checks**: no
+notes, no suggestions and nothing in the "check before report" list. It is independent of the red ▲/▼
+marks on out-of-range results, which have their own switch (**Abnormal value highlighting**).
+
 ## How they behave
 
 - **Yellow (check):** likely typo, unit slip, impossible value, or two fields that contradict

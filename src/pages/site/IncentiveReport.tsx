@@ -1,63 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer, Download, Calendar } from 'lucide-react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Printer, Download } from 'lucide-react'
 import { getDoctor, listPatients, loadBillingContext, incentiveLineItemsFor, getLabSettings, getLogoDataUrl, getBadgeDataUrl, getCertificationDataUrls, type Doctor, type Patient, type BillingContext, type LabSettingsForm } from './api'
+import PeriodFilter from './PeriodFilter'
+import { rangeFor, periodLabel, loadPeriod, savePeriod, type Preset } from './period'
 import { LetterheadHeader, LetterheadWatermark, LetterheadFooter } from './ReportLetterhead'
-
-type Preset = 'thisMonth' | 'lastMonth' | 'thisYear' | 'allTime' | 'custom'
-
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: 'thisMonth', label: 'This month' },
-  { key: 'lastMonth', label: 'Last month' },
-  { key: 'thisYear', label: 'This year' },
-  { key: 'allTime', label: 'All time' },
-  { key: 'custom', label: 'Custom' }
-]
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-function isoDate(y: number, m: number, d: number): string {
-  return `${y}-${pad2(m)}-${pad2(d)}`
-}
-
-function lastDayOfMonth(y: number, m: number): number {
-  return new Date(y, m, 0).getDate()
-}
-
-/** Returns the ISO from/to bounds for a preset, or null/null for "all time". */
-function rangeFor(preset: Preset, customFrom: string, customTo: string): { from: string | null; to: string | null } {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth() + 1
-
-  if (preset === 'thisMonth') return { from: isoDate(y, m, 1), to: isoDate(y, m, lastDayOfMonth(y, m)) }
-  if (preset === 'lastMonth') {
-    const py = m === 1 ? y - 1 : y
-    const pm = m === 1 ? 12 : m - 1
-    return { from: isoDate(py, pm, 1), to: isoDate(py, pm, lastDayOfMonth(py, pm)) }
-  }
-  if (preset === 'thisYear') return { from: isoDate(y, 1, 1), to: isoDate(y, 12, 31) }
-  if (preset === 'custom') return { from: customFrom || null, to: customTo || null }
-  return { from: null, to: null } // allTime
-}
-
-/** The friendly line printed on the report itself — this is what tells the doctor's office what period they're being paid for. */
-function periodLabel(preset: Preset, from: string | null, to: string | null): string {
-  if (preset === 'allTime') return 'All recorded referrals'
-  if (!from || !to) return 'Pick a date range'
-  const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-  if (preset === 'thisMonth' || preset === 'lastMonth') {
-    return new Date(from + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-  }
-  if (preset === 'thisYear') return from.slice(0, 4)
-  return `${fmt(from)} – ${fmt(to)}`
-}
 
 export default function IncentiveReport() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  // Back goes to wherever the report was opened from (Reports or the doctor's page).
+  const cameFrom = (useLocation().state as { from?: string } | null)?.from
+  const backTo = cameFrom ?? `/doctors/${id}`
+  const backLabel = backTo === '/reports' ? 'Back to reports' : 'Back to doctor'
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [doctorLoaded, setDoctorLoaded] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
@@ -67,10 +22,12 @@ export default function IncentiveReport() {
   const [badge, setBadge] = useState<string | null>(null)
   const [certifications, setCertifications] = useState<string[]>([])
 
-  const now = new Date()
-  const [preset, setPreset] = useState<Preset>('thisMonth')
-  const [customFrom, setCustomFrom] = useState(isoDate(now.getFullYear(), now.getMonth() + 1, 1))
-  const [customTo, setCustomTo] = useState(isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate()))
+  // Opens on the period picked on the Doctors page, and changes here carry back to it.
+  const initial = useState(loadPeriod)[0]
+  const [preset, setPreset] = useState<Preset>(initial.preset)
+  const [customFrom, setCustomFrom] = useState(initial.customFrom)
+  const [customTo, setCustomTo] = useState(initial.customTo)
+  useEffect(() => { savePeriod({ preset, customFrom, customTo }) }, [preset, customFrom, customTo])
 
   useEffect(() => {
     if (!id) return
@@ -114,15 +71,15 @@ export default function IncentiveReport() {
         <div className="flex flex-col gap-3 px-8 py-4 bg-[var(--surface)] border-b border-[var(--border)] flex-shrink-0 print:hidden">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/doctors')}
+              onClick={() => navigate(backTo)}
               className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ink-3)] hover:text-[var(--ink)]"
             >
               <ArrowLeft size={15} />
-              Back to doctors
+              {backLabel}
             </button>
             <div className="h-5 w-px bg-[var(--border)]" />
             <div>
-              <div className="text-[15px] font-semibold text-[var(--ink)]">Incentive Report — Review</div>
+              <div className="text-[15px] font-semibold text-[var(--ink)]">Incentive Report: Review</div>
               <div className="text-[13px] text-[var(--ink-2)]">{doctor.name} · {filtered.length} line item{filtered.length === 1 ? '' : 's'} · {period}</div>
             </div>
             <div className="flex-1" />
@@ -142,40 +99,7 @@ export default function IncentiveReport() {
               window you're paying for, then the table/total below update immediately. Defaults to
               the current month, since that's the normal payout cycle, not a lifetime total. */}
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ink-3)]">
-              <Calendar size={13} />
-              Period
-            </span>
-            <div className="inline-flex items-center gap-1 bg-[var(--bg-app)] rounded-xl p-1">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPreset(p.key)}
-                  className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
-                    preset === p.key ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--ink-2)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {preset === 'custom' && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="px-2.5 py-1.5 text-[13px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-                />
-                <span className="text-[13px] text-[var(--ink-3)]">to</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="px-2.5 py-1.5 text-[13px] border border-[var(--border-strong)] rounded-lg bg-[var(--surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring-25)]"
-                />
-              </div>
-            )}
+            <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onPreset={setPreset} onFrom={setCustomFrom} onTo={setCustomTo} />
           </div>
         </div>
 
@@ -185,14 +109,14 @@ export default function IncentiveReport() {
             className="report-paper relative max-w-[780px] mx-auto bg-[var(--surface)] shadow-lg print:shadow-none px-[52px] py-11 print:px-2 print:py-2"
             style={{ minHeight: '600px' }}
           >
-            <LetterheadWatermark labName={settings.labName} />
+            <LetterheadWatermark labName={settings.labName} logoDataUrl={logo} />
             <div className="relative" style={{ zIndex: 1 }}>
               <LetterheadHeader labName={settings.labName} logoDataUrl={logo} badgeDataUrl={badge} />
 
               <div className="avoid-break flex items-start justify-between mt-4 mb-6 pb-3 border-b-2" style={{ borderColor: 'var(--ink)' }}>
                 <div>
                   <div className="text-[11px] uppercase tracking-widest text-[var(--ink-3)] mb-1">Referral Incentive Report</div>
-                  <div className="text-[18px] font-bold text-[var(--ink)]">{doctor.name}</div>
+                  <div className="text-[18px] font-bold text-[var(--ink)]">{doctor.name}{doctor.qualifications ? <span className="text-[13px] font-normal text-[var(--ink-2)]">, {doctor.qualifications}</span> : null}</div>
                   <div className="text-[12px] text-[var(--ink-2)]">{doctor.specialty} · {doctor.phone}</div>
                 </div>
                 <div className="text-[11px] text-right text-[var(--ink-2)] leading-relaxed">

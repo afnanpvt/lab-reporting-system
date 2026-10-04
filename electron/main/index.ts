@@ -36,7 +36,7 @@ function createWindow(): void {
     titleBarOverlay: {
       color: '#ffffff',
       symbolColor: '#1a2023',
-      height: 76
+      height: 40
     },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -77,7 +77,7 @@ app.whenReady().then(async () => {
   // expired trial still opens so the renderer can show the trial-ended screen and its key box.
   if (license.state === 'none' && !is.dev) {
     dialog.showErrorBox(
-      'LumaLabs — Unlicensed',
+      'LumaLabs: Unlicensed',
       'This installation does not have a valid license.\n\n' +
         'Contact Scalyft (www.scalyft.tech) to get this lab licensed.'
     )

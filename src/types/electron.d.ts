@@ -21,6 +21,7 @@ interface LabAPI {
   }
   patients: {
     list(search?: string): Promise<import('./lab').Patient[]>
+    listAll(): Promise<{ patients: Record<string, unknown>[]; withResults: number[] }>
     create(data: Omit<import('./lab').Patient, 'id' | 'created_at'>): Promise<{ id: number; sid: string }>
     get(id: number): Promise<import('./lab').Patient | null>
     update(id: number, data: Partial<import('./lab').Patient>): Promise<boolean>
@@ -51,6 +52,7 @@ interface LabAPI {
     get(id: number): Promise<import('./lab').Doctor | null>
     create(data: { name: string; specialty?: string; phone?: string }): Promise<{ id: number }>
     update(id: number, data: Partial<import('./lab').Doctor>): Promise<boolean>
+    delete(id: number): Promise<boolean>
   }
   billing: {
     rateCard(): Promise<import('./lab').RateCardEntry[]>

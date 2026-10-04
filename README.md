@@ -8,7 +8,8 @@ This build is licensed exclusively to **Super Lab Service** (Vaniyambadi) — se
 
 Every screen lives under `src/pages/site/`, backed by a single data-access module (`src/pages/site/api.ts`) that talks to the Electron main process over IPC (`window.api.*`). Nothing touches the database directly from the UI.
 
-- **Dashboard** — today's registered/needs-attention/completed counts, recent patients.
+- **Dashboard** — registered/needs-attention/completed counts, recent patients.
+- **Analytics** — charts and insights on how the lab is doing; see [Analytics](#analytics). Can be switched off per lab.
 - **Patients** — search, status pills (draft / in progress / completed — always computed live from actual saved results, never manually overridden), referring doctor shown per patient.
 - **Patient Entry** — register or edit a patient: name, age, gender, mobile, address, referring doctor, which of the 12 test sections apply, and a consent checkbox.
 - **Result Entry** — one test section at a time, a local checklist rail showing completion state per section, prev/next patient navigation, live abnormal-value flagging against reference ranges, click-to-prefill from the printed reference range.
@@ -16,15 +17,90 @@ Every screen lives under `src/pages/site/`, backed by a single data-access modul
 - **Bill** — per-patient line items derived from a rate card, with per-patient-per-section amount overrides (rates aren't fixed).
 - **Doctors / Incentive Report** — referring doctors, who they've referred, and a printable incentive statement per doctor.
 - **Reports** — every completed report and bill in one place.
-- **Settings** — lab identity (address/phone/email/doctor — editable; the lab *name* is locked to the license, see below), plus a note confirming everything is stored locally.
+- **Settings** — five tabs: **Laboratory** (lab identity — address/phone/email/doctor are editable, the lab *name* is locked to the license — with the only Save button), **Tests** ([renaming and adding tests](#saved-tests-and-editable-test-names), saved Others tests), **Preferences** (Analytics / highlighting / value-check switches, appearance, report output), **Shortcuts** ([keyboard shortcuts](#keyboard-shortcuts)) and **License & About**. Everything outside the Laboratory tab applies the moment it is changed.
 
 12 laboratory categories are supported end to end: Haematology, Biochemistry, Serology, Urine, Motion, C.S. (with a 20-antibiotic antibiogram grid), Mantoux, G.T.T./S.A./Lipid, Blood Group, Electrolytes, L.F.T., and ABG/Sputum.
+
+## Analytics
+
+The **Analytics** page (sidebar, bar-chart icon) turns the lab's own records into something readable, with a period switcher (7 days, 30 days, 90 days, 12 months, all time):
+
+- **Highlights** (closed until you press the Highlights button) — plain-language findings (revenue up/down on the previous period, busiest weekday, top test, top referring doctor).
+- **KPI cards** — revenue, patients, tests, average bill and completion rate, each compared with the previous period.
+- **Trend chart** — revenue / patients / tests by day, week or month. The still-running current week or month is drawn dashed so it isn't read as a drop.
+- **Breakdowns** — report completion, top investigations, top referring doctors, gender, new vs returning patients (matched by mobile number, else name), doctor-referred vs walk-in, age groups, busiest weekdays and a peak-hours heatmap.
+
+Everything is computed on the fly from the existing patient, billing and rate-card data — nothing extra is stored, and there are no charting dependencies (the charts are hand-drawn SVG in `src/pages/site/Analytics.tsx`; the maths is in `analyticsData.ts`). Revenue uses the same `priceFor()` as the Bill and the doctors' incentive reports, so the numbers always agree with them.
+
+Because it shows money, a lab can hide it completely: **Settings → Features → Analytics**. Off removes it from the menu and redirects the URL. The choice is stored per lab in the database (`lab_settings.feature_analytics`; on unless set to `0`). The sidebar's "Today" card deliberately shows no money (patients, tests, open reports).
+
+## Keyboard shortcuts
+
+Shortcuts are customisable per lab in **Settings → Keyboard shortcuts**: click a shortcut, press the new keys. Esc cancels, Backspace removes it, each row can be reset, and "Reset all" restores the defaults. A key already in use is moved to the new action (the old one becomes unassigned, and the row says so).
+
+| Action | Default |
+|---|---|
+| New patient (anywhere) | Ctrl + N |
+| Next field / alternate / previous field (Result Entry) | Tab / Enter / Shift + Tab |
+| Previous / next section | Ctrl + ↑ / Ctrl + ↓ |
+| Previous / next patient | Page Up / Page Down |
+| Review report | Ctrl + Enter |
+| Open the shortcut guide | ? |
+
+Fixed and not editable: ↑/↓ value stepping (Shift for bigger steps) and Esc to clear a field. Only changes from the defaults are stored (`lab_settings.shortcut_bindings`, JSON), so a future change to a default reaches every lab that never touched that action.
+
+Rules the recorder enforces: a plain letter, digit, arrow, Enter or Esc on its own is refused (it would get in the way of typing) — except Tab/Enter for the field-navigation rows — and Alt+F4 is refused because Windows takes it first. Ctrl+A/C/V/X/Z/Y can be assigned but only fire when focus is *not* in a text field, so select-all and copy/paste keep working. Everything lives in `src/pages/site/shortcutsStore.ts` (actions, defaults, matching) and `ShortcutSettings.tsx` (the editor).
+
+## Abnormal flagging and value checks
+
+Two separate aids on the result sheet, each with its own switch in **Settings → Features** (both on by default, stored as `lab_settings.feature_flagging` / `feature_value_checks`, `'0'` = off):
+
+- **Abnormal value highlighting** — `flagFor()` in `reportFields.ts` returns `'high'`/`'low'`, which drives the red result text on Result Entry and the ▲/▼ on the printed report. It reads a *structured* range (`RangeSpec` in `rangeSpec.ts`: kind `between` / `upto` / `lt` / `gte` / `gt` / `text`, its number(s), and a highlight flag) rather than guessing from wording. A lab's own edit (made in the `RangeEditor` card beside each reference range) is stored as `lab_settings.range_specs`, keyed like the text overrides (`section.field[.M|.F]`) and always written with the generated range text; a lab-added test carries its own spec; everything else (built-in defaults, Others rows, older saved text) is read once by `parseRangeText`. Every numeric range highlights by default (both sides of a two-sided range, one side of `Up to` / `<` / `≥` / `>`); the editor's checkbox opts a single test out. Qualitative ranges (`Negative`, `Nil`, `Non-Reactive`) have nothing above or below and never show an arrow. A result typed as a span (`4-6/HPF`) counts as high if any part is above the range and low if any part is below. Off means `flagFor` always returns `null`.
+- **Smart value checks** — `checksForSection()` in `valueChecks.ts`: the yellow/red/blue notes and the "check before report" list; see [docs/value-checks.md](docs/value-checks.md). Off means it returns nothing.
+
+Both read the switches through plain functions in `featuresStore.ts` (`isFlaggingOn`, `isValueChecksOn`), and the pages that use them also call `useFeatures()` so they redraw when a switch changes.
+
+## Numbers in results
+
+Values typed in result boxes get thousands separators automatically (`numberFormat.ts`: `20000` → `20,000`, Indian grouping above that, `1,00,000`), with the caret kept beside the digit being typed (`useNumberInput.ts`). Only plain numbers of four or more whole digits are touched; text, spans (`4-6/HPF`), titres (`1:80`) and anything with a unit are left alone. Anything that needs the numeric value of a result must read it with `parseResultNumber()` (or the comma-stripping reader in `rangeSpec.ts` / `valueChecks.ts`) rather than `parseFloat()`, which stops at the first comma.
+
+## Report pagination
+
+The printed report is paginated in JavaScript (`pagination.ts`) so the preview and the PDF break pages in the same places. A page is `overflow: hidden`, so a wrong guess silently clips rows — which is why pagination does **not** use fixed row heights. `ReportPreview` renders an invisible *probe* page holding one of every block (`measureReport.ts`), reads the real height of every row, heading, the sign-off and the room above the footer, and passes those to `paginateReport()` as `PageMetrics`. A self-check re-paginates with extra room if a displayed page ever overflows anyway. The rules (never leave a page holding only the patient header; keep the sign-off with the last rows rather than alone; never strand a single row) live in `paginateReport()`.
+
+Run `npm run test:pagination` after touching any of this: it paginates 20,000 random reports with random row heights and fails if a row is lost, a page overflows, a page holds only the header, or the sign-off is left alone. Row *heights* come from the DOM, so after changing the report's markup also open a few long reports (long test names, long results, method notes) in the preview and check the pages.
+
+## Confirmation dialogs
+
+Anything that needs a yes/no from the user calls `confirmDialog({ tone, title, subject, message, confirmLabel })` from `confirmStore.ts` and awaits the result (`ConfirmHost`, mounted once in `Shell`, draws it). Don't use `window.confirm()` — it shows the browser's native box, unthemed and titled with the app's internal name. For destructive actions use `tone: 'danger'`, which focuses Cancel first.
+
+## Doctors, search and lists
+
+**Doctors.** `Doctors.tsx` is the directory (Cards / List, search). `DoctorDetail.tsx` (`/doctors/:id`) shows one doctor's referrals for a period; its **Create incentive report** button opens `IncentiveReport.tsx` (`/doctors/:id/report`). Reports and the doctor page pass `from` in the route state so Back returns to where the report was opened. The chosen period is shared by the doctor screens, Reports and the incentive report (`period.ts`, kept in `sessionStorage`). Doctors have `qualifications` (a column added by `addColumnIfNotExists` in `db.ts`); `referredByLine()` in `api.ts` builds the "Referred by Dr. X, MBBS" text.
+
+**Search.** `fuzzySearch.ts` ranks doctors (`searchDoctors`) and patients (`searchPatients`): every typed word must match something (name, qualifications, speciality, phone or, for patients, SID without leading zeros, mobile, tests, referring doctor), allowing prefixes, typos (more for longer words), words that sound alike and a small table of field synonyms ("heart" = cardiology). Run `npm run test:search` after touching it.
+
+**Lists and filters.** `ViewToggle.tsx` is the Cards / List switch (`useViewMode` remembers it per list). `PatientCard.tsx` holds the card, the table and `TestChips` (first three tests plus "+N more"). `SlideFilter.tsx` is the slide-out "Show" control used by Patients (`side` right), and via `PeriodFilter.tsx` by Reports, Analytics and the doctor screens. Dates and times use `DatePicker.tsx` / `TimePicker.tsx`; do not use `<input type="date">` or `type="time"`, which open the browser's unstyled pop-up. `DaysStepper.tsx` is the number box for "last N days".
+
+**Unsaved changes.** A screen with edits registers `useLeaveGuard(dirty, save)` (`leaveGuard.ts`); every way out goes through `useGuardedNavigate()`, which shows Save changes / Discard changes / Keep editing. New screens with a Save button should use it.
+
+**No em dashes.** Visible text never uses the em dash. `node scripts/find-emdash.js` lists any that slipped in (comments are ignored); run it before a release.
+
+## Saved tests and editable test names
+
+**Saved "Others" tests.** The *Others* section has no fixed test list, so staff type each test's name, unit and reference range. These are now remembered per lab (`lab_settings.saved_other_tests`, JSON): typing a name offers the saved ones, tabbing out of a saved name fills in its unit and reference, and *Add a saved test* lists them all. A test is saved automatically when its row has a name and a result and focus leaves the row; a saved entry is never overwritten by a one-off change, but blank units/references on it are filled in later. *Settings → Saved tests (Others)* lets the lab edit, add or delete entries and switch automatic saving off (`remember_other_tests = '0'`). Logic: `savedTestsStore.ts`; the row editor is `OthersEditor` in `ResultEntry.tsx`.
+
+**Editable tests (rename and add).** *Settings → Tests → Edit tests…* opens `TestNames.tsx`, where any built-in test can be renamed (search, per-row reset, reset names to defaults) and new tests can be added to any section. It is a separate screen on purpose: a change affects every report, so it can't happen by a stray keystroke on the result sheet, and saving returns to Settings.
+
+- *Renames.* Only names that differ from the default are stored (`lab_settings.test_labels`, JSON keyed `section.field`, so the same field in two sections is renamed independently). Everything that shows a test name goes through `labelFor(section, field)` in `labelsStore.ts` — result sheet, review warnings, printed report — so a new place that shows a field name must use it rather than `humanizeKey`.
+- *Added tests.* Definitions (id, name, unit, reference range) live in `lab_settings.custom_tests` (`customTestsStore.ts`); a test's result key is `x_<id>`. The section tables have fixed columns, so the main process splits `x_` keys off in `results:save` and keeps them in the `section_extras` table (one JSON row per patient per section), merging them back in `results:get` / `results:getAll`. Units, ranges and names for these keys resolve through the same `unitFor` / `getReferenceRange` / `labelFor` functions as built-ins, they print through the normal report path, and they flag against their range like Others rows. Ids are never reused, so renaming can't detach values; removing a test hides its values (pagination skips keys with no definition) but never deletes them.
+- Antibiotics and Others rows are not part of this screen.
 
 ## Tech stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Shell | Electron 32 | Native Windows printing, no browser sandbox limitations |
+| Shell | Electron 32 (22.3.27 on the `win7-compat` branch — see [Windows 7](#windows-7-builds)) | Native Windows printing, no browser sandbox limitations |
 | UI | React 18 + TypeScript + Vite | Fast dev loop, typed IPC contract |
 | Styling | Tailwind CSS | Utility classes, no separate design-token build step |
 | Local database | sql.js (SQLite compiled to WASM) | Zero native build tooling required — no Visual Studio Build Tools, no Python |
@@ -72,6 +148,7 @@ npm install
 | `npm run dev` | Launches the app in development mode with hot reload |
 | `npm run build` | Bundles main/preload/renderer for production via `electron-vite` |
 | `npm run preview` | Runs the production build locally without packaging |
+| `npm run test:pagination` | Runs the report-pagination regression test (see [Report pagination](#report-pagination)) |
 | `npm run package` | Runs `build` then `electron-builder` to produce a distributable — see [Packaging](#packaging) |
 
 To type-check explicitly:
@@ -143,18 +220,19 @@ After `npm run license`, commit `profiles/sunlab` and `licenses/ledger.csv` so e
 
 ## Packaging
 
-`npm run package` runs `electron-vite build` then `electron-builder`. On this development machine, the final NSIS-installer step fails because it needs to download and extract a signing-tool archive containing macOS symlinks, which Windows blocks without Developer Mode (or an elevated terminal) enabled. This is an environment limitation, not a code issue.
+```bash
+npm run package -- superlab           # one lab's installer  -> dist/LumaLabs-superlab-Setup-<version>.exe
+npm run package -- --all-profiles     # every profile, including the dev pitch installer
+```
 
-Working alternative used for the current release: `npx electron-builder --dir --win` produces a plain folder build (`dist/win-unpacked/`) without hitting that step. That folder is then:
+`npm run package` runs `electron-vite build` then `electron-builder` (NSIS). The very first build on a machine must be run once from an Administrator terminal (or with Developer Mode on), because electron-builder extracts a tool archive containing symlinks; after that a normal terminal works. Step-by-step, including licensing and releasing, is in [docs/licensing-and-releases.md](docs/licensing-and-releases.md).
 
-1. Signed with a self-signed Authenticode certificate (`Set-AuthenticodeSignature` — no Windows SDK / `signtool.exe` needed), so Windows' Smart App Control doesn't block it on a machine that has imported the matching `.cer` once.
-2. Given its icon via `rcedit` directly (bypassing the same blocked step electron-builder would otherwise use).
-3. Zipped up as the distributable.
+### Windows 7 builds
 
-Once Developer Mode (or an elevated terminal) is available, `npm run package` alone should produce a proper `Setup.exe` installer instead of the manual dir-build/sign/icon sequence above.
+Electron 23+ dropped Windows 7, so Windows 7 machines get a separate build from the long-lived **`win7-compat`** branch, which is `dev` plus one change: Electron pinned to 22.3.27. The app code is identical; merge `dev` into `win7-compat` for each release. These installers are named `LumaLabs-<profile>-win7-<arch>-Setup-<version>.exe` and are tagged `vX.Y.Z-win7`. Code in this repo must stay within what Chromium 108 (Electron 22) supports — e.g. no CSS `color-mix()` in light-mode styling. Use the 32-bit (`ia32`) one for 32-bit Windows 7 — it also runs on 64-bit Windows. See the handbook for the exact commands and the SP1 / KB2999226 prerequisites older machines may need.
 
 ## Status
 
-Working end to end: patient registration/editing, result entry across all 12 categories with live abnormal-value flagging, paginated report preview, printing/PDF, billing with per-patient overrides, doctors and incentive reports, and the licensing/branding lock described above.
+Working end to end: patient registration/editing, result entry across all 12 categories with live abnormal-value flagging, paginated report preview, printing/PDF, billing with per-patient overrides, doctors and incentive reports, analytics, customisable keyboard shortcuts, NSIS installers (64-bit, plus 32-bit/Windows 7 builds), and the licensing/branding lock described above.
 
-Not yet built: the real NSIS installer (blocked on the Developer Mode issue above, not on missing code), multi-computer/shared-data support (each install is a single local database on one machine), and a proper paid code-signing certificate (the current self-signed one requires a one-time trust step per machine — fine for hand-delivered installs, not for broad public distribution).
+Not yet built: multi-computer/shared-data support (each install is a single local database on one machine) and a paid code-signing certificate (installers are unsigned, so Windows SmartScreen may warn on first run — fine for hand-delivered installs, not for broad public distribution).
