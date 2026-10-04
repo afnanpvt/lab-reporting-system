@@ -1,6 +1,6 @@
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import { join } from 'path'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, copyFileSync, readdirSync, unlinkSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { getBranding } from './branding'
 
@@ -57,8 +57,18 @@ export async function initDb(): Promise<void> {
   SQL = await initSqlJs({ locateFile: () => wasmPath })
 
   if (existsSync(dbPath)) {
-    const fileBuffer = readFileSync(dbPath)
-    db = new SQL.Database(fileBuffer)
+    try {
+      db = openChecked(readFileSync(dbPath))
+      backupDaily()
+    } catch (e) {
+      // A truncated/corrupt file (power cut mid-save on an old build): fall back to the newest
+      // daily backup instead of crashing at startup or starting empty and overwriting it.
+      console.error('DB load error, trying backups:', e)
+      const restored = loadNewestBackup()
+      if (!restored) throw e
+      try { copyFileSync(dbPath, dbPath + '.corrupt') } catch { /* keep going */ }
+      db = restored
+    }
   } else {
     db = new SQL.Database()
   }
@@ -67,17 +77,64 @@ export async function initDb(): Promise<void> {
   persist()
 }
 
+function openChecked(buf: Buffer): SqlDatabase {
+  const d = new SQL.Database(buf)
+  d.exec('SELECT count(*) FROM sqlite_master') // throws on a damaged file
+  return d
+}
+
+const BACKUP_KEEP = 14
+const backupDir = () => join(dbPath, '..', 'backups')
+
+/** One copy of the database per day, the last two weeks kept. Taken right after a successful load, so a bad file never overwrites a good backup. */
+function backupDaily(): void {
+  try {
+    mkdirSync(backupDir(), { recursive: true })
+    const day = new Date().toISOString().slice(0, 10)
+    const target = join(backupDir(), `lab-data-${day}.db`)
+    if (!existsSync(target)) copyFileSync(dbPath, target)
+    const all = readdirSync(backupDir()).filter((f) => /^lab-data-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort()
+    for (const old of all.slice(0, Math.max(0, all.length - BACKUP_KEEP))) unlinkSync(join(backupDir(), old))
+  } catch (e) {
+    console.error('DB backup error:', e)
+  }
+}
+
+function loadNewestBackup(): SqlDatabase | null {
+  try {
+    const all = readdirSync(backupDir()).filter((f) => /^lab-data-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse()
+    for (const f of all) {
+      try { return openChecked(readFileSync(join(backupDir(), f))) } catch { /* try the next older one */ }
+    }
+  } catch { /* no backups */ }
+  return null
+}
+
 function persist(): void {
   try {
     const data = db.export()
     const buffer = Buffer.from(data)
     const dir = join(dbPath, '..')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    writeFileSync(dbPath, buffer)
+    // Write beside the real file and rename over it, so a crash mid-write can't leave a half file.
+    const tmp = dbPath + '.tmp'
+    writeFileSync(tmp, buffer)
+    try {
+      renameSync(tmp, dbPath)
+    } catch {
+      writeFileSync(dbPath, buffer) // rename can be refused while antivirus holds the file; plain write still works
+    }
+    persistFailed = false
   } catch (e) {
     console.error('DB persist error:', e)
+    // Tell the user once per failure streak; otherwise the screen says "saved" while nothing is.
+    if (!persistFailed) {
+      persistFailed = true
+      dialog.showErrorBox('Could not save your data', `Changes could not be written to disk (${(e as Error).message}). Check that the disk is not full or read-only, then try again.`)
+    }
   }
 }
+let persistFailed = false
 
 // Wrap run to auto-persist
 export function dbRun(sql: string, params: unknown[] = []): void {

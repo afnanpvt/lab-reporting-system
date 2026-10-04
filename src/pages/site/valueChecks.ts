@@ -325,20 +325,50 @@ function bilirubinAndProtein(section: string, data: Data, issues: IssuesByField)
   }
 }
 
+const DIFFERENTIAL_KEYS = ['neutrophils', 'eosinophils', 'basophils', 'lymphocytes', 'monocytes']
+
+/**
+ * The one check that is not advisory: a differential count above 100% is arithmetically impossible,
+ * so (at the customer's request) the report cannot be viewed, printed or saved until it is fixed.
+ * Unlike every other check it ignores the "Smart value checks" switch and can't be dismissed. Uses
+ * every filled-in differential field, not just the sane ones — 150 in one field is already over.
+ */
+function differentialOver100(data: Data): { field: string; issue: ValueIssue } | null {
+  const filled = DIFFERENTIAL_KEYS.map((k) => ({ k, n: num(data[k]) })).filter((d) => d.n !== null)
+  const sum = filled.reduce((a, d) => a + (d.n as number), 0)
+  if (Math.round(sum * 100) / 100 <= 100) return null
+  const total = fmt(sum, 1)
+  return {
+    field: filled[filled.length - 1].k,
+    issue: { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It can't be more than 100%.` }
+  }
+}
+
+export interface ReportBlocker { sectionKey: string; field: string; issue: ValueIssue }
+
+/** Problems that stop the report from opening at all (see differentialOver100). `results` is keyed by section key. */
+export function reportBlockers(sectionKeys: string[], results: Record<string, Data>): ReportBlocker[] {
+  const out: ReportBlocker[] = []
+  if (sectionKeys.includes('haematology')) {
+    const over = differentialOver100(results.haematology ?? {})
+    if (over) out.push({ sectionKey: 'haematology', ...over })
+  }
+  return out
+}
+
 const CROSS_FIELD: Record<string, (data: Data, issues: IssuesByField) => void> = {
   haematology: (data, issues) => {
     const s = (k: string) => sane('haematology', data, k)
 
     const dlcKeys = ['neutrophils', 'eosinophils', 'basophils', 'lymphocytes', 'monocytes']
-    const dlc = dlcKeys.map((k) => ({ k, n: s(k) })).filter((d) => d.n !== null)
-    if (dlc.length > 0) {
+    const over = differentialOver100(data)
+    if (over) add(issues, over.field, over.issue)
+    else {
+      const dlc = dlcKeys.map((k) => ({ k, n: s(k) })).filter((d) => d.n !== null)
       const sum = dlc.reduce((a, d) => a + (d.n as number), 0)
-      const anchor = dlc[dlc.length - 1].k
-      const total = fmt(sum, 1)
-      if (sum > 100.5) {
-        add(issues, anchor, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It can't be more than 100%.` })
-      } else if (dlc.length === dlcKeys.length && Math.abs(sum - 100) > 0.5) {
-        add(issues, anchor, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It should total 100%.` })
+      if (dlc.length === dlcKeys.length && Math.abs(sum - 100) > 0.5) {
+        const total = fmt(sum, 1)
+        add(issues, dlc[dlc.length - 1].k, { id: `dlc:${total}`, level: 'check', message: `Differential count adds up to ${total}%. It should total 100%.` })
       }
     }
 

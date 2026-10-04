@@ -1,4 +1,4 @@
-import { sectionKeyForLabel, supportsMethodNote } from './reportFields'
+import { decodeOtherRow, sectionKeyForLabel, supportsMethodNote } from './reportFields'
 import { findCustomTest, isCustomKey } from './customTestsStore'
 import type { Patient } from './api'
 
@@ -97,14 +97,19 @@ export function filledKeysFor(sectionKey: string | undefined, data: Record<strin
       k !== '__label' &&
       !k.endsWith('_method') &&
       !MANTOUX_TIME_KEYS.has(k) &&
-      data[k] &&
-      data[k].trim() !== '' &&
+      // An 'Others' row stores its unit/reference with the result, so a test added with a unit but
+      // no result yet is not blank text; only a real result makes it print.
+      (sectionKey === 'others' ? decodeOtherRow(data[k]).value.trim() !== '' : !!data[k] && data[k].trim() !== '') &&
       (!isCustomKey(k) || !!findCustomTest(sectionKey ?? '', k))
   )
 }
 
 export function paginateReport(patient: Pick<Patient, 'sections'>, results: ResultsBySection, metrics: PageMetrics = defaultMetrics()): ReportBlock[][] {
-  const { contentHeight, blockGap } = metrics
+  const { blockGap } = metrics
+  // The patient-info block (title + SID/Collected/Received/Reported) is printed at the top of EVERY
+  // page, identical to page 1 (ReportPreview renders it itself), so it is a fixed per-page cost here
+  // rather than a block that gets paginated.
+  const contentHeight = metrics.contentHeight - metrics.patientInfo - blockGap
   const pages: ReportBlock[][] = [[]]
   let remaining = contentHeight
 
@@ -114,14 +119,6 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     currentPage().push(block)
     remaining -= height + blockGap
   }
-  /** Moves to a fresh page first only if the block wouldn't fit on the current one — never split a whole block that fits on an empty page. */
-  const placeWhole = (block: ReportBlock, height: number) => {
-    if (height > remaining && currentPage().length > 0) startNewPage()
-    push(block, height)
-  }
-
-  placeWhole({ kind: 'patientInfo' }, metrics.patientInfo)
-
   for (const rawLabel of patient.sections) {
     const sectionKey = sectionKeyForLabel(rawLabel)
     const data = sectionKey ? results[sectionKey] ?? {} : {}
@@ -129,10 +126,8 @@ export function paginateReport(patient: Pick<Patient, 'sections'>, results: Resu
     const label = sectionKey === 'others' && data.__label ? data.__label : rawLabel
     const filledKeys = filledKeysFor(sectionKey, data)
 
-    if (filledKeys.length === 0) {
-      placeWhole({ kind: 'emptySection', label }, metrics.emptySection)
-      continue
-    }
+    // A section with nothing entered isn't printed (ReportPreview lists it in a warning above the report).
+    if (filledKeys.length === 0) continue
 
     const keyHeights = filledKeys.map((k) => metrics.rowHeight(sectionKey!, k, data))
 

@@ -78,15 +78,15 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('patients:list', (_e, search?: string) => {
     if (search) {
       return dbAll(
-        `SELECT * FROM patients WHERE name LIKE ? OR sid LIKE ? ORDER BY rowid DESC LIMIT 100`,
+        `SELECT * FROM patients WHERE name LIKE ? OR sid LIKE ? ORDER BY rowid DESC`,
         [`%${search}%`, `%${search}%`]
       )
     }
-    return dbAll('SELECT * FROM patients ORDER BY rowid DESC LIMIT 100')
+    return dbAll('SELECT * FROM patients ORDER BY rowid DESC')
   })
 
-  // Every patient, uncapped, for the Analytics page — patients:list stops at 100 rows, which is
-  // right for list screens but would silently truncate any aggregate. withResults lists the ids
+  // Every patient plus withResults for the Analytics page. (patients:list used to stop at 100 rows,
+  // which hid older patients and understated doctors' incentive totals.) withResults lists the ids
   // that have a saved row in any result table, so the page can tell "in progress" from "not
   // started" without one results:getAll round trip per patient.
   ipcMain.handle('patients:listAll', () => {
@@ -281,7 +281,12 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       printBackground: true,
       margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
     })
-    writeFileSync(filePath, pdfBuffer)
+    try {
+      writeFileSync(filePath, pdfBuffer)
+    } catch (e) {
+      // Typically the same-named PDF is still open in a viewer (EBUSY/EPERM on Windows).
+      return { saved: false as const, reason: `write failed: ${(e as Error).message}` }
+    }
 
     return { saved: true as const, filePath }
   })

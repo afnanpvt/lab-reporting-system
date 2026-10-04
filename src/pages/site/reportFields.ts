@@ -1,4 +1,4 @@
-import { SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
+import { ANTIBIOTICS, SECTIONS, SECTION_FIELD_KEYS } from '../../types/lab'
 import { findCustomTest } from './customTestsStore'
 import { isFlaggingOn } from './featuresStore'
 import { getStoredSpec } from './rangeSpecsStore'
@@ -35,6 +35,7 @@ export function formatTime12h(time24: string): string {
 
 export function humanizeKey(key: string): string {
   if (LABEL_OVERRIDES[key]) return LABEL_OVERRIDES[key]
+  if (key.startsWith('abx_')) { const abx = ANTIBIOTICS.find((a) => 'abx_' + a.key === key); if (abx) return abx.label }
   return key
     .split('_')
     .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))

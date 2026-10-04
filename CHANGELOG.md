@@ -4,6 +4,32 @@ Every release is also published on GitHub with its installers. Versions follow
 `major.minor.patch` (see the handbook, `docs/licensing-and-releases.md`). Windows 7 builds carry the
 same version with a `-win7` tag.
 
+## 2.5.4
+
+### Fixed
+- **External lab reports keep clear of the other lab's footer.** Content no longer runs down into the
+  pre-printed footer area; rows that do not fit move to the next page. Top and bottom margins are two
+  fields in the toolbar (remembered), because every lab's stationery differs.
+- **Page 2 onward looks like page 1.** Every page carries the full Laboratory Report block (SID,
+  Collected, Received, Reported) under the patient strip, instead of the one-line version.
+- **A differential count above 100% blocks the report.** Neutrophils, eosinophils, basophils,
+  lymphocytes and monocytes must not total more than 100. Review report, the preview, Print and Save PDF
+  all refuse until it is fixed.
+- **Patient lists no longer stop at 100 patients.** Older patients show in Patients and Reports and
+  count in doctors' incentive totals.
+- **Safer database saves.** The file is written atomically, one backup per day is kept for two weeks
+  (`backups` next to the data), a damaged file falls back to the newest backup, and a failed save now
+  says so instead of looking saved.
+- **Blank rows no longer print.** An "Others" test with a unit or range but no result stays off the
+  report. A section with nothing entered is left out of the print and listed in a warning above the
+  report instead of printing a note on paper. A report with no results at all cannot be printed or saved.
+- **Age is checked** (a whole number, within a sensible limit for Yrs, Mos or Days) so a blank age no
+  longer prints as 0Y.
+- **Long results are readable.** Remarks, interpretations and other long text use the full row width and
+  keep line breaks. C.S. uses a wide result column, and antibiotics print by their real names
+  (Co-trimoxazole, not ABX Cotrimoxazole).
+- **Save PDF says why it failed** (for example the same file open in a PDF viewer).
+
 ## 2.5.3
 
 ### Added

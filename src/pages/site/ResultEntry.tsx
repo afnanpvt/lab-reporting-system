@@ -6,7 +6,7 @@ import { CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Eye, IndianRupee, P
 import { getPatient, getResultsFor, setSectionResults, listPatients, getRangeOverrides, setRangeOverride, getHiddenReferenceSections, setReferenceSectionHidden, getUnitOverrides, setUnitOverride, type Patient, type ResultsBySection } from './api'
 import { getReferenceRange, defaultReferenceRange, rangeOverrideKey, unitFor, unitOverrideKey, defaultUnitFor, flagFor, effectiveSpec, sectionKeyForLabel, defaultValueForRange, numericRangeInfo, decodeOtherRow, encodeOtherRow, optionsFor, supportsMethodNote } from './reportFields'
 import { SECTION_FIELD_KEYS, HAEMATOLOGY_SUBGROUPS, ANTIBIOTICS, getCompletionState, type CompletionState } from '../../types/lab'
-import { checksForSection, type IssuesByField, type ValueIssue } from './valueChecks'
+import { checksForSection, reportBlockers, type IssuesByField, type ValueIssue } from './valueChecks'
 import { useLabels } from './labelsStore'
 import RangeEditor from './RangeEditor'
 import { saveRangeSpec, useRangeSpecs } from './rangeSpecsStore'
@@ -18,7 +18,7 @@ import { useCustomTests, customKey } from './customTestsStore'
 import { useSavedTests, findSavedTest, rememberOtherRow } from './savedTestsStore'
 import { useShortcutHandlers, useBindings, eventToCombo, comboLabel, FIXED_SHORTCUTS } from './shortcutsStore'
 
-interface PendingIssue { sectionIndex: number; sectionKey: string; sectionLabel: string; field: string; issue: ValueIssue }
+interface PendingIssue { sectionIndex: number; sectionKey: string; sectionLabel: string; field: string; issue: ValueIssue; blocking?: boolean }
 
 // Excludes the reference-range editor's own <input> (see RangeEditor's data-range-editor
 // attribute) — without that, opening a range editor mid-entry would insert it into the Tab/Enter/
@@ -199,14 +199,24 @@ export default function ResultEntry() {
   // outstanding first. Suggestions (calculated values) never hold it up.
   const openReview = useCallback(() => {
     if (!patient) return
-    const pending = categories.flatMap((c, sectionIndex) =>
+    // Hard blockers (a differential over 100%) come first, ignore dismissals and the value-checks
+    // switch, and remove the "Review report anyway" way through.
+    const blockers = reportBlockers(categories.map((c) => c.key), results).map((b) => {
+      const sectionIndex = categories.findIndex((c) => c.key === b.sectionKey)
+      return { sectionIndex, sectionKey: b.sectionKey, sectionLabel: categories[sectionIndex].label, field: b.field, issue: b.issue, blocking: true }
+    })
+    const blockerIds = new Set(blockers.map((b) => `${b.sectionKey}:${b.field}:${b.issue.id}`))
+    const soft = categories.flatMap((c, sectionIndex) =>
       Object.entries(issuesBySection[c.key] ?? {}).flatMap(([field, list]) =>
-        list.filter((issue) => issue.level !== 'suggest').map((issue) => ({ sectionIndex, sectionKey: c.key, sectionLabel: c.label || 'Others', field, issue }))
+        list
+          .filter((issue) => issue.level !== 'suggest' && !blockerIds.has(`${c.key}:${field}:${issue.id}`))
+          .map((issue) => ({ sectionIndex, sectionKey: c.key, sectionLabel: c.label || 'Others', field, issue }))
       )
     )
+    const pending: PendingIssue[] = [...blockers, ...soft]
     if (pending.length === 0) navigate(`/preview/${patient.id}`, { state: { patient } })
     else setPendingIssues(pending)
-  }, [patient, categories, issuesBySection, navigate])
+  }, [patient, categories, issuesBySection, results, navigate])
 
   const isOthers = active?.key === 'others'
 
@@ -644,6 +654,7 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
 
   const labelFor = useLabels()
   const critical = issues.filter((i) => i.issue.level === 'critical').length
+  const blocked = issues.some((i) => i.blocking)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26, 36, 48, 0.35)' }} onClick={onClose}>
@@ -655,10 +666,11 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
         <div className="flex items-center gap-2 mb-1">
           <AlertTriangle size={17} className="text-[var(--warning)]" />
           <h2 className="text-[16px] font-semibold text-[var(--ink)]">
-            {issues.length} value{issues.length === 1 ? '' : 's'} to check before the report
+            {blocked ? 'The report is blocked until this is fixed' : `${issues.length} value${issues.length === 1 ? '' : 's'} to check before the report`}
           </h2>
         </div>
         <p className="text-[13px] text-[var(--ink-3)] mb-4">
+          {blocked ? 'A report with impossible values can’t be viewed, printed or saved. ' : ''}
           {critical > 0 ? `Includes ${critical} critical value${critical === 1 ? '' : 's'}. Inform the referring doctor. ` : ''}
           Click one to jump to it.
         </p>
@@ -691,13 +703,15 @@ function ChecksBeforeReview({ issues, onClose, onGoTo, onContinue }: {
           >
             Back to results
           </button>
-          <button
-            type="button"
-            onClick={onContinue}
-            className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
-          >
-            Review report anyway
-          </button>
+          {!blocked && (
+            <button
+              type="button"
+              onClick={onContinue}
+              className="px-4 py-2 text-[14px] font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-ink)]"
+            >
+              Review report anyway
+            </button>
+          )}
         </div>
       </div>
     </div>

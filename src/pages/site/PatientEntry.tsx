@@ -92,6 +92,12 @@ export default function PatientEntry() {
   // `openReport` is false when saving from the unsaved-changes dialog, which carries on to wherever the user was heading.
   const save = async (openReport: boolean): Promise<boolean> => {
     if (!form.name.trim()) { setError('Please enter the patient\'s name before continuing.'); return false }
+    const age = form.age.trim()
+    const maxAge = { Y: 120, M: 240, D: 366 }[form.ageUnit]
+    if (!/^\d+$/.test(age) || Number(age) < 1 || Number(age) > maxAge) {
+      setError(`Please enter the patient's age as a whole number (1 to ${maxAge} ${{ Y: 'years', M: 'months', D: 'days' }[form.ageUnit]}). Use Mos or Days for babies.`)
+      return false
+    }
     if (form.sections.length === 0) { setError('Select at least one test before continuing.'); return false }
     if (!form.consentGiven) { setError('Patient consent is required before registering. Please confirm with the patient and check the consent box below.'); return false }
     setError('')
